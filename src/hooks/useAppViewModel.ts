@@ -5,12 +5,12 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { 
   AppViewModel, 
-  ProjectContext, 
-  AiProvider, 
-  AppError,
-  TauriResult,
   UserProfile,
-  PerformanceMetrics
+  PerformanceMetrics,
+  ProjectContext,
+  AiProvider,
+  AppError,
+  TauriResult
 } from '../types';
 
 // ================================
@@ -109,6 +109,11 @@ export const useAppViewModel = (): UseAppViewModelReturn => {
     performanceMode: true,
     securityContext: undefined,
     complianceMode: false,
+    availableProviders: [],
+    smartRouting: true,
+    selectedProvider: undefined,
+    currentProject: undefined,
+    session: undefined,
   });
   
   const [aiProviders, setAiProviders] = useState<readonly AiProvider[]>([]);

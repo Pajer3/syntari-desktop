@@ -1,5 +1,5 @@
-// Syntari AI IDE - Refactored Code Editor Component
-// Now much cleaner with extracted components and utilities
+// Syntari AI IDE - Professional Code Editor Component
+// VSCode-inspired layout and design
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Editor from '@monaco-editor/react';
@@ -34,7 +34,7 @@ interface TauriResult<T> {
 }
 
 // ================================
-// MAIN CODE EDITOR COMPONENT
+// PROFESSIONAL CODE EDITOR COMPONENT
 // ================================
 
 export const CodeEditor: React.FC<CodeEditorProps> = ({
@@ -50,7 +50,6 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const editorRef = useRef<any>(null);
   
   const loadFileContent = useCallback(async (file: FileInfo) => {
-    // Don't try to load content for directories
     if (file.language === 'directory') {
       setError('Cannot open directory as file');
       return;
@@ -60,14 +59,12 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     setError(null);
     
     try {
-      console.log('Loading file content for:', file.path);
       const result = await invoke<TauriResult<string>>('read_file', { path: file.path });
       
       if (result.success && result.data) {
         setFileContent(result.data);
         setIsModified(false);
         
-        // Update the selected file with content
         const updatedFile: EditorFile = {
           ...file,
           content: result.data,
@@ -75,25 +72,19 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           isDirty: false,
         };
         setSelectedFile(updatedFile);
-        
-        console.log('Successfully loaded file:', file.path, 'Size:', result.data.length);
       } else {
         throw new Error(result.error || 'Failed to read file');
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
       setError(`Failed to load file: ${errorMessage}`);
-      console.error('Error loading file:', err);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   const handleFileSelect = useCallback((file: FileInfo) => {
-    if (selectedFile?.path === file.path) {
-      return; // Already selected
-    }
-    
+    if (selectedFile?.path === file.path) return;
     loadFileContent(file);
   }, [selectedFile, loadFileContent]);
   
@@ -127,7 +118,6 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
       setError(`Failed to save file: ${errorMessage}`);
-      console.error('Error saving file:', err);
     } finally {
       setIsLoading(false);
     }
@@ -143,57 +133,50 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const handleEditorDidMount = useCallback((editor: any, monaco: any) => {
     editorRef.current = editor;
     
-    // Define custom Syntari theme
-    monaco.editor.defineTheme('syntari-dark', {
+    // VSCode-inspired professional theme
+    monaco.editor.defineTheme('vscode-professional', {
       base: 'vs-dark',
       inherit: true,
       rules: [
-        { token: 'comment', foreground: '6B7280', fontStyle: 'italic' },
-        { token: 'keyword', foreground: '8B5CF6' },
-        { token: 'string', foreground: '10B981' },
-        { token: 'number', foreground: 'F59E0B' },
-        { token: 'regexp', foreground: 'EF4444' },
-        { token: 'type', foreground: '3B82F6' },
-        { token: 'class', foreground: '06B6D4' },
-        { token: 'function', foreground: 'F472B6' },
-        { token: 'variable', foreground: 'E5E7EB' },
-        { token: 'constant', foreground: 'FBBF24' },
+        { token: 'comment', foreground: '6A9955', fontStyle: 'italic' },
+        { token: 'keyword', foreground: '569CD6' },
+        { token: 'string', foreground: 'CE9178' },
+        { token: 'number', foreground: 'B5CEA8' },
+        { token: 'regexp', foreground: 'D16969' },
+        { token: 'type', foreground: '4EC9B0' },
+        { token: 'class', foreground: '4EC9B0' },
+        { token: 'function', foreground: 'DCDCAA' },
+        { token: 'variable', foreground: '9CDCFE' },
+        { token: 'constant', foreground: '4FC1FF' },
       ],
       colors: {
-        'editor.background': '#0F1419',
-        'editor.foreground': '#E5E7EB',
-        'editor.lineHighlightBackground': '#1F2937',
-        'editor.selectionBackground': '#374151',
-        'editor.inactiveSelectionBackground': '#1F2937',
-        'editorCursor.foreground': '#3B82F6',
-        'editorLineNumber.foreground': '#6B7280',
-        'editorLineNumber.activeForeground': '#9CA3AF',
-        'editor.selectionHighlightBackground': '#374151',
-        'editor.wordHighlightBackground': '#374151',
-        'editor.findMatchBackground': '#1E40AF',
-        'editor.findMatchHighlightBackground': '#1E3A8A',
-        'editorBracketMatch.background': '#374151',
-        'editorBracketMatch.border': '#6B7280',
+        'editor.background': '#1E1E1E',
+        'editor.foreground': '#D4D4D4',
+        'editor.lineHighlightBackground': '#2A2D2E',
+        'editor.selectionBackground': '#264F78',
+        'editor.inactiveSelectionBackground': '#3A3D41',
+        'editorCursor.foreground': '#AEAFAD',
+        'editorLineNumber.foreground': '#858585',
+        'editorLineNumber.activeForeground': '#C6C6C6',
+        'editor.selectionHighlightBackground': '#ADD6FF26',
+        'editor.wordHighlightBackground': '#575757B8',
+        'editor.findMatchBackground': '#515C6A',
+        'editor.findMatchHighlightBackground': '#EA5C0055',
+        'editorBracketMatch.background': '#0064001A',
+        'editorBracketMatch.border': '#888888',
       }
     });
     
-    // Set the custom theme
-    monaco.editor.setTheme('syntari-dark');
+    monaco.editor.setTheme('vscode-professional');
     
-    // Add custom commands
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      handleSave();
-    });
+    // Professional keyboard shortcuts
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, handleSave);
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, handleAskAI);
     
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, () => {
-      handleAskAI();
-    });
-
-    // Focus the editor
     editor.focus();
   }, [handleSave, handleAskAI]);
   
-  // Keyboard shortcuts
+  // Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey) {
@@ -217,9 +200,9 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const language = selectedFile ? getLanguageFromExtension(selectedFile.extension) : 'plaintext';
   
   return (
-    <div className="flex h-full bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
-      {/* File Explorer */}
-      <div className="w-64 flex-shrink-0">
+    <div className="flex h-full bg-vscode-bg text-vscode-fg font-mono">
+      {/* File Explorer Sidebar */}
+      <div className="w-64 flex-shrink-0 bg-vscode-sidebar border-r border-vscode-border">
         <FileExplorer
           project={project}
           selectedFile={selectedFile?.path}
@@ -227,32 +210,32 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         />
       </div>
       
-      {/* Editor Area */}
-      <div className="flex-1 flex flex-col">
-        {/* Editor Header */}
+      {/* Main Editor Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Editor Header/Tab Bar */}
         {selectedFile && (
-          <EditorHeader
-            selectedFile={selectedFile}
-            isModified={isModified}
-            isLoading={isLoading}
-            onSave={handleSave}
-            onAskAI={handleAskAI}
-          />
+          <div className="h-9 bg-vscode-tab-bg border-b border-vscode-border">
+            <EditorHeader
+              selectedFile={selectedFile}
+              isModified={isModified}
+              isLoading={isLoading}
+              onSave={handleSave}
+              onAskAI={handleAskAI}
+            />
+          </div>
         )}
 
-        {/* Error Display */}
+        {/* Error Notification */}
         {error && (
-          <div className="px-6 py-3 bg-gradient-to-r from-red-900/70 to-red-800/70 border-b border-red-700 text-red-200 text-sm backdrop-blur-sm">
-            <div className="flex items-center space-x-3">
-              <span className="text-red-400">⚠️</span>
-              <span className="flex-1">{error}</span>
-              <button 
-                onClick={() => setError(null)}
-                className="text-red-300 hover:text-red-200 transition-colors duration-200 font-bold"
-              >
-                ✕
-              </button>
-            </div>
+          <div className="h-8 px-4 bg-vscode-error-bg border-b border-vscode-error-border text-vscode-error-fg text-xs flex items-center">
+            <span className="mr-2">⚠</span>
+            <span className="flex-1 truncate">{error}</span>
+            <button 
+              onClick={() => setError(null)}
+              className="ml-2 text-vscode-error-fg hover:text-white transition-colors"
+            >
+              ×
+            </button>
           </div>
         )}
         
@@ -261,10 +244,10 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           {selectedFile ? (
             <div className="h-full">
               {isLoading ? (
-                <div className="flex items-center justify-center h-full bg-gray-900">
-                  <div className="text-center">
-                    <div className="animate-spin text-4xl mb-4">⚡</div>
-                    <p className="text-gray-400">Loading file...</p>
+                <div className="flex items-center justify-center h-full bg-vscode-bg">
+                  <div className="text-center text-vscode-fg-muted">
+                    <div className="animate-spin w-6 h-6 border-2 border-vscode-accent border-t-transparent rounded-full mx-auto mb-2"></div>
+                    <p className="text-sm">Loading {selectedFile.name}...</p>
                   </div>
                 </div>
               ) : (
@@ -274,13 +257,13 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
                   value={fileContent}
                   onChange={(value) => handleContentChange(value || '')}
                   onMount={handleEditorDidMount}
-                  theme="vs-dark"
+                  theme="vscode-professional"
                   options={EDITOR_OPTIONS}
                   loading={
-                    <div className="flex items-center justify-center h-full bg-gray-900">
-                      <div className="text-center">
-                        <div className="animate-pulse text-4xl mb-4">🚀</div>
-                        <p className="text-gray-400">Initializing Monaco Editor...</p>
+                    <div className="flex items-center justify-center h-full bg-vscode-bg">
+                      <div className="text-center text-vscode-fg-muted">
+                        <div className="animate-pulse w-6 h-6 bg-vscode-accent rounded mx-auto mb-2"></div>
+                        <p className="text-sm">Initializing editor...</p>
                       </div>
                     </div>
                   }

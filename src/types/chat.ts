@@ -21,6 +21,7 @@ export interface ChatMessageMetadata {
   readonly responseTime?: number;
   readonly qualityScore?: number;
   readonly auditId?: string;
+  readonly confidence?: number;
 }
 
 export interface CodeSnippet {
@@ -48,7 +49,7 @@ export interface ChatSession {
   readonly createdAt: number;
   readonly updatedAt: number;
   readonly userId?: string;
-  readonly analytics?: SessionAnalytics;
+  readonly analytics: SessionAnalytics;
   readonly archived?: boolean;
 }
 
@@ -116,6 +117,9 @@ export interface ChatViewModel {
   readonly smartRouting: boolean;
   readonly costTracking: CostTracker;
   readonly qualityMetrics: QualityMetrics;
+  readonly securityContext?: SecurityContext;
+  readonly performanceMetrics?: PerformanceMetrics;
+  readonly auditTrail?: readonly AuditMetadata[];
 }
 
 export interface QualityMetrics {
@@ -124,6 +128,10 @@ export interface QualityMetrics {
   readonly userSatisfaction: number;
   readonly errorRate: number;
   readonly costEfficiency: number;
+  readonly averageConfidence?: number;
+  readonly responseAccuracy?: number;
+  readonly contextRelevance?: number;
+  readonly lastCalculated?: number;
 }
 
 export interface CostTracker {
@@ -161,4 +169,17 @@ export interface AuditMetadata {
   readonly outcome: 'success' | 'failure' | 'partial';
   readonly riskLevel: 'low' | 'medium' | 'high' | 'critical';
   readonly complianceFlags: readonly string[];
+}
+
+export interface PerformanceMetrics {
+  readonly responseTime: number;
+  readonly memoryUsage?: number;
+  readonly cpuUsage?: number;
+  readonly networkLatency?: number;
+  readonly errorRate?: number;
+  readonly throughput?: number;
+  readonly successRate?: number;
+  readonly cacheHitRate?: number;
+  readonly providerDistribution?: Record<string, number>;
+  readonly lastUpdated?: number;
 } 

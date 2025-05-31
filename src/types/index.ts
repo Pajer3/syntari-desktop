@@ -39,7 +39,7 @@ import type { SecurityContext } from './chat';
 
 // App State types
 export interface AppViewModel {
-  readonly currentView: 'welcome' | 'editor' | 'chat' | 'settings';
+  readonly currentView: 'welcome' | 'editor' | 'chat' | 'settings' | 'projects' | 'analytics';
   readonly isLoading: boolean;
   readonly error?: AppError;
   readonly project?: ProjectContext;
@@ -47,6 +47,11 @@ export interface AppViewModel {
   readonly performanceMode: boolean;
   readonly securityContext?: SecurityContext;
   readonly complianceMode?: boolean;
+  readonly availableProviders: readonly import('./core').AiProvider[];
+  readonly smartRouting: boolean;
+  readonly selectedProvider?: string;
+  readonly currentProject?: ProjectContext;
+  readonly session?: import('./chat').ChatSession;
 }
 
 export interface EditorViewModel {

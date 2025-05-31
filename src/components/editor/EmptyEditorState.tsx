@@ -1,5 +1,5 @@
-// Syntari AI IDE - Empty Editor State Component
-// Extracted from CodeEditor.tsx for better maintainability
+// Syntari AI IDE - Professional Empty Editor State Component
+// VSCode-inspired welcome state when no file is open
 
 import React from 'react';
 import type { ProjectContext } from '../../types';
@@ -10,39 +10,44 @@ interface EmptyEditorStateProps {
 
 export const EmptyEditorState: React.FC<EmptyEditorStateProps> = ({ project }) => {
   return (
-    <div className="flex items-center justify-center h-full text-gray-300 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
-      <div className="text-center max-w-2xl px-8">
-        <div className="bg-gradient-to-br from-gray-800 to-gray-700 rounded-2xl p-8 border border-gray-600 shadow-2xl">
-          <div className="text-7xl mb-6 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">💻</div>
-          <h2 className="text-3xl font-bold mb-4 bg-gradient-to-r from-gray-100 to-gray-300 bg-clip-text text-transparent">Syntari AI IDE</h2>
-          <p className="text-gray-300 mb-2 text-lg">Professional code editor powered by Monaco</p>
-          <p className="text-sm text-gray-400 mb-8">
-            Select a file from the explorer to start editing with enterprise-grade features
+    <div className="flex items-center justify-center h-full bg-vscode-bg text-vscode-fg">
+      <div className="text-center max-w-lg">
+        <div className="mb-8">
+          <div className="text-6xl mb-4 text-vscode-fg-muted">📝</div>
+          <h2 className="text-xl font-medium text-vscode-fg mb-2">
+            Welcome to Syntari AI IDE
+          </h2>
+          <p className="text-sm text-vscode-fg-muted">
+            Select a file from the Explorer to start editing
           </p>
-          <div className="grid grid-cols-2 gap-6 text-sm text-gray-400 mb-8">
-            <div className="text-center p-4 bg-gradient-to-br from-gray-700 to-gray-600 rounded-xl border border-gray-500">
-              <div className="text-3xl mb-3 bg-gradient-to-r from-green-400 to-blue-500 bg-clip-text text-transparent">🚀</div>
-              <p className="text-gray-200 font-medium">IntelliSense & Auto-completion</p>
-            </div>
-            <div className="text-center p-4 bg-gradient-to-br from-gray-700 to-gray-600 rounded-xl border border-gray-500">
-              <div className="text-3xl mb-3 bg-gradient-to-r from-pink-400 to-red-500 bg-clip-text text-transparent">🎨</div>
-              <p className="text-gray-200 font-medium">Syntax Highlighting</p>
-            </div>
-            <div className="text-center p-4 bg-gradient-to-br from-gray-700 to-gray-600 rounded-xl border border-gray-500">
-              <div className="text-3xl mb-3 bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">🔍</div>
-              <p className="text-gray-200 font-medium">Advanced Search & Replace</p>
-            </div>
-            <div className="text-center p-4 bg-gradient-to-br from-gray-700 to-gray-600 rounded-xl border border-gray-500">
-              <div className="text-3xl mb-3 bg-gradient-to-r from-purple-400 to-blue-500 bg-clip-text text-transparent">🤖</div>
-              <p className="text-gray-200 font-medium">AI-Powered Assistance</p>
-            </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 mb-8">
+          <div className="p-4 bg-vscode-sidebar border border-vscode-border rounded">
+            <div className="text-2xl mb-2">🚀</div>
+            <div className="text-sm font-medium text-vscode-fg">IntelliSense</div>
+            <div className="text-xs text-vscode-fg-muted">Smart completions</div>
           </div>
-          <div className="pt-6 border-t border-gray-600">
-            <p className="text-xs text-gray-500">
-              Project: <span className="text-blue-400 font-medium">{project.projectType}</span> • 
-              Files: <span className="text-green-400 font-medium">{project.openFiles.length}</span>
-            </p>
+          <div className="p-4 bg-vscode-sidebar border border-vscode-border rounded">
+            <div className="text-2xl mb-2">🎨</div>
+            <div className="text-sm font-medium text-vscode-fg">Syntax</div>
+            <div className="text-xs text-vscode-fg-muted">Highlighting</div>
           </div>
+          <div className="p-4 bg-vscode-sidebar border border-vscode-border rounded">
+            <div className="text-2xl mb-2">🔍</div>
+            <div className="text-sm font-medium text-vscode-fg">Search</div>
+            <div className="text-xs text-vscode-fg-muted">& Replace</div>
+          </div>
+          <div className="p-4 bg-vscode-sidebar border border-vscode-border rounded">
+            <div className="text-2xl mb-2">🤖</div>
+            <div className="text-sm font-medium text-vscode-fg">AI Assistant</div>
+            <div className="text-xs text-vscode-fg-muted">Smart help</div>
+          </div>
+        </div>
+
+        <div className="text-xs text-vscode-fg-muted border-t border-vscode-border pt-4">
+          <div>Project: <span className="text-vscode-accent">{project.projectType}</span></div>
+          <div>Files: <span className="text-vscode-accent">{project.openFiles.length}</span></div>
         </div>
       </div>
     </div>

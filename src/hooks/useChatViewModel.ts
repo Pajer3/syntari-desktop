@@ -1,23 +1,22 @@
-// Syntari AI IDE - Enterprise Chat ViewModel (AI Conversation Intelligence)
-// Advanced multi-model routing with cost optimization and security compliance
+// Syntari AI IDE - Chat View Model (MVVM Business Logic Layer)
+// Enterprise chat with AI consensus, cost optimization, security, and compliance
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { 
-  ChatViewModel, 
-  ChatSession, 
-  ChatMessage, 
+  ChatViewModel,
+  ChatSession,
+  ChatMessage,
   AiProvider,
   AiRequest,
   ConsensusResult,
-  ProjectContext,
-  TauriResult,
-  AppError,
-  SecurityContext,
-  CostTracker,
   QualityMetrics,
   PerformanceMetrics,
-  AuditMetadata
+  SecurityContext,
+  AuditMetadata,
+  ProjectContext,
+  AppError,
+  TauriResult
 } from '../types';
 
 // ================================
@@ -36,7 +35,6 @@ const AI_CONFIG = {
 } as const;
 
 const COST_SAVINGS_TARGET = 0.97; // 97% savings goal
-const GEMINI_PREFERENCE_RATIO = 0.8; // 80% preference for cost-effective models
 
 const AI_ERROR_CODES = {
   MESSAGE_SEND_FAILED: 'AI_MESSAGE_SEND_FAILED',
@@ -152,7 +150,7 @@ export const useChatViewModel = (
   
   // Enterprise State Management
   const [isInitialized, setIsInitialized] = useState(false);
-  const [securityContext, setSecurityContext] = useState<SecurityContext | null>(null);
+  const [securityContext, setSecurityContext] = useState<SecurityContext | undefined>(undefined);
   const [auditQueue, setAuditQueue] = useState<AuditMetadata[]>([]);
   const [performanceMetrics, setPerformanceMetrics] = useState<PerformanceMetrics>({
     responseTime: 0,
@@ -499,7 +497,19 @@ export const useChatViewModel = (
       };
       
       // Get AI response with consensus
-      const aiResult: TauriResult<ConsensusResult> = await invoke('generate_ai_response', aiRequest);
+      const aiResult: TauriResult<ConsensusResult> = await invoke('generate_ai_response', {
+        id: aiRequest.id,
+        prompt: aiRequest.prompt,
+        context: aiRequest.context,
+        timestamp: aiRequest.timestamp,
+        userId: aiRequest.userId,
+        sessionId: aiRequest.sessionId,
+        provider: aiRequest.provider,
+        securityContext: aiRequest.securityContext,
+        auditMetadata: aiRequest.auditMetadata,
+        maxTokens: aiRequest.maxTokens,
+        temperature: aiRequest.temperature,
+      });
       
       if (!aiResult.success || !aiResult.data) {
         throw new Error(aiResult.error || 'Failed to get AI response');

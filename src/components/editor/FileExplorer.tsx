@@ -1,5 +1,5 @@
-// Syntari AI IDE - File Explorer Component
-// Extracted from CodeEditor.tsx for better maintainability
+// Syntari AI IDE - Professional File Explorer Component
+// VSCode-inspired file tree with clean design
 
 import React, { useState, useCallback, useMemo } from 'react';
 import type { ProjectContext, FileInfo } from '../../types';
@@ -17,14 +17,12 @@ interface FileExplorerProps {
   onFileSelect: (file: FileInfo) => void;
 }
 
-const buildFileTree = (files: FileInfo[], rootPath: string): FileTreeNode[] => {
+const buildFileTree = (files: readonly FileInfo[], rootPath: string): FileTreeNode[] => {
   const tree: FileTreeNode[] = [];
   const nodeMap = new Map<string, FileTreeNode>();
   
-  // Normalize root path (remove trailing slash)
   const normalizedRootPath = rootPath.replace(/\/$/, '');
   
-  // Sort files so directories come first, then by name
   const sortedFiles = [...files].sort((a, b) => {
     const aIsDir = a.language === 'directory';
     const bIsDir = b.language === 'directory';
@@ -34,10 +32,8 @@ const buildFileTree = (files: FileInfo[], rootPath: string): FileTreeNode[] => {
     return a.name.localeCompare(b.name);
   });
   
-  // Filter out the root path itself to prevent self-nesting
   const filteredFiles = sortedFiles.filter(file => file.path !== normalizedRootPath);
   
-  // Create nodes for all files
   for (const file of filteredFiles) {
     const node: FileTreeNode = {
       file,
@@ -47,22 +43,17 @@ const buildFileTree = (files: FileInfo[], rootPath: string): FileTreeNode[] => {
     nodeMap.set(file.path, node);
   }
   
-  // Build tree structure
   for (const file of filteredFiles) {
     const node = nodeMap.get(file.path)!;
     const parentPath = file.path.substring(0, file.path.lastIndexOf('/'));
     
-    // Check if this file is a direct child of the root
     if (parentPath === normalizedRootPath) {
       tree.push(node);
     } else {
-      // Find parent and add as child
       const parent = nodeMap.get(parentPath);
       if (parent) {
         parent.children.push(node);
       } else {
-        // If parent not found and it's not the root, still add to root
-        // This handles cases where intermediate directories might be missing
         if (!parentPath.startsWith(normalizedRootPath)) {
           tree.push(node);
         }
@@ -96,29 +87,28 @@ const FileTreeItem: React.FC<{
   return (
     <div>
       <div
-        className={`flex items-center space-x-2 px-3 py-2 rounded-lg cursor-pointer transition-all duration-300 ${
-          isSelected 
-            ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg border border-blue-400' 
-            : 'hover:bg-gradient-to-r hover:from-gray-800 hover:to-gray-700 text-gray-300 hover:text-white border border-transparent hover:border-gray-600'
-        }`}
-        style={{ paddingLeft: `${12 + depth * 20}px` }}
+        className={`file-explorer-item ${isSelected ? 'selected' : ''} ${isDirectory ? 'folder' : ''}`}
+        style={{ paddingLeft: `${12 + depth * 16}px` }}
         onClick={handleClick}
       >
+        {/* Chevron for directories */}
         {isDirectory && (
-          <span className="text-xs text-gray-400 w-3 text-center">
+          <span className="icon text-xs text-vscode-fg-muted mr-1">
             {hasChildren ? (node.isExpanded ? '▼' : '▶') : ''}
           </span>
         )}
-        {!isDirectory && <span className="w-3"></span>}
         
-        <span className="text-sm">
+        {/* File/Folder Icon */}
+        <span className="icon">
           {isDirectory ? (node.isExpanded ? '📂' : '📁') : getFileIcon(file.extension)}
         </span>
         
-        <span className="text-sm truncate flex-1 font-medium">{file.name}</span>
+        {/* File Name */}
+        <span className="flex-1 truncate">{file.name}</span>
         
+        {/* File Size (for files only) */}
         {!isDirectory && file.size > 0 && (
-          <span className="text-xs text-gray-400 flex-shrink-0 bg-gray-700 px-2 py-0.5 rounded">
+          <span className="text-xs text-vscode-fg-muted ml-auto">
             {(file.size / 1024).toFixed(1)}KB
           </span>
         )}
@@ -126,7 +116,7 @@ const FileTreeItem: React.FC<{
       
       {/* Render children if directory is expanded */}
       {isDirectory && node.isExpanded && hasChildren && (
-        <div className="mt-1">
+        <div>
           {node.children.map((childNode) => (
             <FileTreeItem
               key={childNode.file.path}
@@ -162,11 +152,9 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     });
   }, []);
   
-  // Build file tree from flat file list
   const fileTree = useMemo(() => {
     const tree = buildFileTree(project.openFiles, project.rootPath);
     
-    // Set expansion state for nodes
     const updateExpansion = (nodes: FileTreeNode[]) => {
       for (const node of nodes) {
         node.isExpanded = expandedFolders.has(node.file.path);
@@ -179,37 +167,35 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   }, [project.openFiles, project.rootPath, expandedFolders]);
   
   return (
-    <div className="h-full bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 border-r border-gray-700 shadow-lg">
-      <div className="p-3 border-b border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700 backdrop-blur-sm">
-        <h3 className="text-sm font-semibold text-gray-100 flex items-center">
-          <span className="mr-2 text-blue-400">📁</span>
-          Explorer
-        </h3>
-        <p className="text-xs text-gray-300 mt-1 truncate" title={project.rootPath}>
-          {project.rootPath.split('/').pop() || project.rootPath}
-        </p>
-        <p className="text-xs text-gray-400 mt-1">
-          {project.openFiles.length} items • <span className="text-blue-300">{project.projectType}</span>
-        </p>
+    <div className="file-explorer h-full flex flex-col">
+      {/* Explorer Header */}
+      <div className="file-explorer-header">
+        Explorer
       </div>
       
-      <div className="p-2 overflow-y-auto" style={{ height: 'calc(100% - 80px)' }}>
-        {/* Project Root */}
+      {/* Project Root Section */}
+      <div className="px-2 py-1 bg-vscode-sidebar border-b border-vscode-border">
         <div 
-          className="flex items-center space-x-2 px-3 py-2 rounded-lg hover:bg-gradient-to-r hover:from-gray-800 hover:to-gray-700 cursor-pointer transition-all duration-300 mb-3 border border-transparent hover:border-gray-600"
+          className="file-explorer-item folder"
+          style={{ paddingLeft: '4px' }}
           onClick={() => toggleFolder(project.rootPath)}
         >
-          <span className="text-amber-400 text-sm">
+          <span className="icon text-xs text-vscode-fg-muted mr-1">
+            {expandedFolders.has(project.rootPath) ? '▼' : '▶'}
+          </span>
+          <span className="icon text-yellow-400">
             {expandedFolders.has(project.rootPath) ? '📂' : '📁'}
           </span>
-          <span className="text-sm text-gray-100 font-medium">
+          <span className="font-medium">
             {project.rootPath.split('/').pop() || 'Project'}
           </span>
         </div>
-        
-        {/* File Tree */}
+      </div>
+      
+      {/* File Tree */}
+      <div className="flex-1 overflow-y-auto vscode-scrollbar">
         {expandedFolders.has(project.rootPath) && (
-          <div className="space-y-1">
+          <div className="py-1">
             {fileTree.map((node) => (
               <FileTreeItem
                 key={node.file.path}
@@ -222,16 +208,17 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
             ))}
             
             {fileTree.length === 0 && (
-              <div className="text-center py-12 text-gray-400">
-                <div className="bg-gradient-to-br from-gray-800 to-gray-700 rounded-xl p-6 border border-gray-600">
-                  <span className="text-3xl">📁</span>
-                  <p className="text-sm mt-3 text-gray-300">No files found</p>
-                  <p className="text-xs mt-1 text-gray-500">This folder appears to be empty</p>
-                </div>
+              <div className="text-center py-8 text-vscode-fg-muted">
+                <div className="text-xs">No files found</div>
               </div>
             )}
           </div>
         )}
+      </div>
+      
+      {/* Explorer Footer */}
+      <div className="px-3 py-2 bg-vscode-sidebar border-t border-vscode-border text-xs text-vscode-fg-muted">
+        {project.openFiles.length} files • {project.projectType}
       </div>
     </div>
   );

@@ -1,18 +1,19 @@
-// Syntari AI IDE - Chat Service
-// Extracted from useChatViewModel.ts for better separation of concerns
+// Syntari AI IDE - Enterprise Chat Service
+// Professional chat service with AI routing and enterprise features
 
 import { invoke } from '@tauri-apps/api/core';
-import type { 
-  ChatMessage, 
-  ChatSession, 
-  AiProvider, 
-  AiRequest, 
+import type {
+  ChatMessage,
+  ChatSession,
+  AiProvider,
+  AiRequest,
   AiResponse,
   ConsensusResult,
   ProjectContext,
   TauriResult,
   AppError,
   SecurityContext,
+  AuditMetadata
 } from '../types';
 
 // Configuration
@@ -267,6 +268,11 @@ export class ChatService {
         "Quick answer: Here's what you need to know...",
         "I can help with that efficiently. The solution is...",
         "Fast response: The key point is...",
+      ],
+      local: [
+        "Local model response: Here's my analysis...",
+        "Processing locally: The solution is...",
+        "Local AI: Here's what I found...",
       ],
     };
 

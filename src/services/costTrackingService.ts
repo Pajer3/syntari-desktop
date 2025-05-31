@@ -1,11 +1,11 @@
 // Syntari AI IDE - Cost Tracking Service
-// Extracted from useChatViewModel.ts for better separation of concerns
+// Enterprise cost optimization and tracking
 
-import type { 
-  CostTracker, 
-  CostOptimizationMetrics, 
-  AiResponse, 
-  AiProvider 
+import type {
+  AiProvider,
+  AiResponse,
+  CostTracker,
+  CostOptimizationMetrics
 } from '../types';
 
 interface CostHistoryEntry {

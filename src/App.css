@@ -33,6 +33,38 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
+
+  /* VSCode Color Palette */
+  --vscode-bg: #1E1E1E;
+  --vscode-fg: #D4D4D4;
+  --vscode-fg-muted: #858585;
+  --vscode-sidebar: #252526;
+  --vscode-tab-bg: #2D2D30;
+  --vscode-border: #3E3E42;
+  --vscode-accent: #007ACC;
+  --vscode-error-bg: #F14C4C;
+  --vscode-error-fg: #FFFFFF;
+  --vscode-error-border: #F14C4C;
+  --vscode-warning-bg: #FC5;
+  --vscode-warning-fg: #000;
+  --vscode-success-bg: #89D185;
+  --vscode-success-fg: #000;
+  
+  /* Professional Typography */
+  --vscode-font-family: 'Fira Code', 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  --vscode-font-size: 13px;
+  --vscode-line-height: 1.4;
+  
+  /* Spacing */
+  --vscode-padding-xs: 2px;
+  --vscode-padding-sm: 4px;
+  --vscode-padding-md: 8px;
+  --vscode-padding-lg: 12px;
+  --vscode-padding-xl: 16px;
+  
+  /* Shadows */
+  --vscode-shadow: 0 2px 8px rgba(0, 0, 0, 0.32);
+  --vscode-shadow-large: 0 5px 26px rgba(0, 0, 0, 0.22), 0 4px 7px rgba(0, 0, 0, 0.28);
 }
 
 /* ================================
@@ -862,3 +894,483 @@ kbd {
   --color-border: rgba(75, 85, 99, 0.3);
   --color-hover: rgba(75, 85, 99, 0.5);
 }
+
+/* Syntari AI IDE - Professional VSCode-inspired Styles */
+
+/* VSCode-style Scrollbars */
+::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--vscode-bg);
+  border-radius: 0;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #424242;
+  border-radius: 0;
+  border: 3px solid var(--vscode-bg);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4F4F4F;
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: #5A5A5A;
+}
+
+::-webkit-scrollbar-corner {
+  background: var(--vscode-bg);
+}
+
+/* Professional scrollbar classes */
+.vscode-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #424242 var(--vscode-bg);
+}
+
+.vscode-scrollbar::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+
+.vscode-scrollbar::-webkit-scrollbar-track {
+  background: var(--vscode-bg);
+}
+
+.vscode-scrollbar::-webkit-scrollbar-thumb {
+  background: #424242;
+  border: 3px solid var(--vscode-bg);
+}
+
+.vscode-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #4F4F4F;
+}
+
+/* Professional color utility classes */
+.bg-vscode-bg { background-color: var(--vscode-bg); }
+.bg-vscode-sidebar { background-color: var(--vscode-sidebar); }
+.bg-vscode-tab-bg { background-color: var(--vscode-tab-bg); }
+.bg-vscode-error-bg { background-color: var(--vscode-error-bg); }
+
+.text-vscode-fg { color: var(--vscode-fg); }
+.text-vscode-fg-muted { color: var(--vscode-fg-muted); }
+.text-vscode-error-fg { color: var(--vscode-error-fg); }
+
+.border-vscode-border { border-color: var(--vscode-border); }
+.border-vscode-error-border { border-color: var(--vscode-error-border); }
+
+/* Professional Focus Styles */
+*:focus {
+  outline: 1px solid var(--vscode-accent);
+  outline-offset: 1px;
+}
+
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Professional Selection */
+::selection {
+  background: #264F78;
+  color: #FFFFFF;
+}
+
+::-moz-selection {
+  background: #264F78;
+  color: #FFFFFF;
+}
+
+/* Professional Button Styles */
+button {
+  font-family: inherit;
+  font-size: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  transition: all 0.15s ease;
+}
+
+/* Professional Input Styles */
+input, textarea {
+  font-family: inherit;
+  font-size: inherit;
+  background: var(--vscode-bg);
+  border: 1px solid var(--vscode-border);
+  color: var(--vscode-fg);
+  transition: border-color 0.15s ease;
+}
+
+input:focus, textarea:focus {
+  border-color: var(--vscode-accent);
+}
+
+/* Professional Link Styles */
+a {
+  color: var(--vscode-accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Professional Animations */
+.fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.slide-in {
+  animation: slideIn 0.2s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(-4px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.3s ease-out;
+  animation-fill-mode: both;
+}
+
+/* Professional Interactive Elements */
+.hover-scale:hover {
+  transform: scale(1.02);
+}
+
+.hover-brightness:hover {
+  filter: brightness(1.1);
+}
+
+/* VSCode-specific component styles */
+.vscode-tab {
+  height: 36px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  background: var(--vscode-tab-bg);
+  border-right: 1px solid var(--vscode-border);
+  color: var(--vscode-fg-muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.vscode-tab:hover {
+  background: #2A2D2E;
+  color: var(--vscode-fg);
+}
+
+.vscode-tab.active {
+  background: var(--vscode-bg);
+  color: var(--vscode-fg);
+  border-top: 2px solid var(--vscode-accent);
+  padding-top: 0;
+}
+
+.vscode-tab .tab-close {
+  margin-left: 8px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+
+.vscode-tab:hover .tab-close {
+  opacity: 1;
+}
+
+.vscode-tab .tab-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* File Explorer Styles */
+.file-explorer {
+  background: var(--vscode-sidebar);
+  color: var(--vscode-fg);
+}
+
+.file-explorer-header {
+  padding: 8px 12px;
+  background: var(--vscode-sidebar);
+  border-bottom: 1px solid var(--vscode-border);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--vscode-fg-muted);
+}
+
+.file-explorer-item {
+  padding: 4px 8px 4px 12px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background-color 0.1s ease;
+}
+
+.file-explorer-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.file-explorer-item.selected {
+  background: var(--vscode-accent);
+  color: white;
+}
+
+.file-explorer-item.folder {
+  font-weight: 500;
+}
+
+.file-explorer-item .icon {
+  margin-right: 6px;
+  width: 16px;
+  display: flex;
+  justify-content: center;
+}
+
+/* Editor Styles */
+.editor-container {
+  background: var(--vscode-bg);
+  position: relative;
+}
+
+.editor-header {
+  height: 36px;
+  background: var(--vscode-tab-bg);
+  border-bottom: 1px solid var(--vscode-border);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  justify-content: space-between;
+}
+
+.editor-file-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--vscode-fg);
+  font-size: 13px;
+}
+
+.editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.editor-button {
+  padding: 4px 8px;
+  font-size: 11px;
+  border: 1px solid var(--vscode-border);
+  background: transparent;
+  color: var(--vscode-fg-muted);
+  border-radius: 2px;
+  transition: all 0.1s ease;
+}
+
+.editor-button:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--vscode-fg);
+}
+
+.editor-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.editor-button.primary {
+  background: var(--vscode-accent);
+  color: white;
+  border-color: var(--vscode-accent);
+}
+
+.editor-button.primary:hover {
+  background: #106BA3;
+}
+
+/* Status indicators */
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-left: 4px;
+}
+
+.status-dot.modified {
+  background: #FC5;
+}
+
+.status-dot.loading {
+  background: var(--vscode-accent);
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Context Menu */
+.context-menu {
+  background: #383838;
+  border: 1px solid #454545;
+  border-radius: 0;
+  box-shadow: var(--vscode-shadow);
+  padding: 4px 0;
+  min-width: 200px;
+  font-size: 13px;
+}
+
+.context-menu-item {
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  color: var(--vscode-fg);
+  transition: background-color 0.1s ease;
+}
+
+.context-menu-item:hover:not(.disabled) {
+  background: #094771;
+}
+
+.context-menu-item.disabled {
+  color: var(--vscode-fg-muted);
+  cursor: default;
+}
+
+.context-menu-separator {
+  height: 1px;
+  background: var(--vscode-border);
+  margin: 4px 0;
+}
+
+/* Professional Responsive Design */
+@media (max-width: 768px) {
+  :root {
+    --vscode-font-size: 12px;
+  }
+  
+  .file-explorer {
+    width: 200px;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --vscode-font-size: 11px;
+  }
+  
+  .editor-header {
+    height: 32px;
+    padding: 0 8px;
+  }
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+  :root {
+    --vscode-bg: #000000;
+    --vscode-fg: #FFFFFF;
+    --vscode-border: #FFFFFF;
+    --vscode-accent: #0E639C;
+  }
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Performance Mode Overrides */
+.performance-mode,
+.performance-mode * {
+  transition: none !important;
+  animation: none !important;
+  transform: none !important;
+  filter: none !important;
+  box-shadow: none !important;
+}
+
+.performance-mode .hover\:scale-\[1\.02\]:hover,
+.performance-mode .hover-scale:hover {
+  transform: none !important;
+}
+
+.performance-mode .hover-brightness:hover {
+  filter: none !important;
+}
+
+.performance-mode .vscode-tab:hover,
+.performance-mode .file-explorer-item:hover,
+.performance-mode .context-menu-item:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.performance-mode .fade-in,
+.performance-mode .slide-in,
+.performance-mode .animate-fade-in-up {
+  animation: none !important;
+}
+
+/* Typography Classes */
+.text-xs { font-size: 11px; }
+.text-sm { font-size: 12px; }
+.text-base { font-size: 13px; }
+.text-lg { font-size: 14px; }
+.text-xl { font-size: 16px; }
+
+.font-mono { font-family: var(--vscode-font-family); }
+.font-medium { font-weight: 500; }
+.font-semibold { font-weight: 600; }
+.font-bold { font-weight: 700; }
+
+/* Layout Utilities */
+.h-9 { height: 36px; }
+.h-8 { height: 32px; }
+.w-64 { width: 256px; }
+.min-w-0 { min-width: 0; }

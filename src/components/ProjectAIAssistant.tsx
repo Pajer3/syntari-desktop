@@ -266,9 +266,9 @@ export const ProjectAIAssistant: React.FC<ProjectAIAssistantProps> = ({
                     <div className="flex items-center space-x-3">
                       <span className="text-blue-400">{message.metadata.provider}</span>
                       <span>•</span>
-                      <span>{formatCost(message.metadata.cost)}</span>
+                      <span>{formatCost(message.metadata.cost || 0)}</span>
                       <span>•</span>
-                      <span>{formatTime(message.metadata.responseTime)}</span>
+                      <span>{formatTime(message.metadata.responseTime || 0)}</span>
                     </div>
                     {message.metadata.confidence && (
                       <div className="text-green-400">
