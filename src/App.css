@@ -102,30 +102,48 @@ body {
 /* Enhanced IDE Scrollbar Class */
 .ide-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: #4a4a4a var(--bg-secondary);
+  scrollbar-color: rgba(75, 85, 99, 0.5) transparent;
 }
 
 .ide-scrollbar::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
+  width: 8px;
+  height: 8px;
 }
 
 .ide-scrollbar::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
-  border-radius: 6px;
-  border: 1px solid var(--border-primary);
+  background: transparent;
 }
 
 .ide-scrollbar::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #4a4a4a 0%, #3a3a3a 100%);
-  border-radius: 6px;
-  border: 1px solid var(--border-primary);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  background: rgba(75, 85, 99, 0.5);
+  border-radius: 4px;
 }
 
 .ide-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #5a5a5a 0%, #4a4a4a 100%);
-  border-color: #6a6a6a;
+  background: rgba(75, 85, 99, 0.7);
+}
+
+/* Horizontal scrollbar for tabs */
+.ide-scrollbar-horizontal {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(75, 85, 99, 0.5) transparent;
+}
+
+.ide-scrollbar-horizontal::-webkit-scrollbar {
+  height: 6px;
+}
+
+.ide-scrollbar-horizontal::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ide-scrollbar-horizontal::-webkit-scrollbar-thumb {
+  background: rgba(75, 85, 99, 0.5);
+  border-radius: 3px;
+}
+
+.ide-scrollbar-horizontal::-webkit-scrollbar-thumb:hover {
+  background: rgba(75, 85, 99, 0.7);
 }
 
 /* Scrollable Container Class */
@@ -458,4 +476,389 @@ a:hover {
 .performance-mode .context-menu-item:hover {
   background-color: inherit !important;
   color: inherit !important;
+}
+
+/* Tab layout transitions */
+.tab-enter {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.tab-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 200ms ease-in-out, transform 200ms ease-in-out;
+}
+
+.tab-exit {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.tab-exit-active {
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: opacity 200ms ease-in-out, transform 200ms ease-in-out;
+}
+
+/* Code editor improvements */
+.code-editor-line-numbers {
+  background: #1f2937;
+  border-right: 1px solid #374151;
+  color: #6b7280;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 16px 8px;
+  text-align: right;
+  user-select: none;
+  width: 60px;
+}
+
+.code-editor-content {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre;
+  word-wrap: break-word;
+}
+
+/* Syntax highlighting colors */
+.syntax-keyword { color: #3b82f6; }
+.syntax-string { color: #fbbf24; }
+.syntax-comment { color: #10b981; }
+.syntax-number { color: #a855f7; }
+.syntax-function { color: #06b6d4; }
+.syntax-variable { color: #f59e0b; }
+
+/* AI Assistant styling */
+.ai-message-typing {
+  background: linear-gradient(90deg, 
+    rgba(59, 130, 246, 0.1) 0%, 
+    rgba(59, 130, 246, 0.2) 50%, 
+    rgba(59, 130, 246, 0.1) 100%);
+  background-size: 200% 100%;
+  animation: typing-gradient 2s linear infinite;
+}
+
+@keyframes typing-gradient {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Performance mode optimizations */
+.performance-mode {
+  animation: none !important;
+  transition: none !important;
+}
+
+.performance-mode * {
+  animation: none !important;
+  transition: none !important;
+}
+
+.performance-mode .animate-bounce,
+.performance-mode .animate-spin,
+.performance-mode .animate-pulse {
+  animation: none !important;
+}
+
+/* File explorer styling */
+.file-explorer-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  margin: 1px 0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 150ms ease-in-out;
+}
+
+.file-explorer-item:hover {
+  background-color: rgba(75, 85, 99, 0.3);
+}
+
+.file-explorer-item.selected {
+  background-color: rgba(59, 130, 246, 0.3);
+  color: white;
+}
+
+.file-explorer-item.folder {
+  font-weight: 500;
+}
+
+.file-explorer-item.file {
+  font-weight: 400;
+  color: #d1d5db;
+}
+
+/* Context menu improvements */
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  margin: 0;
+  border: none;
+  background: none;
+  color: #d1d5db;
+  cursor: pointer;
+  font-size: 14px;
+  font-family: inherit;
+  text-align: left;
+  width: 100%;
+  transition: background-color 150ms ease-in-out, color 150ms ease-in-out;
+}
+
+.context-menu-item:hover:not(:disabled) {
+  background-color: rgba(75, 85, 99, 0.5);
+  color: white;
+}
+
+.context-menu-item:disabled {
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
+.context-menu-item:focus {
+  outline: none;
+  background-color: rgba(59, 130, 246, 0.3);
+}
+
+/* Project insights cards */
+.project-insight-card {
+  background: rgba(31, 41, 55, 0.5);
+  border: 1px solid rgba(75, 85, 99, 0.3);
+  border-radius: 8px;
+  padding: 12px;
+  transition: border-color 200ms ease-in-out, background-color 200ms ease-in-out;
+}
+
+.project-insight-card:hover {
+  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(31, 41, 55, 0.7);
+}
+
+/* ================================
+   ENHANCED MESSAGE BUBBLES
+   ================================ */
+
+.message-bubble {
+  padding: 16px 20px;
+  border-radius: 12px;
+  max-width: 85%;
+  word-wrap: break-word;
+  font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2px;
+}
+
+.message-bubble.user {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: #ffffff;
+  margin-left: auto;
+  border-bottom-right-radius: 4px;
+}
+
+.message-bubble.ai {
+  background: linear-gradient(135deg, #374151 0%, #4b5563 100%);
+  color: #f3f4f6;
+  margin-right: auto;
+  border-bottom-left-radius: 4px;
+  border: 1px solid #6b7280;
+}
+
+.message-bubble.system {
+  background: #1f2937;
+  color: #d1d5db;
+  margin: 0 auto;
+  border: 1px solid #374151;
+  font-style: italic;
+}
+
+/* ================================
+   QUICK ACTION BUTTONS
+   ================================ */
+
+.quick-action-button {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+}
+
+.quick-action-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.quick-action-button:active {
+  transform: translateY(0);
+}
+
+/* ================================
+   LOADING DOTS ANIMATION
+   ================================ */
+
+.loading-dots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 0;
+}
+
+.loading-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #6b7280;
+  animation: loading-bounce 1.4s ease-in-out infinite both;
+}
+
+.loading-dot:nth-child(1) { animation-delay: -0.32s; }
+.loading-dot:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes loading-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+/* ================================
+   ENHANCED TYPOGRAPHY
+   ================================ */
+
+/* Code blocks in messages */
+.message-bubble code {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  font-size: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.message-bubble pre {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 8px 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.message-bubble pre code {
+  background: none;
+  padding: 0;
+  border: none;
+  color: inherit;
+}
+
+/* Enhanced prose styling */
+.prose {
+  color: inherit;
+}
+
+.prose p {
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
+
+.prose strong {
+  font-weight: 600;
+  color: inherit;
+}
+
+.prose em {
+  font-style: italic;
+  color: inherit;
+}
+
+.prose ul, .prose ol {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.prose li {
+  margin-bottom: 4px;
+}
+
+.prose h1, .prose h2, .prose h3, .prose h4 {
+  color: inherit;
+  font-weight: 600;
+  margin: 12px 0 8px 0;
+}
+
+.prose h1 { font-size: 18px; }
+.prose h2 { font-size: 16px; }
+.prose h3 { font-size: 14px; }
+.prose h4 { font-size: 14px; }
+
+/* ================================
+   IMPROVED FORM INPUTS
+   ================================ */
+
+input[type="text"], textarea {
+  font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  transition: all 0.2s ease;
+}
+
+input[type="text"]:focus, textarea:focus {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: #3b82f6;
+}
+
+input[type="text"]::placeholder, textarea::placeholder {
+  color: #9ca3af;
+  font-weight: 400;
+}
+
+/* ================================
+   KBD STYLING
+   ================================ */
+
+kbd {
+  background: #374151;
+  border: 1px solid #4b5563;
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  color: #d1d5db;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Dark theme variables */
+:root {
+  --color-bg-primary: #111827;
+  --color-bg-secondary: #1f2937;
+  --color-bg-tertiary: #374151;
+  --color-text-primary: #f9fafb;
+  --color-text-secondary: #d1d5db;
+  --color-text-tertiary: #9ca3af;
+  --color-accent-primary: #3b82f6;
+  --color-accent-secondary: #1d4ed8;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-border: rgba(75, 85, 99, 0.3);
+  --color-hover: rgba(75, 85, 99, 0.5);
 }

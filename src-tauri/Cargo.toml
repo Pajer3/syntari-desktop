@@ -17,46 +17,52 @@ name = "syntari_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.0", features = [] }
+tauri-build = { version = "2.2.0", features = [] }
 
 [dependencies]
 # Tauri framework (desktop-only)
-tauri = { version = "2.0", features = [] }
+tauri = { version = "2.5.1", features = [] }
+
+# Dialog plugin for Tauri 2.x
+tauri-plugin-dialog = "2.2.2"
+
+# File system plugin for Tauri 2.x with permissions
+tauri-plugin-fs = "2.2.2"
 
 # Async runtime and utilities
-tokio = { version = "1.0", features = ["full"] }
-anyhow = "1.0"
+tokio = { version = "1.45.1", features = ["full"] }
+anyhow = "1.0.98"
 
 # Serialization and data handling
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
 
-# UUID generation for unique IDs
-uuid = { version = "1.0", features = ["v4"] }
+# UUID generation for unique IDs (with serde support)
+uuid = { version = "1.17.0", features = ["v4", "serde"] }
 
 # HTTP client for AI integrations
 reqwest = { version = "0.12.18", features = ["json"] }
 
 # File system operations
-walkdir = "2.0"
+walkdir = "2.5.0"
 
 # Git integration
 git2 = { version = "0.20.2", optional = true }
 
 # Encryption and security
-ring = "0.17"
+ring = "0.17.14"
 base64 = "0.22.1"
 
 # Logging and tracing
-tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing = "0.1.41"
+tracing-subscriber = "0.3.19"
 
 # Configuration management
 config = "0.15.11"
 dirs = "6.0.0"
 
 # Time and date handling
-chrono = { version = "0.4", features = ["serde"] }
+chrono = { version = "0.4.41", features = ["serde"] }
 
 [features]
 default = []

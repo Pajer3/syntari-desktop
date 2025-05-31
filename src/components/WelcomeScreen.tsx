@@ -1,7 +1,7 @@
 import React from 'react';
 
 interface WelcomeScreenProps {
-  onOpenProject: (path: string) => void;
+  onOpenProject: () => void;
 }
 
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenProject }) => {
@@ -9,7 +9,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenProject }) =
     console.log(`Action: ${action}`);
     // Implement specific actions here
     if (action === 'Open Project') {
-      onOpenProject('/home/pajer/Documents/Businesses/Syntari');
+      onOpenProject();
     }
   };
 
@@ -378,8 +378,6 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenProject }) =
                   </div>
                 </div>
               </div>
-
-
 
               <div className="bg-gray-800/30 p-6 rounded-xl border border-gray-700">
                 <h3 className="text-lg font-semibold mb-4 text-yellow-400">Getting Started</h3>
