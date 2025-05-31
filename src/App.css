@@ -1,20 +1,32 @@
 @import "tailwindcss";
 
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
+/* ================================
+   SYNTARI AI IDE - DARK THEME STYLES
+   Professional IDE styling with dark theme
+   ================================ */
 
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafb);
-}
 :root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
+  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
   font-weight: 400;
 
-  color: #0f0f0f;
-  background-color: #f6f6f6;
+  /* IDE Dark Theme Colors */
+  --bg-primary: #1e1e1e;
+  --bg-secondary: #252526;
+  --bg-tertiary: #2d2d30;
+  --border-primary: #3e3e42;
+  --text-primary: #cccccc;
+  --text-secondary: #969696;
+  --text-muted: #6a6a6a;
+  --accent-blue: #0078d4;
+  --accent-green: #16c60c;
+  --accent-red: #f14c4c;
+  --accent-yellow: #ffcc02;
+
+  /* Force dark theme */
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -23,96 +35,274 @@
   -webkit-text-size-adjust: 100%;
 }
 
-.container {
+/* ================================
+   GLOBAL OVERRIDES FOR IDE
+   ================================ */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
   margin: 0;
-  padding-top: 10vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
+  padding: 0;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  overflow: hidden; /* IDE should not scroll */
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
+#root {
+  height: 100vh;
+  overflow: hidden;
 }
 
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
+/* ================================
+   SCROLLBAR STYLING (DARK THEME)
+   ================================ */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
 
-.row {
-  display: flex;
-  justify-content: center;
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
+::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 4px;
 }
 
-a:hover {
-  color: #535bf2;
+::-webkit-scrollbar-thumb:hover {
+  background: #5a5a5c;
 }
 
-h1 {
-  text-align: center;
+::-webkit-scrollbar-corner {
+  background: var(--bg-secondary);
 }
 
-input,
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
+/* ================================
+   FOCUS STYLES
+   ================================ */
+
+*:focus {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: -2px;
 }
 
-button {
-  cursor: pointer;
-}
-
-button:hover {
-  border-color: #396cd8;
-}
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
-}
-
-input,
-button {
+*:focus:not(:focus-visible) {
   outline: none;
 }
 
-#greet-input {
-  margin-right: 5px;
+/* ================================
+   SELECTION STYLING
+   ================================ */
+
+::selection {
+  background: var(--accent-blue);
+  color: white;
 }
 
-@media (prefers-color-scheme: dark) {
+::-moz-selection {
+  background: var(--accent-blue);
+  color: white;
+}
+
+/* ================================
+   COMPONENT-SPECIFIC OVERRIDES
+   ================================ */
+
+/* Button resets */
+button {
+  font-family: inherit;
+  font-size: inherit;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+/* Input resets */
+input, textarea {
+  font-family: inherit;
+  font-size: inherit;
+  border: none;
+  background: none;
+  color: inherit;
+}
+
+/* Link resets */
+a {
+  color: var(--accent-blue);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* ================================
+   UTILITY CLASSES
+   ================================ */
+
+.ide-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-primary) var(--bg-secondary);
+}
+
+.text-ide-primary {
+  color: var(--text-primary);
+}
+
+.text-ide-secondary {
+  color: var(--text-secondary);
+}
+
+.text-ide-muted {
+  color: var(--text-muted);
+}
+
+.bg-ide-primary {
+  background-color: var(--bg-primary);
+}
+
+.bg-ide-secondary {
+  background-color: var(--bg-secondary);
+}
+
+.bg-ide-tertiary {
+  background-color: var(--bg-tertiary);
+}
+
+.border-ide {
+  border-color: var(--border-primary);
+}
+
+/* ================================
+   ANIMATION CLASSES
+   ================================ */
+
+.fade-in {
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.slide-in {
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Custom animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.6s ease-out forwards;
+  opacity: 0;
+}
+
+/* Professional utilities */
+.bg-gray-750 {
+  background-color: rgb(55 65 81 / 1);
+}
+
+.text-shadow-sm {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.backdrop-blur-xs {
+  backdrop-filter: blur(2px);
+}
+
+/* Professional hover effects */
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+/* Gradient text utilities */
+.gradient-text-blue {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.gradient-text-purple {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+/* ================================
+   RESPONSIVE DESIGN
+   ================================ */
+
+@media (max-width: 768px) {
   :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
+    font-size: 13px;
   }
+}
 
-  a:hover {
-    color: #24c8db;
+@media (max-width: 480px) {
+  :root {
+    font-size: 12px;
   }
+}
 
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
+/* ================================
+   HIGH CONTRAST MODE SUPPORT
+   ================================ */
+
+@media (prefers-contrast: high) {
+  :root {
+    --text-primary: #ffffff;
+    --text-secondary: #ffffff;
+    --bg-primary: #000000;
+    --bg-secondary: #1a1a1a;
+    --border-primary: #ffffff;
   }
-  button:active {
-    background-color: #0f0f0f69;
+}
+
+/* ================================
+   REDUCED MOTION SUPPORT
+   ================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

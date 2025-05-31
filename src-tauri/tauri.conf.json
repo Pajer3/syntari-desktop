@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "syntari-desktop",
+  "productName": "Syntari AI IDE",
   "version": "0.1.0",
-  "identifier": "app",
+  "identifier": "com.syntari.ai-ide",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,9 +12,16 @@
   "app": {
     "windows": [
       {
-        "title": "syntari-desktop",
-        "width": 800,
-        "height": 600
+        "title": "Syntari AI IDE",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 1200,
+        "minHeight": 700,
+        "resizable": true,
+        "maximized": false,
+        "decorations": true,
+        "transparent": false,
+        "center": true
       }
     ],
     "security": {
