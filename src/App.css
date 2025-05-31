@@ -60,26 +60,87 @@ body {
    SCROLLBAR STYLING (DARK THEME)
    ================================ */
 
+/* Enhanced Custom Scrollbar - More Visible */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 12px;
+  height: 12px;
 }
 
 ::-webkit-scrollbar-track {
   background: var(--bg-secondary);
+  border-radius: 6px;
+  border: 1px solid var(--border-primary);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border-primary);
-  border-radius: 4px;
+  background: linear-gradient(180deg, #4a4a4a 0%, #3a3a3a 100%);
+  border-radius: 6px;
+  border: 1px solid var(--border-primary);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #5a5a5c;
+  background: linear-gradient(180deg, #5a5a5a 0%, #4a4a4a 100%);
+  border-color: #6a6a6a;
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: linear-gradient(180deg, #6a6a6a 0%, #5a5a5a 100%);
 }
 
 ::-webkit-scrollbar-corner {
   background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+}
+
+/* Firefox Scrollbar Support */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #4a4a4a var(--bg-secondary);
+}
+
+/* Enhanced IDE Scrollbar Class */
+.ide-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #4a4a4a var(--bg-secondary);
+}
+
+.ide-scrollbar::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.ide-scrollbar::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  border: 1px solid var(--border-primary);
+}
+
+.ide-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #4a4a4a 0%, #3a3a3a 100%);
+  border-radius: 6px;
+  border: 1px solid var(--border-primary);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.ide-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #5a5a5a 0%, #4a4a4a 100%);
+  border-color: #6a6a6a;
+}
+
+/* Scrollable Container Class */
+.scrollable {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.scrollable-x {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.scrollable-both {
+  overflow: auto;
 }
 
 /* ================================
@@ -144,11 +205,6 @@ a:hover {
 /* ================================
    UTILITY CLASSES
    ================================ */
-
-.ide-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-primary) var(--bg-secondary);
-}
 
 .text-ide-primary {
   color: var(--text-primary);
