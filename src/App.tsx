@@ -4,8 +4,10 @@
 import React from 'react';
 import { useAppViewModel } from './hooks/useAppViewModel';
 import { useChatViewModel } from './hooks/useChatViewModel';
+import { useContextMenu } from './hooks/useContextMenu';
 import { Header } from './components/Header';
 import { WelcomeScreen } from './components/WelcomeScreen';
+import { ContextMenu, getDefaultContextMenuItems } from './components/ContextMenu';
 import './App.css';
 
 // ================================
@@ -182,6 +184,7 @@ const App: React.FC = () => {
     appViewModel.viewModel.project,
     appViewModel.handleError
   );
+  const contextMenu = useContextMenu();
 
   // ================================
   // HANDLERS
@@ -196,13 +199,30 @@ const App: React.FC = () => {
     appViewModel.setCurrentView('settings');
   };
 
+  // Context menu items based on current view
+  const getContextMenuItems = () => {
+    const hasSelection = (window.getSelection()?.toString().length ?? 0) > 0;
+    const isChatView = appViewModel.viewModel.currentView === 'chat';
+    
+    return getDefaultContextMenuItems(
+      hasSelection,
+      isChatView, // Chat input is editable
+      appViewModel.viewModel.project?.rootPath
+    );
+  };
+
   // ================================
   // MAIN LAYOUT STRUCTURE
   // ================================
   
   if (appViewModel.viewModel.isLoading) {
     return (
-      <div className="h-screen flex flex-col bg-gray-900">
+      <div 
+        className={`h-screen flex flex-col bg-gray-900 ${
+          appViewModel.viewModel.performanceMode ? 'performance-mode' : ''
+        }`}
+        onContextMenu={contextMenu.handleContextMenu}
+      >
         <Header 
           viewModel={appViewModel.viewModel}
           currentProject={appViewModel.viewModel.project}
@@ -210,17 +230,32 @@ const App: React.FC = () => {
           onNavigate={appViewModel.setCurrentView}
           onOpenProject={handleOpenProject}
           onSettings={handleSettings}
+          onTogglePerformanceMode={appViewModel.togglePerformanceMode}
         />
         <div className="flex-1">
           <LoadingScreen />
         </div>
+        
+        {/* Context Menu */}
+        <ContextMenu
+          visible={contextMenu.contextMenu.visible}
+          x={contextMenu.contextMenu.x}
+          y={contextMenu.contextMenu.y}
+          items={getContextMenuItems()}
+          onClose={contextMenu.hideContextMenu}
+        />
       </div>
     );
   }
   
   if (appViewModel.viewModel.error) {
     return (
-      <div className="h-screen flex flex-col bg-gray-900">
+      <div 
+        className={`h-screen flex flex-col bg-gray-900 ${
+          appViewModel.viewModel.performanceMode ? 'performance-mode' : ''
+        }`}
+        onContextMenu={contextMenu.handleContextMenu}
+      >
         <Header 
           viewModel={appViewModel.viewModel}
           currentProject={appViewModel.viewModel.project}
@@ -228,6 +263,7 @@ const App: React.FC = () => {
           onNavigate={appViewModel.setCurrentView}
           onOpenProject={handleOpenProject}
           onSettings={handleSettings}
+          onTogglePerformanceMode={appViewModel.togglePerformanceMode}
         />
         <div className="flex-1">
           <ErrorScreen 
@@ -235,21 +271,36 @@ const App: React.FC = () => {
             onRetry={appViewModel.clearError}
           />
         </div>
+        
+        {/* Context Menu */}
+        <ContextMenu
+          visible={contextMenu.contextMenu.visible}
+          x={contextMenu.contextMenu.x}
+          y={contextMenu.contextMenu.y}
+          items={getContextMenuItems()}
+          onClose={contextMenu.hideContextMenu}
+        />
       </div>
     );
   }
   
   // Main IDE Layout
   return (
-    <div className="h-screen flex flex-col bg-gray-900">
+    <div 
+      className={`h-screen flex flex-col bg-gray-900 ${
+        appViewModel.viewModel.performanceMode ? 'performance-mode' : ''
+      }`}
+      onContextMenu={contextMenu.handleContextMenu}
+    >
       {/* Always visible header */}
       <Header 
         viewModel={appViewModel.viewModel}
         currentProject={appViewModel.viewModel.project}
-        aiProviders={chatViewModel.viewModel.availableProviders}
+        aiProviders={[]}
         onNavigate={appViewModel.setCurrentView}
         onOpenProject={handleOpenProject}
         onSettings={handleSettings}
+        onTogglePerformanceMode={appViewModel.togglePerformanceMode}
       />
       
       {/* Main content area */}
@@ -273,6 +324,15 @@ const App: React.FC = () => {
           }
         })()}
       </div>
+      
+      {/* Context Menu */}
+      <ContextMenu
+        visible={contextMenu.contextMenu.visible}
+        x={contextMenu.contextMenu.x}
+        y={contextMenu.contextMenu.y}
+        items={getContextMenuItems()}
+        onClose={contextMenu.hideContextMenu}
+      />
     </div>
   );
 };

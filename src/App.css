@@ -362,3 +362,100 @@ a:hover {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ================================
+   PERFORMANCE MODE - DISABLE EFFECTS
+   ================================ */
+
+/* When performance mode is enabled, disable all visual effects */
+.performance-mode,
+.performance-mode * {
+  /* Disable all transitions */
+  transition: none !important;
+  
+  /* Disable all animations */
+  animation: none !important;
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+}
+
+/* Disable specific hover scale effects in performance mode */
+.performance-mode .hover\:scale-\[1\.02\]:hover,
+.performance-mode .group:hover .group-hover\:scale-105,
+.performance-mode .hover\:scale-105:hover {
+  transform: none !important;
+}
+
+/* Disable hover transform effects but preserve layout transforms */
+.performance-mode .hover-lift:hover {
+  transform: none !important;
+}
+
+/* Disable hover background changes in performance mode */
+.performance-mode .hover\:bg-gray-700\/40:hover,
+.performance-mode .hover\:bg-gray-750\/50:hover,
+.performance-mode .hover\:bg-gray-600\/50:hover,
+.performance-mode .hover\:bg-blue-700:hover,
+.performance-mode .hover\:bg-green-700:hover,
+.performance-mode .hover\:bg-gray-500:hover,
+.performance-mode .hover\:bg-gray-700\/20:hover {
+  background-color: inherit !important;
+}
+
+/* Disable hover text color changes in performance mode */
+.performance-mode .hover\:text-white:hover,
+.performance-mode .hover\:text-blue-200:hover,
+.performance-mode .hover\:text-blue-300:hover,
+.performance-mode .hover\:text-gray-300:hover,
+.performance-mode .hover\:text-gray-400:hover,
+.performance-mode .group:hover .group-hover\:text-blue-100,
+.performance-mode .group:hover .group-hover\:text-gray-300,
+.performance-mode .group:hover .group-hover\:text-gray-400 {
+  color: inherit !important;
+}
+
+/* Disable hover border changes in performance mode */
+.performance-mode .hover\:border-gray-600\/60:hover,
+.performance-mode .hover\:border-blue-500\/50:hover {
+  border-color: inherit !important;
+}
+
+/* Disable hover shadow effects in performance mode */
+.performance-mode .hover\:shadow-xl:hover {
+  box-shadow: none !important;
+}
+
+/* Disable focus ring animations in performance mode */
+.performance-mode *:focus {
+  transition: none !important;
+}
+
+/* Disable animated elements in performance mode */
+.performance-mode .animate-spin,
+.performance-mode .animate-bounce,
+.performance-mode .animate-pulse,
+.performance-mode .animate-fade-in-up {
+  animation: none !important;
+  /* For fade-in-up, ensure opacity is visible when animation is disabled */
+  opacity: 1 !important;
+}
+
+/* Disable gradient animations in performance mode but keep static gradients */
+.performance-mode .bg-gradient-to-r:hover,
+.performance-mode .bg-gradient-to-br:hover {
+  background: inherit !important;
+}
+
+/* Override Tailwind transitions in performance mode */
+.performance-mode .transition-all,
+.performance-mode .transition-colors,
+.performance-mode .transition-transform,
+.performance-mode .transition-opacity {
+  transition: none !important;
+}
+
+/* Context Menu Performance Mode Overrides */
+.performance-mode .context-menu-item:hover {
+  background-color: inherit !important;
+  color: inherit !important;
+}

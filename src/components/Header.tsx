@@ -11,6 +11,7 @@ interface HeaderProps {
   onNavigate: (view: AppViewModel['currentView']) => void;
   onOpenProject: () => void;
   onSettings: () => void;
+  onTogglePerformanceMode: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -20,6 +21,7 @@ export const Header: React.FC<HeaderProps> = ({
   onNavigate,
   onOpenProject,
   onSettings,
+  onTogglePerformanceMode,
 }) => {
   // Calculate AI status
   const availableProviders = aiProviders.filter(p => p.isAvailable).length;
@@ -67,6 +69,31 @@ export const Header: React.FC<HeaderProps> = ({
             placeholder="Search features..."
             className="bg-gray-700/50 border border-gray-500/40 rounded-md pl-10 pr-4 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64 text-white placeholder-gray-400"
           />
+        </div>
+
+        {/* Performance Mode Toggle */}
+        <div className="flex items-center space-x-2 px-3 py-1.5 bg-gray-600/40 border border-gray-500/30 rounded-md">
+          <span className="text-xs text-gray-200">Performance</span>
+          <button
+            onClick={onTogglePerformanceMode}
+            className={`relative inline-flex h-4 w-8 items-center rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 ${
+              viewModel.performanceMode 
+                ? 'bg-orange-500' 
+                : 'bg-gray-600 transition-colors duration-200'
+            }`}
+            aria-label="Toggle Performance Mode"
+          >
+            <span
+              className={`inline-block h-3 w-3 transform rounded-full bg-white ${
+                viewModel.performanceMode 
+                  ? 'translate-x-4' 
+                  : 'translate-x-0.5 transition-transform duration-200'
+              }`}
+            />
+          </button>
+          {viewModel.performanceMode && (
+            <span className="text-xs text-orange-400 font-medium">ON</span>
+          )}
         </div>
 
         {/* AI Status Indicator */}

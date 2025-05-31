@@ -25,11 +25,11 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenProject }) =
       </div>
       
       {/* Subtle Logo Background */}
-      <div className="absolute inset-0 flex items-center justify-center opacity-3">
+      <div className="fixed inset-0 flex items-center justify-center opacity-30 pointer-events-none z-0">
         <img 
           src="/logo.png" 
           alt="Syntari Logo" 
-          className="w-[32rem] h-[32rem] object-contain filter brightness-75 grayscale"
+          className="w-[52rem] h-[52rem] object-contain filter brightness-75 grayscale"
         />
       </div>
 

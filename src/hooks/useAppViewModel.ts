@@ -23,10 +23,12 @@ interface UseAppViewModelReturn {
   closeProject: () => void;
   handleError: (error: AppError) => void;
   clearError: () => void;
+  togglePerformanceMode: () => void;
   
   // Computed properties
   isReady: boolean;
   hasProject: boolean;
+  performanceMode: boolean;
 }
 
 export const useAppViewModel = (): UseAppViewModelReturn => {
@@ -40,6 +42,7 @@ export const useAppViewModel = (): UseAppViewModelReturn => {
     error: undefined,
     project: undefined,
     user: undefined,
+    performanceMode: true,
   });
   
   const [aiProviders, setAiProviders] = useState<AiProvider[]>([]);
@@ -87,6 +90,7 @@ export const useAppViewModel = (): UseAppViewModelReturn => {
           aiProvider: 'auto',
           costOptimization: true,
           autoSave: true,
+          performanceMode: true,
           keyboardShortcuts: {},
         },
         subscription: {
@@ -208,6 +212,22 @@ export const useAppViewModel = (): UseAppViewModelReturn => {
     setViewModel(prev => ({ ...prev, error: undefined }));
   }, []);
   
+  const togglePerformanceMode = useCallback((): void => {
+    setViewModel(prev => ({
+      ...prev,
+      performanceMode: !prev.performanceMode,
+      user: prev.user ? {
+        ...prev.user,
+        preferences: {
+          ...prev.user.preferences,
+          performanceMode: !prev.performanceMode,
+        },
+      } : prev.user,
+    }));
+    
+    console.log(`⚡ Performance mode: ${!viewModel.performanceMode ? 'enabled' : 'disabled'}`);
+  }, [viewModel.performanceMode]);
+  
   // ================================
   // LIFECYCLE EFFECTS
   // ================================
@@ -271,9 +291,11 @@ export const useAppViewModel = (): UseAppViewModelReturn => {
     closeProject,
     handleError,
     clearError,
+    togglePerformanceMode,
     
     // Computed
     isReady,
     hasProject,
+    performanceMode: viewModel.performanceMode,
   };
 }; 

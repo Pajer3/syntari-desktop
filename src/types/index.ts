@@ -121,6 +121,7 @@ export interface AppViewModel {
   error?: AppError;
   project?: ProjectContext;
   user?: UserProfile;
+  performanceMode: boolean;
 }
 
 export interface EditorViewModel {
@@ -176,6 +177,7 @@ export interface UserPreferences {
   aiProvider: 'auto' | 'claude' | 'openai' | 'gemini';
   costOptimization: boolean;
   autoSave: boolean;
+  performanceMode: boolean;
   keyboardShortcuts: Record<string, string>;
 }
 
