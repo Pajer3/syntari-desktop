@@ -48,10 +48,12 @@ const EDITOR_OPTIONS = {
   cursorStyle: 'line' as const,
   automaticLayout: true,
   wordWrap: 'on' as const,
-  theme: 'vs-dark',
+  theme: 'syntari-dark',
   minimap: {
     enabled: true,
     side: 'right' as const,
+    scale: 1,
+    showSlider: 'mouseover' as const,
   },
   bracketPairColorization: {
     enabled: true,
@@ -292,6 +294,9 @@ const buildFileTree = (files: FileInfo[], rootPath: string): FileTreeNode[] => {
   const tree: FileTreeNode[] = [];
   const nodeMap = new Map<string, FileTreeNode>();
   
+  // Normalize root path (remove trailing slash)
+  const normalizedRootPath = rootPath.replace(/\/$/, '');
+  
   // Sort files so directories come first, then by name
   const sortedFiles = [...files].sort((a, b) => {
     const aIsDir = a.language === 'directory';
@@ -302,8 +307,11 @@ const buildFileTree = (files: FileInfo[], rootPath: string): FileTreeNode[] => {
     return a.name.localeCompare(b.name);
   });
   
+  // Filter out the root path itself to prevent self-nesting
+  const filteredFiles = sortedFiles.filter(file => file.path !== normalizedRootPath);
+  
   // Create nodes for all files
-  for (const file of sortedFiles) {
+  for (const file of filteredFiles) {
     const node: FileTreeNode = {
       file,
       children: [],
@@ -313,12 +321,12 @@ const buildFileTree = (files: FileInfo[], rootPath: string): FileTreeNode[] => {
   }
   
   // Build tree structure
-  for (const file of sortedFiles) {
+  for (const file of filteredFiles) {
     const node = nodeMap.get(file.path)!;
     const parentPath = file.path.substring(0, file.path.lastIndexOf('/'));
     
-    if (parentPath === rootPath.replace(/\/$/, '') || parentPath === '') {
-      // Root level item
+    // Check if this file is a direct child of the root
+    if (parentPath === normalizedRootPath) {
       tree.push(node);
     } else {
       // Find parent and add as child
@@ -326,8 +334,11 @@ const buildFileTree = (files: FileInfo[], rootPath: string): FileTreeNode[] => {
       if (parent) {
         parent.children.push(node);
       } else {
-        // If parent not found, add to root
-        tree.push(node);
+        // If parent not found and it's not the root, still add to root
+        // This handles cases where intermediate directories might be missing
+        if (!parentPath.startsWith(normalizedRootPath)) {
+          tree.push(node);
+        }
       }
     }
   }
@@ -358,12 +369,12 @@ const FileTreeItem: React.FC<{
   return (
     <div>
       <div
-        className={`flex items-center space-x-2 px-2 py-1.5 rounded cursor-pointer transition-all duration-200 ${
+        className={`flex items-center space-x-2 px-3 py-2 rounded-lg cursor-pointer transition-all duration-300 ${
           isSelected 
-            ? 'bg-blue-600 text-white shadow-sm' 
-            : 'hover:bg-gray-800 text-gray-300 hover:text-white'
+            ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg border border-blue-400' 
+            : 'hover:bg-gradient-to-r hover:from-gray-800 hover:to-gray-700 text-gray-300 hover:text-white border border-transparent hover:border-gray-600'
         }`}
-        style={{ paddingLeft: `${8 + depth * 16}px` }}
+        style={{ paddingLeft: `${12 + depth * 20}px` }}
         onClick={handleClick}
       >
         {isDirectory && (
@@ -377,10 +388,10 @@ const FileTreeItem: React.FC<{
           {isDirectory ? (node.isExpanded ? '📂' : '📁') : getFileIcon(file.extension)}
         </span>
         
-        <span className="text-sm truncate flex-1">{file.name}</span>
+        <span className="text-sm truncate flex-1 font-medium">{file.name}</span>
         
         {!isDirectory && file.size > 0 && (
-          <span className="text-xs text-gray-500 flex-shrink-0">
+          <span className="text-xs text-gray-400 flex-shrink-0 bg-gray-700 px-2 py-0.5 rounded">
             {(file.size / 1024).toFixed(1)}KB
           </span>
         )}
@@ -388,7 +399,7 @@ const FileTreeItem: React.FC<{
       
       {/* Render children if directory is expanded */}
       {isDirectory && node.isExpanded && hasChildren && (
-        <div>
+        <div className="mt-1">
           {node.children.map((childNode) => (
             <FileTreeItem
               key={childNode.file.path}
@@ -441,37 +452,37 @@ const FileExplorer: React.FC<{
   }, [project.openFiles, project.rootPath, expandedFolders]);
   
   return (
-    <div className="h-full bg-gray-900 border-r border-gray-700">
-      <div className="p-3 border-b border-gray-700 bg-gray-800">
-        <h3 className="text-sm font-semibold text-gray-200 flex items-center">
-          <span className="mr-2">📁</span>
+    <div className="h-full bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 border-r border-gray-700 shadow-lg">
+      <div className="p-3 border-b border-gray-700 bg-gradient-to-r from-gray-800 to-gray-700 backdrop-blur-sm">
+        <h3 className="text-sm font-semibold text-gray-100 flex items-center">
+          <span className="mr-2 text-blue-400">📁</span>
           Explorer
         </h3>
-        <p className="text-xs text-gray-400 mt-1 truncate" title={project.rootPath}>
+        <p className="text-xs text-gray-300 mt-1 truncate" title={project.rootPath}>
           {project.rootPath.split('/').pop() || project.rootPath}
         </p>
-        <p className="text-xs text-gray-500 mt-1">
-          {project.openFiles.length} items • {project.projectType}
+        <p className="text-xs text-gray-400 mt-1">
+          {project.openFiles.length} items • <span className="text-blue-300">{project.projectType}</span>
         </p>
       </div>
       
       <div className="p-2 overflow-y-auto" style={{ height: 'calc(100% - 80px)' }}>
         {/* Project Root */}
         <div 
-          className="flex items-center space-x-2 px-2 py-1.5 rounded hover:bg-gray-800 cursor-pointer transition-colors mb-2"
+          className="flex items-center space-x-2 px-3 py-2 rounded-lg hover:bg-gradient-to-r hover:from-gray-800 hover:to-gray-700 cursor-pointer transition-all duration-300 mb-3 border border-transparent hover:border-gray-600"
           onClick={() => toggleFolder(project.rootPath)}
         >
-          <span className="text-yellow-400 text-sm">
+          <span className="text-amber-400 text-sm">
             {expandedFolders.has(project.rootPath) ? '📂' : '📁'}
           </span>
-          <span className="text-sm text-gray-200 font-medium">
+          <span className="text-sm text-gray-100 font-medium">
             {project.rootPath.split('/').pop() || 'Project'}
           </span>
         </div>
         
         {/* File Tree */}
         {expandedFolders.has(project.rootPath) && (
-          <div className="space-y-0.5">
+          <div className="space-y-1">
             {fileTree.map((node) => (
               <FileTreeItem
                 key={node.file.path}
@@ -484,10 +495,12 @@ const FileExplorer: React.FC<{
             ))}
             
             {fileTree.length === 0 && (
-              <div className="text-center py-8 text-gray-500">
-                <span className="text-2xl">📁</span>
-                <p className="text-sm mt-2">No files found</p>
-                <p className="text-xs mt-1">This folder appears to be empty</p>
+              <div className="text-center py-12 text-gray-400">
+                <div className="bg-gradient-to-br from-gray-800 to-gray-700 rounded-xl p-6 border border-gray-600">
+                  <span className="text-3xl">📁</span>
+                  <p className="text-sm mt-3 text-gray-300">No files found</p>
+                  <p className="text-xs mt-1 text-gray-500">This folder appears to be empty</p>
+                </div>
               </div>
             )}
           </div>
@@ -607,6 +620,43 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const handleEditorDidMount = useCallback((editor: any, monaco: any) => {
     editorRef.current = editor;
     
+    // Define custom Syntari theme
+    monaco.editor.defineTheme('syntari-dark', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: 'comment', foreground: '6B7280', fontStyle: 'italic' },
+        { token: 'keyword', foreground: '8B5CF6' },
+        { token: 'string', foreground: '10B981' },
+        { token: 'number', foreground: 'F59E0B' },
+        { token: 'regexp', foreground: 'EF4444' },
+        { token: 'type', foreground: '3B82F6' },
+        { token: 'class', foreground: '06B6D4' },
+        { token: 'function', foreground: 'F472B6' },
+        { token: 'variable', foreground: 'E5E7EB' },
+        { token: 'constant', foreground: 'FBBF24' },
+      ],
+      colors: {
+        'editor.background': '#0F1419',
+        'editor.foreground': '#E5E7EB',
+        'editor.lineHighlightBackground': '#1F2937',
+        'editor.selectionBackground': '#374151',
+        'editor.inactiveSelectionBackground': '#1F2937',
+        'editorCursor.foreground': '#3B82F6',
+        'editorLineNumber.foreground': '#6B7280',
+        'editorLineNumber.activeForeground': '#9CA3AF',
+        'editor.selectionHighlightBackground': '#374151',
+        'editor.wordHighlightBackground': '#374151',
+        'editor.findMatchBackground': '#1E40AF',
+        'editor.findMatchHighlightBackground': '#1E3A8A',
+        'editorBracketMatch.background': '#374151',
+        'editorBracketMatch.border': '#6B7280',
+      }
+    });
+    
+    // Set the custom theme
+    monaco.editor.setTheme('syntari-dark');
+    
     // Add custom commands
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
       handleSave();
@@ -644,7 +694,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const language = selectedFile ? getLanguageFromExtension(selectedFile.extension) : 'plaintext';
   
   return (
-    <div className="flex h-full bg-gray-900 text-white">
+    <div className="flex h-full bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
       {/* File Explorer */}
       <div className="w-64 flex-shrink-0">
         <FileExplorer
@@ -658,30 +708,30 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       <div className="flex-1 flex flex-col">
         {/* Editor Header */}
         {selectedFile && (
-          <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
-            <div className="flex items-center space-x-3">
-              <span className="text-lg">{getFileIcon(selectedFile.extension)}</span>
+          <div className="flex items-center justify-between px-6 py-3 bg-gradient-to-r from-gray-800 via-gray-700 to-gray-800 border-b border-gray-600 shadow-lg">
+            <div className="flex items-center space-x-4">
+              <span className="text-xl">{getFileIcon(selectedFile.extension)}</span>
               <div className="flex flex-col">
-                <div className="flex items-center space-x-2">
-                  <span className="text-sm font-medium text-gray-200">{selectedFile.name}</span>
-                  {isModified && <span className="w-2 h-2 bg-orange-500 rounded-full"></span>}
-                  {isLoading && <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>}
+                <div className="flex items-center space-x-3">
+                  <span className="text-sm font-semibold text-gray-100">{selectedFile.name}</span>
+                  {isModified && <span className="w-2 h-2 bg-orange-400 rounded-full shadow-lg"></span>}
+                  {isLoading && <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse shadow-lg"></span>}
                 </div>
                 <span className="text-xs text-gray-400">{selectedFile.path}</span>
               </div>
             </div>
             
-            <div className="flex items-center space-x-2">
-              <span className="text-xs text-gray-500 px-2 py-1 bg-gray-700 rounded">
+            <div className="flex items-center space-x-3">
+              <span className="text-xs text-gray-300 px-3 py-1.5 bg-gradient-to-r from-gray-700 to-gray-600 rounded-lg border border-gray-500">
                 {language}
               </span>
               <button
                 onClick={handleSave}
                 disabled={!isModified || isLoading}
-                className={`px-3 py-1.5 text-xs rounded transition-all duration-200 ${
+                className={`px-4 py-2 text-xs rounded-lg transition-all duration-300 font-medium ${
                   isModified && !isLoading
-                    ? 'bg-green-600 hover:bg-green-700 text-white shadow-sm'
-                    : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                    ? 'bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white shadow-lg border border-green-400'
+                    : 'bg-gray-600 text-gray-400 cursor-not-allowed border border-gray-500'
                 }`}
               >
                 {isLoading ? 'Saving...' : 'Save'} <span className="text-gray-300">(Ctrl+S)</span>
@@ -689,7 +739,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
               <button
                 onClick={handleAskAI}
                 disabled={!selectedFile || isLoading}
-                className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded transition-all duration-200 text-white shadow-sm"
+                className="px-4 py-2 text-xs bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 disabled:from-gray-600 disabled:to-gray-500 disabled:cursor-not-allowed rounded-lg transition-all duration-300 text-white shadow-lg border border-blue-400 font-medium"
               >
                 Ask AI <span className="text-gray-300">(Ctrl+K)</span>
               </button>
@@ -699,13 +749,13 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
 
         {/* Error Display */}
         {error && (
-          <div className="px-4 py-2 bg-red-900/50 border-b border-red-800 text-red-200 text-sm">
-            <div className="flex items-center space-x-2">
-              <span>⚠️</span>
-              <span>{error}</span>
+          <div className="px-6 py-3 bg-gradient-to-r from-red-900/70 to-red-800/70 border-b border-red-700 text-red-200 text-sm backdrop-blur-sm">
+            <div className="flex items-center space-x-3">
+              <span className="text-red-400">⚠️</span>
+              <span className="flex-1">{error}</span>
               <button 
                 onClick={() => setError(null)}
-                className="ml-auto text-red-400 hover:text-red-300"
+                className="text-red-300 hover:text-red-200 transition-colors duration-200 font-bold"
               >
                 ✕
               </button>
@@ -745,37 +795,39 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
               )}
             </div>
           ) : (
-            <div className="flex items-center justify-center h-full text-gray-400 bg-gray-900">
-              <div className="text-center max-w-md">
-                <div className="text-6xl mb-6">💻</div>
-                <h2 className="text-2xl font-bold mb-4 text-gray-200">Syntari AI IDE</h2>
-                <p className="text-gray-400 mb-2">Professional code editor powered by Monaco</p>
-                <p className="text-sm text-gray-500 mb-6">
-                  Select a file from the explorer to start editing with enterprise-grade features
-                </p>
-                <div className="grid grid-cols-2 gap-4 text-sm text-gray-500">
-                  <div className="text-center">
-                    <div className="text-2xl mb-2">🚀</div>
-                    <p>IntelliSense & Auto-completion</p>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl mb-2">🎨</div>
-                    <p>Syntax Highlighting</p>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl mb-2">🔍</div>
-                    <p>Advanced Search & Replace</p>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl mb-2">🤖</div>
-                    <p>AI-Powered Assistance</p>
-                  </div>
-                </div>
-                <div className="mt-6 pt-4 border-t border-gray-700">
-                  <p className="text-xs text-gray-600">
-                    Project: <span className="text-blue-400">{project.projectType}</span> • 
-                    Files: <span className="text-green-400">{project.openFiles.length}</span>
+            <div className="flex items-center justify-center h-full text-gray-300 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+              <div className="text-center max-w-2xl px-8">
+                <div className="bg-gradient-to-br from-gray-800 to-gray-700 rounded-2xl p-8 border border-gray-600 shadow-2xl">
+                  <div className="text-7xl mb-6 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">💻</div>
+                  <h2 className="text-3xl font-bold mb-4 bg-gradient-to-r from-gray-100 to-gray-300 bg-clip-text text-transparent">Syntari AI IDE</h2>
+                  <p className="text-gray-300 mb-2 text-lg">Professional code editor powered by Monaco</p>
+                  <p className="text-sm text-gray-400 mb-8">
+                    Select a file from the explorer to start editing with enterprise-grade features
                   </p>
+                  <div className="grid grid-cols-2 gap-6 text-sm text-gray-400 mb-8">
+                    <div className="text-center p-4 bg-gradient-to-br from-gray-700 to-gray-600 rounded-xl border border-gray-500">
+                      <div className="text-3xl mb-3 bg-gradient-to-r from-green-400 to-blue-500 bg-clip-text text-transparent">🚀</div>
+                      <p className="text-gray-200 font-medium">IntelliSense & Auto-completion</p>
+                    </div>
+                    <div className="text-center p-4 bg-gradient-to-br from-gray-700 to-gray-600 rounded-xl border border-gray-500">
+                      <div className="text-3xl mb-3 bg-gradient-to-r from-pink-400 to-red-500 bg-clip-text text-transparent">🎨</div>
+                      <p className="text-gray-200 font-medium">Syntax Highlighting</p>
+                    </div>
+                    <div className="text-center p-4 bg-gradient-to-br from-gray-700 to-gray-600 rounded-xl border border-gray-500">
+                      <div className="text-3xl mb-3 bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">🔍</div>
+                      <p className="text-gray-200 font-medium">Advanced Search & Replace</p>
+                    </div>
+                    <div className="text-center p-4 bg-gradient-to-br from-gray-700 to-gray-600 rounded-xl border border-gray-500">
+                      <div className="text-3xl mb-3 bg-gradient-to-r from-purple-400 to-blue-500 bg-clip-text text-transparent">🤖</div>
+                      <p className="text-gray-200 font-medium">AI-Powered Assistance</p>
+                    </div>
+                  </div>
+                  <div className="pt-6 border-t border-gray-600">
+                    <p className="text-xs text-gray-500">
+                      Project: <span className="text-blue-400 font-medium">{project.projectType}</span> • 
+                      Files: <span className="text-green-400 font-medium">{project.openFiles.length}</span>
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
