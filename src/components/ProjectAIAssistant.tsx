@@ -12,7 +12,6 @@ import type { ProjectContext, FileInfo, ChatMessage } from '../types';
 interface ProjectAIAssistantProps {
   project: ProjectContext;
   currentFile: FileInfo | null;
-  onSendMessage: (message: string, context?: any) => Promise<string>;
 }
 
 interface AiResponse {
@@ -31,7 +30,6 @@ interface AiResponse {
 export const ProjectAIAssistant: React.FC<ProjectAIAssistantProps> = ({
   project,
   currentFile,
-  onSendMessage,
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');

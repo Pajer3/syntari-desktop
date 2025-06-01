@@ -21,7 +21,7 @@ tauri-build = { version = "2.2.0", features = [] }
 
 [dependencies]
 # Tauri framework (desktop-only)
-tauri = { version = "2.5.1", features = [] }
+tauri = { version = "2.5.1", features = ["devtools"] }
 
 # Dialog plugin for Tauri 2.x
 tauri-plugin-dialog = "2.2.2"

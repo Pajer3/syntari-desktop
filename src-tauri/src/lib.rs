@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use tauri::State;
+use tauri::{State, Manager};
 use tokio::sync::Mutex;
 use anyhow::{Result, Context};
 use reqwest;
@@ -528,6 +528,34 @@ async fn check_folder_permissions(path: String) -> Result<TauriResult<bool>, Str
                 success: false,
                 data: Some(false),
                 error: Some(error_message),
+            })
+        }
+    }
+}
+
+// Add missing commands for file explorer
+#[tauri::command]
+async fn get_directory_mtime(path: String) -> Result<TauriResult<u64>, String> {
+    use std::fs;
+    
+    match fs::metadata(&path) {
+        Ok(metadata) => {
+            let mtime = metadata.modified()
+                .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs())
+                .unwrap_or(0);
+            
+            Ok(TauriResult {
+                success: true,
+                data: Some(mtime),
+                error: None,
+            })
+        }
+        Err(e) => {
+            tracing::warn!("Failed to get directory mtime for {}: {}", path, e);
+            Ok(TauriResult {
+                success: false,
+                data: Some(0),
+                error: Some(format!("Cannot get directory modification time: {}", e)),
             })
         }
     }
@@ -1077,6 +1105,30 @@ pub struct Context7DocsResult {
     pub topic_focused: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DirectoryInfo {
+    pub path: String,
+    pub name: String,
+    pub depth: u32,
+    pub last_modified: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FileInfoChunk {
+    pub path: String,
+    pub name: String,
+    pub depth: u32,
+    pub size: u64,
+    pub last_modified: u64,
+    pub extension: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ScanFilesResult {
+    pub files: Vec<FileInfoChunk>,
+    pub has_more: bool,
+}
+
 #[tauri::command]
 async fn resolve_library_id(library_name: String) -> Result<TauriResult<Vec<Context7LibraryResult>>, String> {
     tracing::info!("Resolving library ID for: {}", library_name);
@@ -1269,6 +1321,183 @@ async fn enhance_prompt_with_context7(prompt: &str, project_context: &Option<Pro
     enhanced_prompt
 }
 
+#[tauri::command]
+async fn scan_directories_only(
+    path: String, 
+    max_depth: Option<u32>, 
+    ignore_patterns: Option<Vec<String>>
+) -> Result<TauriResult<Vec<DirectoryInfo>>, String> {
+    use std::fs;
+    use walkdir::WalkDir;
+    
+    let max_depth = max_depth.unwrap_or(3);
+    let ignore_patterns = ignore_patterns.unwrap_or_else(|| vec![
+        ".git".to_string(), 
+        "node_modules".to_string(), 
+        ".DS_Store".to_string(), 
+        "target".to_string()
+    ]);
+    
+    tracing::info!("Scanning directories only in: {} (max depth: {})", path, max_depth);
+    
+    let mut directories = Vec::new();
+    let project_path = PathBuf::from(&path);
+    
+    for entry in WalkDir::new(&project_path)
+        .max_depth(max_depth as usize)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        if !entry.file_type().is_dir() {
+            continue;
+        }
+        
+        let dir_path = entry.path();
+        let path_str = dir_path.to_string_lossy();
+        
+        // Skip ignored patterns
+        let should_ignore = ignore_patterns.iter().any(|pattern| {
+            dir_path.file_name()
+                .map(|name| name.to_string_lossy().contains(pattern))
+                .unwrap_or(false)
+        });
+        
+        if should_ignore {
+            continue;
+        }
+        
+        if let Ok(metadata) = fs::metadata(dir_path) {
+            let depth = dir_path.components().count() - project_path.components().count();
+            let last_modified = metadata.modified()
+                .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs())
+                .unwrap_or(0);
+            
+            directories.push(DirectoryInfo {
+                path: path_str.to_string(),
+                name: dir_path.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "unknown".to_string()),
+                depth: depth as u32,
+                last_modified,
+            });
+        }
+    }
+    
+    tracing::info!("Found {} directories", directories.len());
+    
+    Ok(TauriResult {
+        success: true,
+        data: Some(directories),
+        error: None,
+    })
+}
+
+#[tauri::command]
+async fn scan_files_chunked(
+    path: String,
+    offset: usize,
+    limit: usize,
+    ignore_patterns: Option<Vec<String>>,
+    include_hidden: Option<bool>
+) -> Result<TauriResult<ScanFilesResult>, String> {
+    use std::fs;
+    use walkdir::WalkDir;
+    
+    let ignore_patterns = ignore_patterns.unwrap_or_else(|| vec![
+        ".git".to_string(), 
+        "node_modules".to_string(), 
+        ".DS_Store".to_string(), 
+        "target".to_string()
+    ]);
+    let include_hidden = include_hidden.unwrap_or(false);
+    
+    tracing::info!("Scanning files in: {} (offset: {}, limit: {})", path, offset, limit);
+    
+    let project_path = PathBuf::from(&path);
+    let mut all_files = Vec::new();
+    
+    // Collect all files first (we can optimize this later with streaming)
+    for entry in WalkDir::new(&project_path)
+        .max_depth(5)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        
+        let file_path = entry.path();
+        let path_str = file_path.to_string_lossy();
+        
+        // Skip hidden files unless requested
+        if !include_hidden {
+            if let Some(filename) = file_path.file_name() {
+                let filename_str = filename.to_string_lossy();
+                if filename_str.starts_with('.') && 
+                   !filename_str.starts_with(".env") && 
+                   !filename_str.starts_with(".git") &&
+                   filename_str != ".gitignore" &&
+                   filename_str != ".gitattributes" {
+                    continue;
+                }
+            }
+        }
+        
+        // Skip ignored patterns
+        let should_ignore = ignore_patterns.iter().any(|pattern| {
+            path_str.contains(&format!("/{}/", pattern)) || 
+            path_str.contains(&format!("\\{}\\", pattern))
+        });
+        
+        if should_ignore {
+            continue;
+        }
+        
+        if let Ok(metadata) = fs::metadata(file_path) {
+            let depth = file_path.components().count() - project_path.components().count();
+            let extension = file_path.extension()
+                .map(|e| format!(".{}", e.to_string_lossy()))
+                .unwrap_or_else(|| "".to_string());
+            
+            let last_modified = metadata.modified()
+                .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs())
+                .unwrap_or(0);
+            
+            all_files.push(FileInfoChunk {
+                path: path_str.to_string(),
+                name: file_path.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "unknown".to_string()),
+                depth: depth as u32,
+                size: metadata.len(),
+                last_modified,
+                extension,
+            });
+        }
+    }
+    
+    // Return the requested chunk
+    let end_index = std::cmp::min(offset + limit, all_files.len());
+    let chunk = if offset < all_files.len() {
+        all_files[offset..end_index].to_vec()
+    } else {
+        Vec::new()
+    };
+    
+    let has_more = end_index < all_files.len();
+    
+    tracing::info!("Returning {} files (chunk {}-{} of {})", chunk.len(), offset, end_index, all_files.len());
+    
+    Ok(TauriResult {
+        success: true,
+        data: Some(ScanFilesResult {
+            files: chunk,
+            has_more,
+        }),
+        error: None,
+    })
+}
+
 // ================================
 // TAURI APPLICATION SETUP
 // ================================
@@ -1279,6 +1508,20 @@ pub fn run() {
         .manage(AppState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .setup(|app| {
+            // Setup logic and developer tools for debug builds
+            tracing::info!("Syntari AI IDE starting up...");
+            
+            #[cfg(debug_assertions)] // Only enable devtools in debug builds
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    window.open_devtools();
+                    tracing::info!("Developer tools opened automatically for window: {}", window.label());
+                }
+            }
+            
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             initialize_app,
             get_ai_providers,
@@ -1293,6 +1536,9 @@ pub fn run() {
             check_folder_permissions,
             resolve_library_id,
             get_library_docs,
+            get_directory_mtime,
+            scan_directories_only,
+            scan_files_chunked,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

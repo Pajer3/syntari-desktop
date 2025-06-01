@@ -3,20 +3,19 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { 
+import type {
+  AppError,
+  ProjectContext,
   ChatViewModel,
   ChatSession,
   ChatMessage,
   AiProvider,
   AiRequest,
   ConsensusResult,
-  QualityMetrics,
-  PerformanceMetrics,
   SecurityContext,
   AuditMetadata,
-  ProjectContext,
-  AppError,
-  TauriResult
+  QualityMetrics,
+  TauriResult,
 } from '../types';
 
 // ================================
@@ -150,22 +149,13 @@ export const useChatViewModel = (
   
   // Enterprise State Management
   const [isInitialized, setIsInitialized] = useState(false);
-  const [securityContext, setSecurityContext] = useState<SecurityContext | undefined>(undefined);
+  const [securityContext] = useState<SecurityContext | undefined>(undefined);
   const [auditQueue, setAuditQueue] = useState<AuditMetadata[]>([]);
-  const [performanceMetrics, setPerformanceMetrics] = useState<PerformanceMetrics>({
-    responseTime: 0,
-    memoryUsage: 0,
-    cpuUsage: 0,
-    networkLatency: 0,
-    errorRate: 0,
-    throughput: 0,
-  });
   
   // Operational References
   const sendingMessageRef = useRef<boolean>(false);
   const sessionRef = useRef<string>('');
   const rateLimitRef = useRef<number[]>([]);
-  const costTrackingRef = useRef<number>(0);
   const qualityHistoryRef = useRef<number[]>([]);
   
   // ================================
@@ -237,7 +227,7 @@ export const useChatViewModel = (
   // AUDIT & COMPLIANCE
   // ================================
   
-  const auditAction = useCallback(async (action: string, metadata: Record<string, any>): Promise<void> => {
+  const auditAction = useCallback(async (action: string): Promise<void> => {
     const auditEntry: AuditMetadata = {
       auditId: `chat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       operation: action,
@@ -281,7 +271,7 @@ export const useChatViewModel = (
       });
       
       if (result.success && result.data) {
-        auditAction('conversation_exported', { sessionId: sessionRef.current });
+        auditAction('conversation_exported');
         return result.data;
       }
       
@@ -358,7 +348,7 @@ export const useChatViewModel = (
         console.log(`✅ Cost optimization enabled - Target: ${COST_SAVINGS_TARGET * 100}%`);
       }
       
-      auditAction('cost_optimization', { currentSavings, target: COST_SAVINGS_TARGET });
+      auditAction('cost_optimization');
       
     } catch (error) {
       console.error('❌ Cost optimization failed:', error);
@@ -407,10 +397,7 @@ export const useChatViewModel = (
       console.log(`📁 Project context: ${projectContext.projectType}`);
       console.log(`🔐 Security level: ${securityRisk}`);
       
-      auditAction('session_created', { 
-        sessionId: result.data, 
-        projectType: projectContext.projectType 
-      });
+      auditAction('session_created');
       
       return result.data;
       
@@ -551,7 +538,7 @@ export const useChatViewModel = (
           [consensus.bestResponse.provider]: (viewModel.session.analytics!.modelUsageBreakdown[consensus.bestResponse.provider] || 0) + 1,
         },
         userSatisfactionScore: viewModel.session.analytics!.userSatisfactionScore,
-        productivityGains: viewModel.session.analytics!.productivityGains + calculateProductivityGain(content, aiMessage.content),
+        productivityGains: (viewModel.session.analytics?.productivityGains || 0) + calculateProductivityGain(content, aiMessage.content),
       };
       
       // Update cost tracking
@@ -598,12 +585,7 @@ export const useChatViewModel = (
       console.log(`   Total cost: $${updatedCostTracking.totalSpent.toFixed(6)}`);
       console.log(`   Budget remaining: $${updatedCostTracking.budgetRemaining.toFixed(2)}`);
       
-      auditAction('message_sent', {
-        provider: consensus.bestResponse.provider,
-        cost: consensus.totalCost,
-        quality: consensus.confidenceScore,
-        responseTime,
-      });
+      auditAction('message_sent');
       
     } catch (error) {
       setViewModel(prev => ({ ...prev, isTyping: false }));
@@ -675,7 +657,7 @@ export const useChatViewModel = (
     console.log(`🎯 Provider selected: ${provider.name} (${provider.type})`);
     console.log(`💰 Cost per token: $${provider.costPerToken.toFixed(8)}`);
     
-    auditAction('provider_selected', { providerId, providerType: provider.type });
+    auditAction('provider_selected');
   }, [viewModel.availableProviders, auditAction]);
   
   const toggleSmartRouting = useCallback((): void => {
@@ -692,12 +674,10 @@ export const useChatViewModel = (
       console.log('💎 Cost optimization active - 97% savings target');
     }
     
-    auditAction('smart_routing_toggle', { enabled: newSmartRouting });
+    auditAction('smart_routing_toggle');
   }, [viewModel.smartRouting, auditAction]);
   
   const clearSession = useCallback((): void => {
-    const sessionId = sessionRef.current;
-    
     setViewModel(prev => ({
       ...prev,
       session: {
@@ -722,7 +702,7 @@ export const useChatViewModel = (
     qualityHistoryRef.current = [];
     
     console.log('🗑️ Chat session cleared');
-    auditAction('session_cleared', { sessionId });
+    auditAction('session_cleared');
   }, [auditAction]);
   
   // ================================

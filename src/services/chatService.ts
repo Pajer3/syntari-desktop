@@ -1,19 +1,13 @@
 // Syntari AI IDE - Enterprise Chat Service
 // Professional chat service with AI routing and enterprise features
 
-import { invoke } from '@tauri-apps/api/core';
 import type {
-  ChatMessage,
   ChatSession,
   AiProvider,
   AiRequest,
   AiResponse,
-  ConsensusResult,
   ProjectContext,
-  TauriResult,
-  AppError,
   SecurityContext,
-  AuditMetadata
 } from '../types';
 
 // Configuration
@@ -279,7 +273,10 @@ export class ChatService {
     const providerResponses = responses[provider.type] || responses.claude;
     const baseResponse = providerResponses[Math.floor(Math.random() * providerResponses.length)];
     
-    return `${baseResponse}\n\n*This is a mock response for development purposes.*`;
+    // Include a relevant snippet from the prompt to show we're processing it
+    const promptSnippet = prompt.length > 50 ? prompt.substring(0, 50) + "..." : prompt;
+    
+    return `${baseResponse}\n\nRegarding your query: "${promptSnippet}"\n\n*This is a mock response for development purposes.*`;
   }
 
   // Export conversation

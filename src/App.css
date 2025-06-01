@@ -1277,6 +1277,11 @@ a:hover {
   cursor: default;
 }
 
+.context-menu-item:focus {
+  outline: none;
+  background-color: rgba(59, 130, 246, 0.3);
+}
+
 .context-menu-separator {
   height: 1px;
   background: var(--vscode-border);
@@ -1374,3 +1379,322 @@ a:hover {
 .h-8 { height: 32px; }
 .w-64 { width: 256px; }
 .min-w-0 { min-width: 0; }
+
+/* ================================ */
+/* VIRTUALIZED FILE EXPLORER STYLES */
+/* ================================ */
+
+.virtualized-file-explorer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--vscode-sidebar);
+  color: var(--vscode-fg);
+  font-size: 13px;
+  user-select: none;
+}
+
+.file-explorer-header {
+  padding: 8px 12px;
+  background-color: var(--vscode-sidebar);
+  border-bottom: 1px solid var(--vscode-border);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--vscode-fg-muted);
+}
+
+.error-banner {
+  padding: 8px 12px;
+  background-color: var(--vscode-error-bg);
+  border-bottom: 1px solid var(--vscode-error-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.file-list-container {
+  flex: 1;
+  overflow: hidden;
+}
+
+.file-list {
+  outline: none;
+}
+
+.file-explorer-item-virtualized {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+  border: none;
+  outline: none;
+}
+
+.file-explorer-item-virtualized:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.file-explorer-item-virtualized.selected {
+  background-color: var(--vscode-accent);
+  color: white;
+}
+
+.file-explorer-item-virtualized:focus {
+  background-color: rgba(255, 255, 255, 0.15);
+  outline: 1px solid var(--vscode-accent);
+  outline-offset: -1px;
+}
+
+.file-item-content {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  padding: 2px 0;
+}
+
+.chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  font-size: 10px;
+  color: var(--vscode-fg-muted);
+  transition: transform 0.1s ease;
+}
+
+.file-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.file-size {
+  font-size: 11px;
+  color: var(--vscode-fg-muted);
+  margin-left: auto;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+.file-explorer-footer {
+  padding: 4px 12px;
+  background-color: var(--vscode-sidebar);
+  border-top: 1px solid var(--vscode-border);
+  font-size: 11px;
+  color: var(--vscode-fg-muted);
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+/* Performance optimizations */
+.performance-mode .file-explorer-item-virtualized {
+  transition: none;
+}
+
+.performance-mode .chevron {
+  transition: none;
+}
+
+.performance-mode .file-explorer-item-virtualized:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Accessibility improvements */
+@media (prefers-reduced-motion: reduce) {
+  .file-explorer-item-virtualized,
+  .chevron {
+    transition: none;
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .file-explorer-item-virtualized:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+  }
+  
+  .file-explorer-item-virtualized.selected {
+    background-color: #0078d4;
+    outline: 2px solid white;
+  }
+  
+  .file-explorer-item-virtualized:focus {
+    outline: 2px solid #ffff00;
+  }
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .file-explorer-item-virtualized {
+    min-height: 32px;
+  }
+  
+  .file-item-content {
+    padding: 4px 0;
+  }
+  
+  .file-icon {
+    width: 18px;
+    height: 18px;
+    font-size: 14px;
+  }
+  
+  .file-name {
+    font-size: 14px;
+  }
+}
+
+/* ================================ */
+/* ENHANCED EDITOR PERFORMANCE */
+/* ================================ */
+
+/* Optimize Monaco Editor container */
+.monaco-editor {
+  will-change: transform, opacity;
+}
+
+.monaco-editor .monaco-scrollable-element {
+  /* Use hardware acceleration for smooth scrolling */
+  transform: translateZ(0);
+}
+
+/* Optimize syntax highlighting performance */
+.monaco-editor .view-lines {
+  /* Enable GPU compositing for large files */
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* Reduce reflows during typing */
+.monaco-editor .cursors-layer {
+  will-change: transform;
+}
+
+/* Performance mode optimizations for editor */
+.performance-mode .monaco-editor .decorations-overview-ruler,
+.performance-mode .monaco-editor .minimap {
+  display: none;
+}
+
+.performance-mode .monaco-editor .suggest-widget,
+.performance-mode .monaco-editor .parameter-hints-widget {
+  will-change: transform, opacity;
+}
+
+/* ================================ */
+/* MEMORY USAGE OPTIMIZATIONS */
+/* ================================ */
+
+/* Limit the number of rendered DOM elements */
+.file-list-container {
+  contain: layout style paint;
+}
+
+/* Optimize icon rendering */
+.file-icon {
+  contain: layout style;
+}
+
+/* Prevent unnecessary repaints */
+.file-explorer-item-virtualized {
+  contain: layout style;
+}
+
+/* ================================ */
+/* LOADING STATES */
+/* ================================ */
+
+.scan-progress {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: var(--vscode-sidebar);
+  border-bottom: 1px solid var(--vscode-border);
+  font-size: 11px;
+  color: var(--vscode-fg-muted);
+}
+
+.scan-progress-bar {
+  flex: 1;
+  height: 2px;
+  background-color: var(--vscode-border);
+  border-radius: 1px;
+  overflow: hidden;
+  margin: 0 8px;
+}
+
+.scan-progress-fill {
+  height: 100%;
+  background-color: var(--vscode-accent);
+  transition: width 0.2s ease;
+}
+
+/* Skeleton loading for file items */
+.file-item-skeleton {
+  display: flex;
+  align-items: center;
+  padding: 2px 8px;
+  height: 24px;
+}
+
+.skeleton-icon {
+  width: 16px;
+  height: 16px;
+  background-color: var(--vscode-border);
+  border-radius: 2px;
+  margin-right: 6px;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-text {
+  height: 12px;
+  background-color: var(--vscode-border);
+  border-radius: 2px;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-text.short {
+  width: 60px;
+}
+
+.skeleton-text.medium {
+  width: 120px;
+}
+
+.skeleton-text.long {
+  width: 180px;
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}

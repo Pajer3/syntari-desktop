@@ -315,8 +315,8 @@ const App: React.FC = () => {
         content: (
           <CodeEditor
             project={project}
-            onFileChange={(file, content) => {
-              console.log('📝 File changed:', file.name);
+            onFileChange={(file, _content) => {
+              console.log(`File changed: ${file.name}`);
               setCurrentFile(file);
             }}
             onRequestAI={(context) => {
@@ -338,33 +338,6 @@ const App: React.FC = () => {
           <ProjectAIAssistant
             project={project}
             currentFile={currentFile}
-            onSendMessage={async (message, context) => {
-              // Integrate with the real AI backend through Tauri
-              try {
-                console.log('🤖 Sending AI request:', { message, context });
-                
-                const response = await invoke<any>('generate_ai_response', {
-                  request: {
-                    id: `req-${Date.now()}`,
-                    prompt: message,
-                    context: context || project,
-                    max_tokens: 2000,
-                    temperature: 0.7,
-                  },
-                });
-                
-                console.log('🤖 AI response received:', response);
-                
-                if (response.success && response.data) {
-                  return response.data.best_response.content;
-                } else {
-                  throw new Error(response.error || 'AI request failed');
-                }
-              } catch (error) {
-                console.error('Failed to get AI response:', error);
-                throw error;
-              }
-            }}
           />
         ),
       };
@@ -591,10 +564,7 @@ const App: React.FC = () => {
       {/* Header */}
       <Header 
         viewModel={appViewModel.viewModel}
-        currentProject={appViewModel.viewModel.project}
         aiProviders={[]}
-        onNavigate={appViewModel.setCurrentView}
-        onOpenProject={handleOpenProject}
         onSettings={handleSettings}
         onTogglePerformanceMode={appViewModel.togglePerformanceMode}
       />

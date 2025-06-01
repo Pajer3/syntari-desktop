@@ -1,15 +1,16 @@
 // Syntari AI IDE - Professional Code Editor Component
-// VSCode-inspired layout and design
+// VSCode-inspired layout with high-performance virtualized file explorer
 
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import Editor from '@monaco-editor/react';
 import { invoke } from '@tauri-apps/api/core';
 import type { ProjectContext, FileInfo } from '../types';
-import { FileExplorer } from './editor/FileExplorer';
+import { VirtualizedFileExplorer } from './editor/VirtualizedFileExplorer';
 import { EditorHeader } from './editor/EditorHeader';
 import { EmptyEditorState } from './editor/EmptyEditorState';
 import { EDITOR_OPTIONS } from '../constants/editorConfig';
 import { getLanguageFromExtension } from '../utils/editorUtils';
+import type { FileNode } from '../types/fileSystem';
 
 // ================================
 // TYPES
@@ -33,8 +34,17 @@ interface TauriResult<T> {
   error?: string;
 }
 
+interface PerformanceConfig {
+  enableVirtualization: boolean;
+  chunkSize: number;
+  debounceMs: number;
+  maxFileSize: number; // in bytes
+  enableLinting: boolean;
+  enableMinimap: boolean;
+}
+
 // ================================
-// PROFESSIONAL CODE EDITOR COMPONENT
+// PERFORMANCE OPTIMIZED CODE EDITOR
 // ================================
 
 export const CodeEditor: React.FC<CodeEditorProps> = ({
@@ -42,16 +52,58 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   onFileChange,
   onRequestAI,
 }) => {
+  // Core state
   const [selectedFile, setSelectedFile] = useState<EditorFile | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [isModified, setIsModified] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const editorRef = useRef<any>(null);
   
+  // Performance state
+  const [performanceMode, setPerformanceMode] = useState(false);
+  const [fileCache] = useState(new Map<string, string>());
+  
+  // Refs for optimization
+  const editorRef = useRef<any>(null);
+  const contentChangeTimeoutRef = useRef<number>();
+  const autoSaveTimeoutRef = useRef<number>();
+  
+  // Performance configuration
+  const perfConfig: PerformanceConfig = useMemo(() => ({
+    enableVirtualization: true,
+    chunkSize: performanceMode ? 25 : 50,
+    debounceMs: performanceMode ? 100 : 300,
+    maxFileSize: performanceMode ? 1024 * 1024 : 5 * 1024 * 1024, // 1MB vs 5MB
+    enableLinting: !performanceMode,
+    enableMinimap: !performanceMode,
+  }), [performanceMode]);
+  
+  // Optimized file loading with caching
   const loadFileContent = useCallback(async (file: FileInfo) => {
     if (file.language === 'directory') {
       setError('Cannot open directory as file');
+      return;
+    }
+    
+    // Check cache first
+    const cached = fileCache.get(file.path);
+    if (cached) {
+      setFileContent(cached);
+      setIsModified(false);
+      
+      const cachedFile: EditorFile = {
+        ...file,
+        content: cached,
+        isOpen: true,
+        isDirty: false,
+      };
+      setSelectedFile(cachedFile);
+      return;
+    }
+    
+    // Check file size before loading
+    if (file.size > perfConfig.maxFileSize) {
+      setError(`File too large (${Math.round(file.size / 1024 / 1024)}MB). Maximum size: ${Math.round(perfConfig.maxFileSize / 1024 / 1024)}MB`);
       return;
     }
     
@@ -62,6 +114,9 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       const result = await invoke<TauriResult<string>>('read_file', { path: file.path });
       
       if (result.success && result.data) {
+        // Cache the content
+        fileCache.set(file.path, result.data);
+        
         setFileContent(result.data);
         setIsModified(false);
         
@@ -81,22 +136,27 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [fileCache, perfConfig.maxFileSize]);
 
-  const handleFileSelect = useCallback((file: FileInfo) => {
-    if (selectedFile?.path === file.path) return;
-    loadFileContent(file);
-  }, [selectedFile, loadFileContent]);
-  
-  const handleContentChange = useCallback((content: string) => {
-    setFileContent(content);
-    setIsModified(true);
+  // Convert FileNode to FileInfo for compatibility
+  const convertFileNode = useCallback((node: FileNode): FileInfo => ({
+    path: node.path,
+    name: node.name,
+    extension: node.extension,
+    size: node.size || 0,
+    lastModified: node.lastModified,
+    content: undefined,
+    language: node.isDirectory ? 'directory' : undefined,
+  }), []);
+
+  const handleFileSelect = useCallback((node: FileNode) => {
+    if (selectedFile?.path === node.path) return;
     
-    if (selectedFile && onFileChange) {
-      onFileChange(selectedFile, content);
-    }
-  }, [selectedFile, onFileChange]);
+    const fileInfo = convertFileNode(node);
+    loadFileContent(fileInfo);
+  }, [selectedFile, convertFileNode, loadFileContent]);
   
+  // Stable file save handler
   const handleSave = useCallback(async () => {
     if (!selectedFile || !isModified) return;
     
@@ -112,6 +172,14 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       if (result.success) {
         setIsModified(false);
         setSelectedFile(prev => prev ? { ...prev, isDirty: false } : null);
+        
+        // Update cache
+        fileCache.set(selectedFile.path, fileContent);
+        
+        // Clear auto-save timeout
+        if (autoSaveTimeoutRef.current) {
+          clearTimeout(autoSaveTimeoutRef.current);
+        }
       } else {
         throw new Error(result.error || 'Failed to save file');
       }
@@ -121,7 +189,46 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [selectedFile, isModified, fileContent]);
+  }, [selectedFile, isModified, fileContent, fileCache]);
+
+  // Debounced content change handler
+  const handleContentChange = useCallback((content: string) => {
+    setFileContent(content);
+    setIsModified(true);
+    
+    // Update cache immediately for responsiveness
+    if (selectedFile) {
+      fileCache.set(selectedFile.path, content);
+    }
+  }, [selectedFile, fileCache]);
+
+  // Debounced content change handler with auto-save
+  useEffect(() => {
+    if (!selectedFile || !isModified) return;
+    
+    // Clear existing timeout
+    if (contentChangeTimeoutRef.current) {
+      clearTimeout(contentChangeTimeoutRef.current);
+    }
+    
+    // Debounce content changes
+    contentChangeTimeoutRef.current = window.setTimeout(() => {
+      if (onFileChange && selectedFile) {
+        onFileChange(selectedFile, fileContent);
+      }
+    }, perfConfig.debounceMs);
+    
+    // Clear existing auto-save timeout
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+    
+    // Set auto-save timeout
+    autoSaveTimeoutRef.current = window.setTimeout(() => {
+      handleSave();
+    }, 5000);
+    
+  }, [selectedFile, onFileChange, fileContent, perfConfig.debounceMs, handleSave]);
   
   const handleAskAI = useCallback(() => {
     if (selectedFile && onRequestAI) {
@@ -130,10 +237,24 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     }
   }, [selectedFile, fileContent, onRequestAI]);
 
+  // Optimized editor mount handler
   const handleEditorDidMount = useCallback((editor: any, monaco: any) => {
     editorRef.current = editor;
     
-    // VSCode-inspired professional theme
+    // Configure for performance
+    const editorOptions = {
+      ...EDITOR_OPTIONS,
+      minimap: { enabled: perfConfig.enableMinimap },
+      // Disable expensive features in performance mode
+      folding: !performanceMode,
+      bracketPairColorization: { enabled: !performanceMode },
+      renderWhitespace: performanceMode ? 'none' : 'selection',
+      smoothScrolling: !performanceMode,
+    };
+    
+    editor.updateOptions(editorOptions);
+    
+    // VSCode-inspired professional theme (unchanged)
     monaco.editor.defineTheme('vscode-professional', {
       base: 'vs-dark',
       inherit: true,
@@ -174,7 +295,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, handleAskAI);
     
     editor.focus();
-  }, [handleSave, handleAskAI]);
+  }, [perfConfig.enableMinimap, perfConfig.enableLinting, performanceMode, handleSave, handleAskAI]);
   
   // Global keyboard shortcuts
   useEffect(() => {
@@ -189,6 +310,12 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
             e.preventDefault();
             handleAskAI();
             break;
+          case 'p':
+            if (e.shiftKey) {
+              e.preventDefault();
+              setPerformanceMode(prev => !prev);
+            }
+            break;
         }
       }
     };
@@ -197,21 +324,48 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleSave, handleAskAI]);
 
+  // Cleanup timeouts
+  useEffect(() => {
+    return () => {
+      if (contentChangeTimeoutRef.current) {
+        clearTimeout(contentChangeTimeoutRef.current);
+      }
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const language = selectedFile ? getLanguageFromExtension(selectedFile.extension) : 'plaintext';
   
   return (
-    <div className="flex h-full bg-vscode-bg text-vscode-fg font-mono">
-      {/* File Explorer Sidebar */}
+    <div className={`flex h-full bg-vscode-bg text-vscode-fg font-mono ${performanceMode ? 'performance-mode' : ''}`}>
+      {/* High-Performance File Explorer Sidebar */}
       <div className="w-64 flex-shrink-0 bg-vscode-sidebar border-r border-vscode-border">
-        <FileExplorer
-          project={project}
-          selectedFile={selectedFile?.path}
+        <VirtualizedFileExplorer
+          rootPath={project.rootPath}
+          selectedPath={selectedFile?.path}
           onFileSelect={handleFileSelect}
+          height={window.innerHeight - 100} // Approximate height minus header
+          className="h-full"
         />
       </div>
       
       {/* Main Editor Area */}
       <div className="flex-1 flex flex-col min-w-0">
+        {/* Performance Mode Indicator */}
+        {performanceMode && (
+          <div className="h-6 px-3 bg-orange-600/20 border-b border-orange-600/30 text-orange-300 text-xs flex items-center">
+            ⚡ Performance Mode Active - Some features disabled for better performance
+            <button 
+              onClick={() => setPerformanceMode(false)}
+              className="ml-auto text-orange-300 hover:text-white"
+            >
+              ×
+            </button>
+          </div>
+        )}
+        
         {/* Editor Header/Tab Bar */}
         {selectedFile && (
           <div className="h-9 bg-vscode-tab-bg border-b border-vscode-border">
@@ -258,7 +412,10 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
                   onChange={(value) => handleContentChange(value || '')}
                   onMount={handleEditorDidMount}
                   theme="vscode-professional"
-                  options={EDITOR_OPTIONS}
+                  options={{
+                    ...EDITOR_OPTIONS,
+                    minimap: { enabled: perfConfig.enableMinimap },
+                  }}
                   loading={
                     <div className="flex items-center justify-center h-full bg-vscode-bg">
                       <div className="text-center text-vscode-fg-muted">
@@ -275,6 +432,15 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           )}
         </div>
       </div>
+      
+      {/* Performance Metrics (Debug) */}
+      {performanceMode && (
+        <div className="fixed bottom-4 right-4 bg-black/80 text-white text-xs p-2 rounded border">
+          <div>Cache: {fileCache.size} files</div>
+          <div>Mode: Performance</div>
+          <div>Chunk: {perfConfig.chunkSize}</div>
+        </div>
+      )}
     </div>
   );
 }; 

@@ -200,4 +200,16 @@ export interface AlertThresholds {
   readonly responseTime: number;
   readonly costPerHour: number;
   readonly securityIncidents: number;
-} 
+}
+
+// Export file system types
+export type {
+  FileNode,
+  FileSystemDiff,
+  FileSystemSnapshot,
+  FileWatchEvent,
+  FileSystemCache,
+  FileSystemService,
+  ScanOptions,
+  FileSystemMetrics,
+} from './fileSystem'; 

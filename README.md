@@ -114,7 +114,7 @@ The system automatically selects the best AI provider:
 - **Complex queries** (> 500 chars) → **Claude** (highest quality)
 - **Medium queries** → **OpenAI** (balanced)
 
-## �� Cost Optimization
+## 💸 Cost Optimization
 
 | Provider | Cost per Token | Use Case | Savings |
 |----------|----------------|----------|---------|
@@ -202,3 +202,70 @@ For issues, feature requests, or questions:
 ---
 
 **Built with ❤️ using Tauri, React, and Rust**
+
+## Developer Tools & Debugging
+
+### Opening Developer Tools
+
+**Linux Users**: Due to WebKit limitations on Linux, you need to use the special development command that disables compositing mode:
+
+```bash
+# Use this command for development on Linux (includes debug build)
+npm run tauri:dev
+```
+
+**All Platforms**: Developer tools are automatically enabled in debug builds:
+
+```bash
+# Debug builds automatically open developer tools
+npm run tauri dev --debug
+
+# Or use the npm script
+npm run tauri:dev
+```
+
+**Manual Access**: You can also open developer tools by:
+- Right-clicking in the app and selecting "Inspect Element"
+- Using keyboard shortcuts:
+  - **Linux/Windows**: `Ctrl + Shift + I`
+  - **macOS**: `Cmd + Option + I`
+
+### Linux WebKit Issues
+
+If you encounter crashes when opening developer tools on Linux, this is a known WebKit issue. The solution is to disable compositing mode:
+
+```bash
+# The npm scripts automatically include this fix
+npm run tauri:dev
+
+# Manual command if needed
+WEBKIT_DISABLE_COMPOSITING_MODE=1 npm run tauri dev --debug
+```
+
+**Note**: This environment variable may disable some CSS effects like backdrop filters, but it's essential for stable development on Linux.
+
+### Debug Builds
+
+Debug builds in Tauri 2.x automatically:
+- Enable developer tools functionality
+- Open devtools window on startup (in our configuration)
+- Provide better error messages and debugging capabilities
+
+```bash
+# Create debug build with devtools
+npm run tauri:dev-debug
+```
+
+### Troubleshooting
+
+1. **File Explorer shows "No files found"**: 
+   - This was a known issue that has been fixed in the latest version
+   - The missing Tauri commands (`scan_directories_only`, `scan_files_chunked`, `get_directory_mtime`) have been implemented
+
+2. **Developer tools crash the app**:
+   - Use `npm run tauri:dev` instead of regular tauri dev on Linux
+   - Ensure `WEBKIT_DISABLE_COMPOSITING_MODE=1` is set
+
+3. **Build errors**:
+   - Clear Rust cache: `cargo clean` in `src-tauri/`
+   - Reinstall dependencies: `rm -rf node_modules && npm install`

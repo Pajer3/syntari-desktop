@@ -2,24 +2,18 @@
 // Dark theme header with navigation, status indicators, and branding
 
 import React from 'react';
-import type { AppViewModel, ProjectContext, AiProvider } from '../types';
+import type { AppViewModel, AiProvider } from '../types';
 
 interface HeaderProps {
   viewModel: AppViewModel;
-  currentProject?: ProjectContext;
   aiProviders?: AiProvider[];
-  onNavigate: (view: AppViewModel['currentView']) => void;
-  onOpenProject: () => void;
   onSettings: () => void;
   onTogglePerformanceMode: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   viewModel,
-  currentProject,
   aiProviders = [],
-  onNavigate,
-  onOpenProject,
   onSettings,
   onTogglePerformanceMode,
 }) => {
