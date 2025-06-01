@@ -30,12 +30,14 @@ pub fn run() {
             // Setup logic and developer tools for debug builds
             tracing::info!("Syntari AI IDE starting up...");
             
-            #[cfg(debug_assertions)] // Only enable devtools in debug builds
-            {
-                if let Some(window) = app.get_webview_window("main") {
-                    window.open_devtools();
-                    tracing::info!("Developer tools opened automatically for window: {}", window.label());
-                }
+            // Always enable devtools for debugging
+            if let Some(window) = app.get_webview_window("main") {
+                // Enable developer tools
+                window.open_devtools();
+                tracing::info!("Developer tools opened automatically for window: {}", window.label());
+                
+                // Log window configuration
+                tracing::info!("Window devtools enabled for debugging");
             }
             
             Ok(())
@@ -49,6 +51,7 @@ pub fn run() {
             chat::commands::send_chat_message,
             chat::commands::get_chat_session,
             filesystem::commands::read_file,
+            filesystem::commands::read_file_smart,
             filesystem::commands::save_file,
             filesystem::commands::open_folder_dialog,
             filesystem::commands::check_folder_permissions,
@@ -59,6 +62,9 @@ pub fn run() {
             filesystem::commands::scan_files_chunked,
             filesystem::commands::scan_files_streaming,
             filesystem::commands::scan_everything_clean,
+            filesystem::commands::load_folder_contents,
+            filesystem::commands::load_root_items,
+            filesystem::commands::debug_test_command,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

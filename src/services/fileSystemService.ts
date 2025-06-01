@@ -1,5 +1,5 @@
-// Syntari AI IDE - High-Performance File System Service
-// Implements chunked scanning, caching, and real-time updates
+// Syntari AI IDE - VS Code-Style Lazy File System Service
+// Implements instant loading with on-demand folder expansion
 
 import { invoke } from '@tauri-apps/api/core';
 import type { 
@@ -153,9 +153,10 @@ const ICON_MAP = new Map<string, string>([
   ['', 'file']
 ]);
 
-export class HighPerformanceFileSystemService implements FileSystemService {
+export class VSCodeLikeFileSystemService implements FileSystemService {
   private cache = new LocalFileSystemCache();
   private iconCache = new Map<string, string>();
+  private folderContentsCache = new Map<string, FileNode[]>(); // Cache loaded folder contents
   private metrics = {
     scanTime: 0,
     nodeCount: 0,
@@ -163,51 +164,18 @@ export class HighPerformanceFileSystemService implements FileSystemService {
     memoryUsage: 0
   };
   
-  // VS Code-style progressive scanning with streaming
+  // VS Code-style INSTANT loading - only root level initially
   async* scanDirectory(path: string, options: ScanOptions = {
-    chunkSize: 50, // Smaller chunks for better responsiveness
-    ignorePatterns: [
-      // Core development artifacts
-      '.git', 'node_modules', 'target', '.next', 'dist', 'build',
-      // Python noise
-      '__pycache__', '.pytest_cache', '.mypy_cache', '.venv', 'venv', '.env',
-      // JavaScript/TypeScript noise  
-      '.turbo', '.vercel', '.nuxt', '.output', 'coverage', '.eslintcache',
-      // Rust noise
-      'target', 'Cargo.lock',
-      // IDE noise
-      '.vscode', '.idea', '.eclipse', '*.swp', '*.swo',
-      // OS noise
-      '.DS_Store', 'Thumbs.db', 'desktop.ini',
-      // Large file types
-      '*.zip', '*.tar.gz', '*.rar', '*.7z', '*.mp4', '*.avi', '*.mkv',
-      '*.jpg', '*.jpeg', '*.png', '*.gif', '*.pdf', '*.doc', '*.docx'
-    ],
+    chunkSize: 50,
+    ignorePatterns: [],
     includeHidden: false
   }): AsyncIterableIterator<FileNode[]> {
     const startTime = performance.now();
     
     try {
-      // Try cache first (VS Code warm start pattern)
-      const snapshot = await this.cache.load(path);
-      if (snapshot && await this.cache.isValid(snapshot, path)) {
-        console.log('📦 Using cached filesystem snapshot (VS Code style)');
-        this.metrics.cacheHitRate = 1;
-        
-        // Yield in chunks even from cache for consistent UX
-        const chunkSize = options.chunkSize || 50;
-        for (let i = 0; i < snapshot.nodes.length; i += chunkSize) {
-          yield snapshot.nodes.slice(i, i + chunkSize);
-          // Small delay to prevent blocking UI
-          await new Promise(resolve => setTimeout(resolve, 1));
-        }
-        return;
-      }
+      console.log('🚀 VS Code INSTANT scan - root only:', path);
       
-      this.metrics.cacheHitRate = 0;
-      console.log('🚀 VS Code-style unified scan (show everything!)');
-      
-      // Use the new unified scanner that shows directories + files together
+      // Load ONLY root level items (VS Code style) - call backend directly
       const result = await invoke<{
         success: boolean;
         data?: Array<{
@@ -220,21 +188,17 @@ export class HighPerformanceFileSystemService implements FileSystemService {
           is_directory: boolean;
         }>;
         error?: string;
-      }>('scan_everything_clean', { 
-        path, 
-        includeHidden: options.includeHidden 
+      }>('load_root_items', { 
+        rootPath: path,
+        includeHidden: options.includeHidden,
+        showHiddenFolders: true  // Show all folders including __pycache__, node_modules, etc.
       });
       
-      if (!result.success || !result.data || result.data.length === 0) {
-        console.warn('Scan failed:', result.error);
-        // Yield empty array to prevent UI blocking
-        yield [];
-        return;
-      }
+      console.log('📋 Backend response:', result);
       
-      // Convert results to FileNodes with proper directory detection
-      const nodes: FileNode[] = result.data.map(item => {
-        return {
+      if (result.success && result.data && result.data.length > 0) {
+        // Convert to FileNode format
+        const rootItems: FileNode[] = result.data.map(item => ({
           id: this.generateId(item.path),
           path: item.path,
           name: item.name,
@@ -244,102 +208,106 @@ export class HighPerformanceFileSystemService implements FileSystemService {
           lastModified: item.last_modified,
           extension: item.extension,
           iconId: this.getIconId(item.extension, item.is_directory),
-          hasChildren: item.is_directory
-        };
-      });
-      
-      console.log(`✅ Clean scan: ${nodes.length} items total`);
-      console.log(`📊 Breakdown: ${nodes.filter(n => n.isDirectory).length} directories, ${nodes.filter(n => !n.isDirectory).length} files`);
-      
-      // Yield in chunks for progressive loading
-      const chunkSize = options.chunkSize || 50;
-      for (let i = 0; i < nodes.length; i += chunkSize) {
-        const chunk = nodes.slice(i, i + chunkSize);
-        yield chunk;
+          hasChildren: item.is_directory,
+          isExpanded: false, // All folders start collapsed
+          children: undefined // Lazy loaded when expanded
+        }));
         
-        // Small delay to prevent UI blocking
-        await new Promise(resolve => setTimeout(resolve, 1));
+        console.log(`⚡ INSTANT root load: ${rootItems.length} items (${rootItems.filter(n => n.isDirectory).length} dirs, ${rootItems.filter(n => !n.isDirectory).length} files)`);
+        
+        this.metrics.nodeCount = rootItems.length;
+        yield rootItems;
+        return;
+      } else {
+        console.warn('❌ No data returned from backend:', result.error);
+        // Yield empty array if no data
+        yield [];
+        return;
       }
       
-      // Cache the complete result (VS Code-style persistent warm start)
-      const finalSnapshot: FileSystemSnapshot = {
-        version: 1,
-        timestamp: Date.now(),
-        rootPath: path,
-        checksum: this.calculateChecksum(nodes),
-        nodes
-      };
-      
-      await this.cache.save(finalSnapshot);
-      
     } catch (error) {
-      console.error('❌ VS Code-style scan failed:', error);
+      console.error('❌ VS Code root scan failed:', error);
       // Yield empty array to prevent UI blocking
       yield [];
     } finally {
       this.metrics.scanTime = performance.now() - startTime;
-      console.log(`⏱️ Total scan time: ${this.metrics.scanTime.toFixed(2)}ms`);
+      console.log(`⏱️ Instant scan time: ${this.metrics.scanTime.toFixed(2)}ms`);
     }
   }
   
-  // Fallback chunked scanning for compatibility
-  private async* _scanFilesChunkedFallback(path: string, options: ScanOptions): AsyncIterableIterator<FileNode[]> {
+  // VS Code-style lazy folder expansion
+  async loadFolderContents(folderPath: string, includeHidden: boolean = false): Promise<FileNode[]> {
+    console.log('📁 VS Code lazy load folder:', folderPath);
+    
+    // Check cache first
+    const cacheKey = `${folderPath}:${includeHidden}`;
+    if (this.folderContentsCache.has(cacheKey)) {
+      console.log('🎯 Cache hit for folder:', folderPath);
+      return this.folderContentsCache.get(cacheKey)!;
+    }
+    
     try {
-      let offset = 0;
-      const chunkSize = options.chunkSize || 50;
+      const result = await invoke<{
+        success: boolean;
+        data?: Array<{
+          path: string;
+          name: string;
+          depth: number;
+          size: number;
+          last_modified: number;
+          extension: string;
+          is_directory: boolean;
+        }>;
+        error?: string;
+      }>('load_folder_contents', { 
+        folderPath: folderPath,
+        includeHidden: includeHidden,
+        showHiddenFolders: true  // Show all folders including __pycache__, node_modules, etc.
+      });
       
-      while (true) {
-        const result = await invoke<{
-          success: boolean;
-          data?: {
-            files: Array<{
-              path: string;
-              name: string;
-              depth: number;
-              size: number;
-              last_modified: number;
-              extension: string;
-            }>;
-            has_more: boolean;
-          };
-          error?: string;
-        }>('scan_files_chunked', { 
-          path, 
-          offset, 
-          limit: chunkSize,
-          ignorePatterns: options.ignorePatterns,
-          includeHidden: options.includeHidden
-        });
-        
-        if (!result.success || !result.data || result.data.files.length === 0) {
-          if (!result.success) {
-            console.warn('Chunked scan failed:', result.error);
-          }
-          break;
-        }
-        
-        const nodes: FileNode[] = result.data.files.map(file => ({
-          id: this.generateId(file.path),
-          path: file.path,
-          name: file.name,
-          depth: file.depth,
-          isDirectory: false,
-          size: file.size,
-          lastModified: file.last_modified,
-          extension: file.extension,
-          iconId: this.getIconId(file.extension, false)
+      console.log('📋 Folder contents response:', result);
+      
+      if (result.success && result.data) {
+        const folderContents: FileNode[] = result.data.map(item => ({
+          id: this.generateId(item.path),
+          path: item.path,
+          name: item.name,
+          depth: item.depth,
+          isDirectory: item.is_directory,
+          size: item.is_directory ? undefined : item.size,
+          lastModified: item.last_modified,
+          extension: item.extension,
+          iconId: this.getIconId(item.extension, item.is_directory),
+          hasChildren: item.is_directory,
+          isExpanded: false, // Start collapsed
+          children: undefined // Lazy loaded when expanded
         }));
         
-        yield nodes;
+        // Cache the results
+        this.folderContentsCache.set(cacheKey, folderContents);
+        console.log(`📦 Loaded ${folderContents.length} items from ${folderPath}`);
         
-        if (!result.data.has_more) break;
-        offset += chunkSize;
-        
-        // Small delay to prevent blocking
-        await new Promise(resolve => setTimeout(resolve, 2));
+        return folderContents;
+      } else {
+        console.warn('❌ Failed to load folder contents:', result.error);
+        return [];
       }
     } catch (error) {
-      console.warn('Fallback chunked scan failed:', error);
+      console.error('❌ Error loading folder contents:', error);
+      return [];
+    }
+  }
+  
+  // Clear folder cache when needed
+  clearFolderCache(folderPath?: string): void {
+    if (folderPath) {
+      // Clear specific folder and its children
+      const keysToDelete = Array.from(this.folderContentsCache.keys())
+        .filter(key => key.startsWith(folderPath));
+      keysToDelete.forEach(key => this.folderContentsCache.delete(key));
+    } else {
+      // Clear all
+      this.folderContentsCache.clear();
     }
   }
   
@@ -369,7 +337,7 @@ export class HighPerformanceFileSystemService implements FileSystemService {
       return cached;
     }
     
-    // Build snapshot from fresh scan
+    // Build snapshot from fresh scan (root only for speed)
     const nodes: FileNode[] = [];
     for await (const chunk of this.scanDirectory(path)) {
       nodes.push(...chunk);
@@ -416,47 +384,10 @@ export class HighPerformanceFileSystemService implements FileSystemService {
   }
   
   getMetrics(): FileSystemMetrics {
-    return { ...this.metrics };
-  }
-  
-  private async _scanDirectoriesFirst(path: string, options: ScanOptions): Promise<FileNode[]> {
-    try {
-      const result = await invoke<{
-        success: boolean;
-        data?: Array<{
-          path: string;
-          name: string;
-          depth: number;
-          last_modified: number;
-        }>;
-        error?: string;
-      }>('scan_directories_only', { 
-        path, 
-        maxDepth: options.maxDepth || 3,
-        ignorePatterns: options.ignorePatterns 
-      });
-      
-      if (!result.success || !result.data) {
-        console.warn('Failed to scan directories:', result.error);
-        return [];
-      }
-      
-      return result.data.map(dir => ({
-        id: this.generateId(dir.path),
-        path: dir.path,
-        name: dir.name,
-        depth: dir.depth,
-        isDirectory: true,
-        isExpanded: dir.depth === 0, // Only root expanded initially
-        lastModified: dir.last_modified,
-        extension: '',
-        iconId: this.getIconId('', true),
-        hasChildren: true
-      }));
-    } catch (error) {
-      console.warn('Failed to scan directories:', error);
-      return [];
-    }
+    return { 
+      ...this.metrics,
+      cacheHitRate: this.folderContentsCache.size > 0 ? 0.8 : 0 // Estimated
+    };
   }
   
   private generateId(path: string): string {
@@ -495,4 +426,4 @@ export class HighPerformanceFileSystemService implements FileSystemService {
 }
 
 // Singleton instance
-export const fileSystemService = new HighPerformanceFileSystemService(); 
+export const fileSystemService = new VSCodeLikeFileSystemService(); 

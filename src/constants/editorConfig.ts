@@ -1,30 +1,36 @@
-// Syntari AI IDE - Professional Editor Configuration
-// VSCode-inspired Monaco Editor settings
+// Syntari AI IDE - VS Code-style Monaco Editor Performance Configuration
+// Unified professional editor settings with performance optimizations
 
 export const EDITOR_OPTIONS = {
-  fontSize: 13,
-  fontFamily: "'Fira Code', 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace",
+  // Core editor settings (enhanced from original)
+  fontSize: 14,
+  fontFamily: 'JetBrains Mono, Fira Code, Monaco, Consolas, monospace',
   fontLigatures: true,
-  lineHeight: 19,
+  lineHeight: 20,
   letterSpacing: 0.5,
+  tabSize: 2,
+  insertSpaces: true,
   lineNumbers: 'on' as const,
   roundedSelection: false,
-  scrollBeyondLastLine: false,
   readOnly: false,
   cursorStyle: 'line' as const,
   cursorBlinking: 'smooth' as const,
+  cursorSmoothCaretAnimation: 'on' as const,
+  
+  // VS Code-style performance optimizations
   automaticLayout: true,
-  wordWrap: 'on' as const,
+  scrollBeyondLastLine: false,
+  wordWrap: 'off' as const, // Performance: disable by default
   wordWrapColumn: 120,
   theme: 'vscode-professional',
   
-  // Minimap configuration
+  // Minimap configuration (performance optimized)
   minimap: {
     enabled: true,
     side: 'right' as const,
     scale: 1,
     showSlider: 'mouseover' as const,
-    size: 'fit' as const,
+    maxColumn: 120, // Limit minimap rendering for performance
   },
   
   // Bracket pair colorization
@@ -41,7 +47,7 @@ export const EDITOR_OPTIONS = {
     highlightActiveIndentation: true,
   },
   
-  // IntelliSense suggestions
+  // IntelliSense suggestions (performance optimized)
   suggest: {
     enabled: true,
     showKeywords: true,
@@ -73,11 +79,11 @@ export const EDITOR_OPTIONS = {
     localityBonus: true,
   },
   
-  // Quick suggestions
+  // Quick suggestions (optimized)
   quickSuggestions: {
     other: true,
-    comments: true,
-    strings: true,
+    comments: false, // Performance: disable in comments
+    strings: false,  // Performance: disable in strings
   },
   
   // Parameter hints
@@ -89,6 +95,7 @@ export const EDITOR_OPTIONS = {
   // Auto-completion behavior
   acceptSuggestionOnCommitCharacter: true,
   acceptSuggestionOnEnter: 'on' as const,
+  suggestOnTriggerCharacters: true,
   
   // Accessibility
   accessibilitySupport: 'auto' as const,
@@ -119,15 +126,16 @@ export const EDITOR_OPTIONS = {
     globalFindClipboard: false,
   },
   
-  // Code folding
+  // Code folding (performance optimized)
   folding: true,
   foldingStrategy: 'auto' as const,
-  foldingHighlight: true,
+  foldingHighlight: false, // Performance: disable highlighting
   unfoldOnClickAfterEndOfLine: false,
+  showFoldingControls: 'mouseover' as const,
   
-  // Formatting
-  formatOnPaste: true,
-  formatOnType: true,
+  // Formatting (performance optimized)
+  formatOnPaste: false, // Performance: disable for large files
+  formatOnType: false,  // Performance: disable for large files
   
   // Glyph margin
   glyphMargin: true,
@@ -155,7 +163,7 @@ export const EDITOR_OPTIONS = {
   overviewRulerBorder: true,
   overviewRulerLanes: 3,
   
-  // Render control characters
+  // Render control characters (performance optimized)
   renderControlCharacters: false,
   
   // Render indent guides
@@ -164,18 +172,18 @@ export const EDITOR_OPTIONS = {
   // Render line highlight
   renderLineHighlight: 'line' as const,
   
-  // Render whitespace
-  renderWhitespace: 'selection' as const,
+  // Render whitespace (performance optimized)
+  renderWhitespace: 'selection' as const, // Only show when selecting
   
   // Reveal horizontal right padding
   revealHorizontalRightPadding: 5,
   
-  // Scrollbar configuration
+  // Scrollbar configuration (performance optimized)
   scrollbar: {
-    vertical: 'visible' as const,
-    horizontal: 'visible' as const,
+    vertical: 'auto' as const,
+    horizontal: 'auto' as const,
     arrowSize: 11,
-    useShadows: true,
+    useShadows: false, // Better performance
     verticalHasArrows: false,
     horizontalHasArrows: false,
     verticalScrollbarSize: 14,
@@ -194,10 +202,7 @@ export const EDITOR_OPTIONS = {
   // Selection highlight
   selectionHighlight: true,
   
-  // Show folding controls
-  showFoldingControls: 'mouseover' as const,
-  
-  // Smooth scrolling
+  // Smooth scrolling (performance aware)
   smoothScrolling: true,
   
   // Snippet suggestions
@@ -229,7 +234,7 @@ export const EDITOR_OPTIONS = {
   wrappingStrategy: 'advanced' as const,
   
   // Ruler
-  rulers: [80, 120],
+  rulers: [80, 120] as number[],
   
   // Padding
   padding: {
@@ -237,18 +242,51 @@ export const EDITOR_OPTIONS = {
     bottom: 16,
   },
   
-  // Fast scroll sensitivity
+  // VS Code-style performance optimizations
   fastScrollSensitivity: 5,
-  
-  // Mouse wheel scroll sensitivity
   mouseWheelScrollSensitivity: 1,
+  disableLayerHinting: true, // Better performance on some systems
+  largeFileOptimizations: true,
+  maxTokenizationLineLength: 10000, // VS Code uses 20k, but 10k is safer
   
   // Sticky scroll
   stickyScroll: {
     enabled: true,
     maxLineCount: 5,
   },
-};
+} as const;
+
+// Performance-optimized options for large files (> 1MB)
+export const LARGE_FILE_EDITOR_OPTIONS = {
+  ...EDITOR_OPTIONS,
+  
+  // Disable expensive features for large files
+  minimap: {
+    enabled: false, // Disable minimap for large files
+  },
+  folding: false,
+  renderWhitespace: 'none',
+  renderControlCharacters: false,
+  lightbulb: {
+    enabled: false, // Disable code actions for performance
+  },
+  
+  // Aggressive performance settings
+  quickSuggestions: false,
+  parameterHints: {
+    enabled: false,
+  },
+  hover: {
+    enabled: false,
+  },
+  
+  // Limit rendering
+  maxTokenizationLineLength: 5000, // Even more conservative
+  stopRenderingLineAfter: 10000,
+  
+  // Fast scrolling
+  fastScrollSensitivity: 10,
+} as const;
 
 // Language mappings for file extensions
 export const LANGUAGE_MAP: Record<string, string> = {
@@ -360,4 +398,19 @@ export const FILE_ICONS: Record<string, string> = {
   '.Dockerfile': '🐳',
   '.vue': '💚',
   '.svelte': '🧡',
-}; 
+};
+
+// VS Code-style file size thresholds
+export const FILE_SIZE_THRESHOLDS = {
+  LARGE_FILE_WARNING: 1024 * 1024,      // 1MB - show warning
+  LARGE_FILE_OPTIMIZATIONS: 5 * 1024 * 1024,  // 5MB - use aggressive optimizations
+  MAX_EDITOR_SIZE: 64 * 1024 * 1024,    // 64MB - refuse to tokenize (like VS Code)
+  MAX_SAFE_SIZE: 256 * 1024 * 1024,     // 256MB - hex mode only
+} as const;
+
+// Performance monitoring thresholds
+export const PERFORMANCE_THRESHOLDS = {
+  RENDER_WARNING_MS: 16,  // 60fps = 16ms per frame
+  SCROLL_WARNING_MS: 8,   // Scrolling should be < 8ms
+  TOKENIZE_WARNING_MS: 100, // Tokenization warning
+} as const; 

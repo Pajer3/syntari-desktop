@@ -1,49 +1,156 @@
 // Syntari AI IDE - Filesystem Commands
-// File system commands exposed to the frontend
+// VS Code-style file operations with size guards and performance optimizations
 
 use std::path::Path;
 use crate::core::types::{TauriResult, DirectoryInfo, FileInfoChunk, ScanFilesResult};
 use ignore::WalkBuilder;
+use tauri::State;
+use crate::filesystem::service::FilesystemService;
 
+// VS Code file size limits
+const MAX_EDITOR_FILE_SIZE: u64 = 64 * 1024 * 1024; // 64MB - refuse to tokenize
+const MAX_SAFE_FILE_SIZE: u64 = 256 * 1024 * 1024;  // 256MB - hex mode only
+const LARGE_FILE_WARNING: u64 = 1024 * 1024;        // 1MB - show warning
+
+#[derive(serde::Serialize)]
+pub struct FileReadResult {
+    content: Option<String>,
+    size: u64,
+    is_binary: bool,
+    is_too_large: bool,
+    should_use_hex_mode: bool,
+    warning: Option<String>,
+}
+
+/// VS Code-style smart file reading with size guards
+#[tauri::command]
+pub async fn read_file_smart(path: String) -> std::result::Result<TauriResult<FileReadResult>, String> {
+    let path = Path::new(&path);
+    
+    // Get file metadata first (don't read content yet)
+    let metadata = match std::fs::metadata(&path) {
+        Ok(m) => m,
+        Err(e) => return Ok(TauriResult::error(format!("Failed to read file metadata: {}", e))),
+    };
+    
+    let size = metadata.len();
+    
+    // VS Code-style size checks
+    if size > MAX_SAFE_FILE_SIZE {
+        let result = FileReadResult {
+            content: None,
+            size,
+            is_binary: false,
+            is_too_large: true,
+            should_use_hex_mode: false,
+            warning: Some(format!("File too large ({:.1} MB). Maximum supported size is 256 MB.", size as f64 / 1024.0 / 1024.0)),
+        };
+        return Ok(TauriResult::success(result));
+    }
+    
+    if size > MAX_EDITOR_FILE_SIZE {
+        let result = FileReadResult {
+            content: None,
+            size,
+            is_binary: false,
+            is_too_large: false,
+            should_use_hex_mode: true,
+            warning: Some(format!("Large file ({:.1} MB). Opening in read-only hex mode for performance.", size as f64 / 1024.0 / 1024.0)),
+        };
+        return Ok(TauriResult::success(result));
+    }
+    
+    // Read content for smaller files
+    let content = match std::fs::read(&path) {
+        Ok(c) => c,
+        Err(e) => return Ok(TauriResult::error(format!("Failed to read file: {}", e))),
+    };
+    
+    // Check if binary (VS Code approach)
+    let is_binary = content.iter().take(8192).any(|&b| b == 0);
+    
+    let file_content = if is_binary {
+        None // Don't try to convert binary to string
+    } else {
+        match String::from_utf8(content) {
+            Ok(text) => Some(text),
+            Err(_) => {
+                // Try with UTF-8 lossy conversion
+                match std::fs::read(&path) {
+                    Ok(bytes) => Some(String::from_utf8_lossy(&bytes).to_string()),
+                    Err(_) => None,
+                }
+            }
+        }
+    };
+    
+    let warning = if size > LARGE_FILE_WARNING {
+        Some(format!("Large file ({:.1} MB). Some features may be slower.", size as f64 / 1024.0 / 1024.0))
+    } else {
+        None
+    };
+    
+    let result = FileReadResult {
+        content: file_content,
+        size,
+        is_binary,
+        is_too_large: false,
+        should_use_hex_mode: false,
+        warning,
+    };
+    
+    Ok(TauriResult::success(result))
+}
+
+/// Original simple file read for compatibility
 #[tauri::command]
 pub async fn read_file(path: String) -> std::result::Result<TauriResult<String>, String> {
-    tracing::debug!("Reading file: {}", path);
+    let smart_result = read_file_smart(path).await?;
     
-    match tokio::fs::read_to_string(&path).await {
-        Ok(content) => {
-            tracing::debug!("Successfully read file: {} ({} bytes)", path, content.len());
-            Ok(TauriResult::success(content))
+    match smart_result.data {
+        Some(file_data) => {
+            if file_data.is_too_large {
+                Ok(TauriResult::error("File too large to read".to_string()))
+            } else if file_data.is_binary {
+                Ok(TauriResult::error("Cannot read binary file as text".to_string()))
+            } else {
+                match file_data.content {
+                    Some(content) => Ok(TauriResult::success(content)),
+                    None => Ok(TauriResult::error("No content available".to_string())),
+                }
+            }
         }
-        Err(e) => {
-            tracing::error!("Failed to read file {}: {:?}", path, e);
-            Ok(TauriResult::error(format!("Failed to read file: {}", e)))
-        }
+        None => Ok(TauriResult::error(smart_result.error.unwrap_or("Unknown error".to_string()))),
     }
 }
 
 #[tauri::command]
 pub async fn save_file(path: String, content: String) -> std::result::Result<TauriResult<String>, String> {
-    tracing::debug!("Saving file: {} ({} bytes)", path, content.len());
-    
-    match tokio::fs::write(&path, &content).await {
-        Ok(_) => {
-            tracing::info!("Successfully saved file: {}", path);
-            Ok(TauriResult::success("File saved successfully".to_string()))
-        }
-        Err(e) => {
-            tracing::error!("Failed to save file {}: {:?}", path, e);
-            Ok(TauriResult::error(format!("Failed to save file: {}", e)))
-        }
+    match std::fs::write(&path, content) {
+        Ok(_) => Ok(TauriResult::success("File saved successfully".to_string())),
+        Err(e) => Ok(TauriResult::error(format!("Failed to save file: {}", e))),
     }
 }
 
 #[tauri::command]
-pub async fn open_folder_dialog() -> std::result::Result<TauriResult<String>, String> {
+pub async fn open_folder_dialog() -> std::result::Result<TauriResult<Option<String>>, String> {
     tracing::debug!("Opening folder dialog");
     
-    // For now, return an error indicating this needs to be implemented via frontend
-    // In Tauri 2.x, dialogs are typically handled via the plugin on the frontend side
-    Ok(TauriResult::error("Folder dialog should be handled via frontend plugin".to_string()))
+    use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+    
+    // Use the proper Tauri 2.x dialog API
+    // Note: This should actually be called from the frontend, but providing backend fallback
+    match std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")) {
+        Ok(home_dir) => {
+            tracing::info!("Folder dialog requested. Default to home: {}", home_dir);
+            // Return None to indicate the frontend should handle this
+            Ok(TauriResult::success(None))
+        }
+        Err(_) => {
+            tracing::warn!("Could not determine home directory for folder dialog");
+            Ok(TauriResult::success(None))
+        }
+    }
 }
 
 #[tauri::command]
@@ -92,9 +199,7 @@ pub async fn check_folder_permissions(path: String) -> std::result::Result<Tauri
 
 #[tauri::command]
 pub async fn get_directory_mtime(path: String) -> std::result::Result<TauriResult<u64>, String> {
-    tracing::debug!("Getting directory mtime for: {}", path);
-    
-    match tokio::fs::metadata(&path).await {
+    match std::fs::metadata(&path) {
         Ok(metadata) => {
             match metadata.modified() {
                 Ok(time) => {
@@ -102,19 +207,12 @@ pub async fn get_directory_mtime(path: String) -> std::result::Result<TauriResul
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default()
                         .as_secs();
-                    tracing::debug!("Directory mtime for {}: {}", path, timestamp);
                     Ok(TauriResult::success(timestamp))
                 }
-                Err(e) => {
-                    tracing::error!("Failed to get modification time for {}: {:?}", path, e);
-                    Ok(TauriResult::error(format!("Failed to get modification time: {}", e)))
-                }
+                Err(e) => Ok(TauriResult::error(format!("Failed to get modification time: {}", e))),
             }
         }
-        Err(e) => {
-            tracing::error!("Failed to get metadata for {}: {:?}", path, e);
-            Ok(TauriResult::error(format!("Failed to get directory metadata: {}", e)))
-        }
+        Err(e) => Ok(TauriResult::error(format!("Failed to read directory metadata: {}", e))),
     }
 }
 
@@ -548,5 +646,234 @@ pub async fn scan_everything_clean(
             tracing::error!("Failed clean scan: {}", e);
             Ok(TauriResult::error(format!("Failed to scan directory: {}", e)))
         }
+    }
+}
+
+// NEW: VS Code-style lazy folder loading command
+#[tauri::command]
+pub async fn load_folder_contents(
+    folder_path: String,
+    include_hidden: Option<bool>,
+    show_hidden_folders: Option<bool>
+) -> std::result::Result<TauriResult<Vec<FileInfoChunk>>, String> {
+    tracing::debug!("🔍 VS Code lazy load: {}", folder_path);
+    
+    let include_hidden = include_hidden.unwrap_or(false);
+    let show_hidden_folders = show_hidden_folders.unwrap_or(false);
+    let folder = Path::new(&folder_path);
+    
+    if !folder.exists() || !folder.is_dir() {
+        return Ok(TauriResult::error("Folder does not exist or is not a directory".to_string()));
+    }
+    
+    let mut contents = Vec::new();
+    
+    match std::fs::read_dir(folder) {
+        Ok(entries) => {
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    let entry_path = entry.path();
+                    let file_type = entry.file_type();
+                    
+                    if let Ok(file_type) = file_type {
+                        let name = entry.file_name().to_string_lossy().to_string();
+                        
+                        // Skip hidden files if not requested
+                        if !include_hidden && name.starts_with('.') {
+                            continue;
+                        }
+                        
+                        // Skip noise directories (configurable)
+                        if !show_hidden_folders && file_type.is_dir() && matches!(name.as_str(), 
+                            "node_modules" | ".git" | "target" | ".next" | "dist" | "build" | 
+                            "__pycache__" | ".pytest_cache" | ".mypy_cache" | ".venv" | "venv"
+                        ) {
+                            continue;
+                        }
+                        
+                        if let Ok(metadata) = entry.metadata() {
+                            let is_directory = file_type.is_dir();
+                            let size = if is_directory { 0 } else { metadata.len() };
+                            let last_modified = metadata
+                                .modified()
+                                .unwrap_or(std::time::UNIX_EPOCH)
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_secs();
+                            
+                            let extension = if is_directory {
+                                String::new()
+                            } else {
+                                entry_path.extension()
+                                    .and_then(|ext| ext.to_str())
+                                    .unwrap_or("")
+                                    .to_string()
+                            };
+                            
+                            // Calculate depth (1 level deeper than parent)
+                            let depth = folder_path.matches('/').count() as u32 + 1;
+                            
+                            contents.push(FileInfoChunk {
+                                path: entry_path.to_string_lossy().to_string(),
+                                name,
+                                depth,
+                                size,
+                                last_modified,
+                                extension,
+                                is_directory,
+                            });
+                        }
+                    }
+                }
+            }
+            
+            // Sort: directories first, then files, both alphabetically
+            contents.sort_by(|a, b| {
+                match (a.is_directory, b.is_directory) {
+                    (true, false) => std::cmp::Ordering::Less,
+                    (false, true) => std::cmp::Ordering::Greater,
+                    _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+                }
+            });
+            
+            tracing::debug!("📁 Lazy loaded {} items from {}", contents.len(), folder_path);
+            Ok(TauriResult::success(contents))
+        }
+        Err(e) => {
+            tracing::warn!("Failed to read folder {}: {}", folder_path, e);
+            Ok(TauriResult::error(format!("Failed to read folder: {}", e)))
+        }
+    }
+}
+
+// VS Code-style root level only loading command
+#[tauri::command]
+pub async fn load_root_items(
+    root_path: String,
+    include_hidden: Option<bool>,
+    show_hidden_folders: Option<bool>
+) -> std::result::Result<TauriResult<Vec<FileInfoChunk>>, String> {
+    tracing::info!("🏠 VS Code root load: {}", root_path);
+    
+    let include_hidden = include_hidden.unwrap_or(false);
+    let show_hidden_folders = show_hidden_folders.unwrap_or(false);
+    let root = Path::new(&root_path);
+    
+    // Debug logging
+    tracing::info!("📂 Path exists: {}", root.exists());
+    tracing::info!("📂 Is directory: {}", root.is_dir());
+    tracing::info!("📂 Include hidden: {}", include_hidden);
+    tracing::info!("📂 Show hidden folders: {}", show_hidden_folders);
+    
+    if !root.exists() || !root.is_dir() {
+        tracing::warn!("❌ Root path does not exist or is not a directory: {}", root_path);
+        return Ok(TauriResult::error("Root path does not exist or is not a directory".to_string()));
+    }
+    
+    let mut root_items = Vec::new();
+    
+    match std::fs::read_dir(root) {
+        Ok(entries) => {
+            let mut entry_count = 0;
+            for entry in entries {
+                entry_count += 1;
+                if let Ok(entry) = entry {
+                    let entry_path = entry.path();
+                    let file_type = entry.file_type();
+                    
+                    if let Ok(file_type) = file_type {
+                        let name = entry.file_name().to_string_lossy().to_string();
+                        
+                        tracing::debug!("🔍 Processing entry: {} (hidden: {}, is_dir: {})", 
+                                       name, name.starts_with('.'), file_type.is_dir());
+                        
+                        // Skip hidden files if not requested
+                        if !include_hidden && name.starts_with('.') {
+                            tracing::debug!("⏭️ Skipping hidden: {}", name);
+                            continue;
+                        }
+                        
+                        // Skip noise directories at root level (configurable)
+                        if !show_hidden_folders && file_type.is_dir() && matches!(name.as_str(), 
+                            "node_modules" | ".git" | "target" | ".next" | "dist" | "build" | 
+                            "__pycache__" | ".pytest_cache" | ".mypy_cache" | ".venv" | "venv" | ".env"
+                        ) {
+                            tracing::debug!("⏭️ Skipping noise directory: {}", name);
+                            continue;
+                        }
+                        
+                        if let Ok(metadata) = entry.metadata() {
+                            let is_directory = file_type.is_dir();
+                            let size = if is_directory { 0 } else { metadata.len() };
+                            let last_modified = metadata
+                                .modified()
+                                .unwrap_or(std::time::UNIX_EPOCH)
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_secs();
+                            
+                            let extension = if is_directory {
+                                String::new()
+                            } else {
+                                entry_path.extension()
+                                    .and_then(|ext| ext.to_str())
+                                    .unwrap_or("")
+                                    .to_string()
+                            };
+                            
+                            root_items.push(FileInfoChunk {
+                                path: entry_path.to_string_lossy().to_string(),
+                                name,
+                                depth: 0, // Root level
+                                size,
+                                last_modified,
+                                extension,
+                                is_directory,
+                            });
+                            
+                            tracing::debug!("✅ Added: {} ({})", 
+                                           root_items.last().unwrap().name,
+                                           if is_directory { "dir" } else { "file" });
+                        }
+                    }
+                }
+            }
+            
+            tracing::info!("📊 Processed {} total entries, added {} items", entry_count, root_items.len());
+            
+            // Sort: directories first, then files, both alphabetically
+            root_items.sort_by(|a, b| {
+                match (a.is_directory, b.is_directory) {
+                    (true, false) => std::cmp::Ordering::Less,
+                    (false, true) => std::cmp::Ordering::Greater,
+                    _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+                }
+            });
+            
+            tracing::info!("🏠 Root loaded {} items", root_items.len());
+            Ok(TauriResult::success(root_items))
+        }
+        Err(e) => {
+            tracing::warn!("❌ Failed to read root folder {}: {}", root_path, e);
+            Ok(TauriResult::error(format!("Failed to read root folder: {}", e)))
+        }
+    }
+}
+
+// DEBUG: Simple test command to verify Tauri command system is working
+#[tauri::command]
+pub async fn debug_test_command(test_path: String) -> std::result::Result<TauriResult<String>, String> {
+    tracing::info!("🧪 Debug test command called with path: {}", test_path);
+    
+    let path = Path::new(&test_path);
+    
+    if path.exists() {
+        if path.is_dir() {
+            Ok(TauriResult::success(format!("✅ Path exists and is a directory: {}", test_path)))
+        } else {
+            Ok(TauriResult::success(format!("✅ Path exists but is NOT a directory: {}", test_path)))
+        }
+    } else {
+        Ok(TauriResult::success(format!("❌ Path does NOT exist: {}", test_path)))
     }
 } 

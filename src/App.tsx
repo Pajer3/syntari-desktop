@@ -6,10 +6,11 @@ import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useAppViewModel } from './hooks/useAppViewModel';
 import { useChatViewModel } from './hooks/useChatViewModel';
-import { useContextMenu } from './hooks/useContextMenu';
+// DISABLED: Custom context menu
+// import { useContextMenu } from './hooks/useContextMenu';
+// import { ContextMenu, getDefaultContextMenuItems } from './components/ContextMenu';
 import { Header } from './components/Header';
 import { WelcomeScreen } from './components/WelcomeScreen';
-import { ContextMenu, getDefaultContextMenuItems } from './components/ContextMenu';
 import { TabLayout, useTabManager, type Tab } from './components/TabLayout';
 import { CodeEditor } from './components/CodeEditor';
 import { ProjectAIAssistant } from './components/ProjectAIAssistant';
@@ -33,7 +34,8 @@ const App: React.FC = () => {
     appViewModel.viewModel.project,
     appViewModel.handleError
   );
-  const contextMenu = useContextMenu();
+  // DISABLED: Custom context menu
+  // const contextMenu = useContextMenu();
   
   // ================================
   // TAB MANAGEMENT
@@ -295,18 +297,21 @@ const App: React.FC = () => {
   // CONTEXT MENU HANDLERS
   // ================================
   
-  const getContextMenuItems = () => {
-    return getDefaultContextMenuItems(
-      false, // hasSelection
-      false, // isEditable
-      appViewModel.viewModel.project?.rootPath
-    );
-  };
+  // DISABLED: Custom context menu items  
+  // const getContextMenuItems = () => {
+  //   return getDefaultContextMenuItems(
+  //     currentView,
+  //     currentPath || '',
+  //     currentModelProvider,
+  //     chatSessions.length
+  //   );
+  // };
 
-  const handleContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault();
-    contextMenu.showContextMenu(e.clientX, e.clientY, 'mouse');
-  };
+  // DISABLED: Custom context menu handler
+  // const handleContextMenu = (e: React.MouseEvent) => {
+  //   e.preventDefault();
+  //   contextMenu.showContextMenu(e.clientX, e.clientY, 'mouse');
+  // };
 
   // ================================
   // KEYBOARD SHORTCUTS
@@ -359,7 +364,8 @@ const App: React.FC = () => {
   return (
     <div 
       className="h-screen bg-gray-900 text-white flex flex-col overflow-hidden"
-      onContextMenu={handleContextMenu}
+      // DISABLED: Custom context menu
+      // onContextMenu={handleContextMenu}
     >
       {/* Header */}
       <Header 
@@ -430,6 +436,8 @@ const App: React.FC = () => {
       </div>
 
       {/* Context Menu */}
+      {/* DISABLED: Custom context menu */}
+      {/* 
       <ContextMenu
         visible={contextMenu.contextMenu.visible}
         x={contextMenu.contextMenu.x}
@@ -437,6 +445,7 @@ const App: React.FC = () => {
         items={getContextMenuItems()}
         onClose={() => contextMenu.hideContextMenu('user_dismissed')}
       />
+      */}
 
       {/* Permission Dialog */}
       {showPermissionDialog && (

@@ -78,7 +78,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     enableMinimap: !performanceMode,
   }), [performanceMode]);
   
-  // Optimized file loading with caching
+  // Optimized file loading with caching and VS Code-style size guards
   const loadFileContent = useCallback(async (file: FileInfo) => {
     if (file.language === 'directory') {
       setError('Cannot open directory as file');
@@ -101,42 +101,80 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       return;
     }
     
-    // Check file size before loading
-    if (file.size > perfConfig.maxFileSize) {
-      setError(`File too large (${Math.round(file.size / 1024 / 1024)}MB). Maximum size: ${Math.round(perfConfig.maxFileSize / 1024 / 1024)}MB`);
-      return;
-    }
-    
     setIsLoading(true);
     setError(null);
     
     try {
-      const result = await invoke<TauriResult<string>>('read_file', { path: file.path });
-      
-      if (result.success && result.data) {
-        // Cache the content
-        fileCache.set(file.path, result.data);
-        
-        setFileContent(result.data);
-        setIsModified(false);
-        
-        const updatedFile: EditorFile = {
-          ...file,
-          content: result.data,
-          isOpen: true,
-          isDirty: false,
+      // Use VS Code-style smart file reading
+      const result = await invoke<{
+        success: boolean;
+        data?: {
+          content?: string;
+          size: number;
+          is_binary: boolean;
+          is_too_large: boolean;
+          should_use_hex_mode: boolean;
+          warning?: string;
         };
-        setSelectedFile(updatedFile);
-      } else {
+        error?: string;
+      }>('read_file_smart', { path: file.path });
+      
+      if (!result.success || !result.data) {
         throw new Error(result.error || 'Failed to read file');
       }
+      
+      const fileData = result.data;
+      
+      // Handle VS Code-style size limits
+      if (fileData.is_too_large) {
+        setError(`File too large (${Math.round(fileData.size / 1024 / 1024)}MB). Maximum supported size is 256MB.`);
+        return;
+      }
+      
+      if (fileData.should_use_hex_mode) {
+        setError(`Large file (${Math.round(fileData.size / 1024 / 1024)}MB). Opening in read-only mode for performance.`);
+        // TODO: Implement hex/read-only viewer
+        return;
+      }
+      
+      if (fileData.is_binary) {
+        setError('Cannot edit binary files. Consider using a hex editor.');
+        return;
+      }
+      
+      if (fileData.warning) {
+        console.warn('⚠️ File size warning:', fileData.warning);
+        // Show warning but continue
+      }
+      
+      const content = fileData.content || '';
+      
+      // Cache the content
+      fileCache.set(file.path, content);
+      
+      setFileContent(content);
+      setIsModified(false);
+      
+      const updatedFile: EditorFile = {
+        ...file,
+        content,
+        isOpen: true,
+        isDirty: false,
+      };
+      setSelectedFile(updatedFile);
+      
+      // Show performance warning for large files
+      if (fileData.size > 1024 * 1024) { // 1MB
+        console.log(`📊 Large file loaded: ${Math.round(fileData.size / 1024)}KB`);
+      }
+      
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
       setError(`Failed to load file: ${errorMessage}`);
     } finally {
       setIsLoading(false);
     }
-  }, [fileCache, perfConfig.maxFileSize]);
+  }, [fileCache]);
 
   // Convert FileNode to FileInfo for compatibility
   const convertFileNode = useCallback((node: FileNode): FileInfo => ({

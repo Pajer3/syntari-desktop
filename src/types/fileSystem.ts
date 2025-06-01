@@ -13,6 +13,7 @@ export interface FileNode {
   readonly extension: string;
   readonly iconId: string;       // Pre-computed icon identifier
   readonly hasChildren?: boolean; // For lazy loading
+  readonly children?: readonly FileNode[]; // Lazily loaded children
 }
 
 export interface FileSystemDiff {
@@ -46,6 +47,7 @@ export interface FileSystemCache {
 
 export interface FileSystemService {
   readonly scanDirectory: (path: string, options?: ScanOptions) => AsyncIterableIterator<FileNode[]>;
+  readonly loadFolderContents: (folderPath: string, includeHidden?: boolean) => Promise<FileNode[]>;
   readonly watchDirectory: (path: string) => AsyncIterableIterator<FileWatchEvent>;
   readonly getSnapshot: (path: string) => Promise<FileSystemSnapshot>;
   readonly applyDiff: (current: readonly FileNode[], diff: FileSystemDiff) => readonly FileNode[];

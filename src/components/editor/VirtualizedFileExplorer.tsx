@@ -1,5 +1,5 @@
-// Syntari AI IDE - High-Performance Virtualized File Explorer
-// Uses react-window for optimal rendering performance
+// Syntari AI IDE - VS Code-Style Lazy File Explorer
+// Instant loading with on-demand folder expansion
 
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { FixedSizeList as List } from 'react-window';
@@ -25,7 +25,7 @@ interface ListItemData {
   selectedPath?: string;
   expandedPaths: Set<string>;
   onFileClick: (node: FileNode) => Promise<void>;
-  onDirectoryToggle: (path: string, expanded: boolean) => void;
+  onDirectoryToggle: (path: string, expanded: boolean) => Promise<void>;
 }
 
 // ================================
@@ -160,42 +160,26 @@ const formatFileSize = (bytes: number): string => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 };
 
-const buildFlatList = (nodes: readonly FileNode[], expandedPaths: Set<string>): readonly FileNode[] => {
+// Build flat list for virtualization with lazy loading
+const buildFlatList = (
+  nodes: readonly FileNode[], 
+  expandedPaths: Set<string>,
+  loadedChildren: Map<string, FileNode[]>
+): readonly FileNode[] => {
   const result: FileNode[] = [];
-  const nodeMap = new Map<string, FileNode>();
   
-  // Build path-to-node map
-  nodes.forEach(node => nodeMap.set(node.path, node));
-  
-  // Sort nodes by path to ensure proper tree order
-  const sortedNodes = [...nodes].sort((a, b) => a.path.localeCompare(b.path));
-  
-  // Build flat list with proper depth and visibility
   const processNode = (node: FileNode) => {
     result.push(node);
     
     if (node.isDirectory && expandedPaths.has(node.path)) {
-      // Add children
-      const children = sortedNodes.filter(n => 
-        n.path.startsWith(node.path + '/') && 
-        n.path.split('/').length === node.path.split('/').length + 1
-      );
-      
-      children.sort((a, b) => {
-        // Directories first, then files
-        if (a.isDirectory !== b.isDirectory) {
-          return a.isDirectory ? -1 : 1;
-        }
-        return a.name.localeCompare(b.name);
-      });
-      
+      // Add children if they're loaded
+      const children = loadedChildren.get(node.path) || [];
       children.forEach(child => processNode(child));
     }
   };
   
-  // Start with root level nodes
-  const rootNodes = sortedNodes.filter(node => node.depth === 0);
-  rootNodes.forEach(node => processNode(node));
+  // Process all root nodes
+  nodes.forEach(node => processNode(node));
   
   return result;
 };
@@ -249,12 +233,13 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
   className = ''
 }) => {
   // State management
-  const [nodes, setNodes] = useState<readonly FileNode[]>([]);
-  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set([rootPath]));
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [fileError, setFileError] = useState<string | null>(null); // Separate error for file operations
-  const [scanProgress, setScanProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
+  const [rootNodes, setRootNodes] = useState<readonly FileNode[]>([]);
+  const [loadedChildren, setLoadedChildren] = useState<Map<string, FileNode[]>>(new Map());
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+  const [isInitialLoading, setIsInitialLoading] = useState(false);
+  const [folderLoadingPaths, setFolderLoadingPaths] = useState<Set<string>>(new Set());
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   
   // Refs for performance optimization
   const listRef = useRef<List>(null);
@@ -262,15 +247,162 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
   
   // Memoized flat list for virtualization
   const flatNodes = useMemo(() => 
-    buildFlatList(nodes, expandedPaths), 
-    [nodes, expandedPaths]
+    buildFlatList(rootNodes, expandedPaths, loadedChildren), 
+    [rootNodes, expandedPaths, loadedChildren]
   );
   
-  // Handle directory toggle
-  const handleDirectoryToggle = useCallback((path: string, expanded: boolean) => {
+  // VS Code-style instant root loading
+  const loadRootItems = useCallback(async (path: string) => {
+    // Cancel any ongoing operation
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = new AbortController();
+    
+    setIsInitialLoading(true);
+    setLoadError(null);
+    
+    try {
+      console.log('🚀 STEP 1: Starting VS Code instant root load for path:', path);
+      console.log('🚀 STEP 1.1: Path type:', typeof path, 'Path length:', path.length);
+      
+      // Test 1: Direct backend call
+      const { invoke } = await import('@tauri-apps/api/core');
+      console.log('🚀 STEP 2: Tauri invoke imported successfully');
+      
+      // Test 2: Try the debug command first
+      console.log('🧪 STEP 3: Testing backend connectivity...');
+      try {
+        const debugResult = await invoke('debug_test_command', { testPath: path });
+        console.log('🧪 STEP 4: Debug test result:', debugResult);
+      } catch (debugError) {
+        console.error('❌ STEP 4 FAILED: Debug test failed:', debugError);
+      }
+      
+      // Test 3: Try load_root_items with detailed logging
+      console.log('📁 STEP 5: Calling load_root_items...');
+      console.log('📁 STEP 5.1: Parameters:', { rootPath: path, includeHidden: true, showHiddenFolders: true });
+      
+      const result = await invoke<{
+        success: boolean;
+        data?: Array<{
+          path: string;
+          name: string;
+          depth: number;
+          size: number;
+          last_modified: number;
+          extension: string;
+          is_directory: boolean;
+        }>;
+        error?: string;
+      }>('load_root_items', { 
+        rootPath: path,
+        includeHidden: true,
+        showHiddenFolders: true
+      });
+      
+      console.log('📁 STEP 6: Backend response from load_root_items:', JSON.stringify(result, null, 2));
+      console.log('📁 STEP 6.1: Response type check:', {
+        isObject: typeof result === 'object',
+        hasSuccess: 'success' in result,
+        successValue: result.success,
+        hasData: 'data' in result,
+        dataType: typeof result.data,
+        dataLength: result.data?.length,
+        hasError: 'error' in result,
+        errorValue: result.error
+      });
+      
+      if (result.success && result.data && result.data.length > 0) {
+        console.log('✅ STEP 7: Converting backend data to FileNode format...');
+        console.log('✅ STEP 7.1: First few items:', result.data.slice(0, 3));
+        
+        // Use direct backend result instead of fileSystemService
+        const rootItems: FileNode[] = result.data.map(item => {
+          // Generate stable ID from path hash
+          let hash = 0;
+          for (let i = 0; i < item.path.length; i++) {
+            const char = item.path.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash;
+          }
+          const id = Math.abs(hash).toString(36);
+          
+          return {
+            id,
+            path: item.path,
+            name: item.name,
+            depth: item.depth,
+            isDirectory: item.is_directory,
+            size: item.is_directory ? undefined : item.size,
+            lastModified: item.last_modified,
+            extension: item.extension,
+            iconId: item.is_directory ? 'folder' : 'file',
+            hasChildren: item.is_directory,
+            isExpanded: false,
+            children: undefined
+          };
+        });
+        
+        console.log(`✅ STEP 8: Successfully converted ${rootItems.length} items`);
+        console.log('📊 STEP 9: Items breakdown:', {
+          total: rootItems.length,
+          directories: rootItems.filter(n => n.isDirectory).length,
+          files: rootItems.filter(n => !n.isDirectory).length
+        });
+        console.log('📊 STEP 9.1: First converted item:', rootItems[0]);
+        
+        setRootNodes(rootItems);
+        setLoadedChildren(new Map());
+        setExpandedPaths(new Set());
+        
+        console.log('✅ STEP 10: State updated successfully!');
+        
+      } else {
+        console.error('❌ STEP 7 FAILED: No data or unsuccessful response');
+        console.error('❌ Response details:', {
+          success: result.success,
+          dataLength: result.data?.length,
+          dataExists: !!result.data,
+          error: result.error
+        });
+        
+        // More descriptive error message
+        let errorMsg = `Failed to load files from: ${path}`;
+        if (!result.success) {
+          errorMsg += ` - Backend reported failure`;
+        }
+        if (result.error) {
+          errorMsg += ` - Error: ${result.error}`;
+        }
+        if (!result.data || result.data.length === 0) {
+          errorMsg += ` - No files returned`;
+        }
+        
+        setLoadError(errorMsg);
+      }
+      
+    } catch (err) {
+      if (err instanceof Error && err.name !== 'AbortError') {
+        console.error('❌ STEP ERROR: Complete failure in loadRootItems:', err);
+        console.error('❌ Error details:', {
+          name: err.name,
+          message: err.message,
+          stack: err.stack
+        });
+        setLoadError(`Failed to load folder: ${err.message}`);
+      }
+    } finally {
+      setIsInitialLoading(false);
+      console.log('🏁 STEP FINAL: Loading process completed');
+    }
+  }, []);
+  
+  // VS Code-style lazy folder expansion
+  const handleDirectoryToggle = useCallback(async (path: string, shouldExpand: boolean) => {
+    console.log(`📁 Folder ${shouldExpand ? 'expand' : 'collapse'}:`, path);
+    
     setExpandedPaths(prev => {
       const newSet = new Set(prev);
-      if (expanded) {
+      if (shouldExpand) {
         newSet.add(path);
       } else {
         newSet.delete(path);
@@ -284,94 +416,43 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
       return newSet;
     });
     
-    onDirectoryToggle?.(path, expanded);
-  }, [onDirectoryToggle]);
-  
-  // Scan directory with progress updates
-  const scanDirectory = useCallback(async (path: string) => {
-    // Cancel any ongoing scan
-    abortControllerRef.current?.abort();
-    abortControllerRef.current = new AbortController();
-    
-    setIsLoading(true);
-    setError(null);
-    setScanProgress({ current: 0, total: 0 });
-    
-    try {
-      const allNodes: FileNode[] = [];
-      let chunkCount = 0;
+    // Load children if expanding and not already loaded
+    if (shouldExpand && !loadedChildren.has(path)) {
+      setFolderLoadingPaths(prev => new Set(prev).add(path));
+      
+      try {
+        console.log('🔄 Loading folder contents:', path);
       const startTime = performance.now();
       
-      console.log('🚀 Starting VS Code-style progressive scan...');
-      console.log('📋 Scan parameters:', {
-        path,
-        chunkSize: 25,
-        ignorePatterns: [],  // Empty array - showing everything
-        includeHidden: true
-      });
-      
-      for await (const chunk of fileSystemService.scanDirectory(path, {
-        chunkSize: 25,
-        ignorePatterns: [],
-        includeHidden: true
-      })) {
-        if (abortControllerRef.current?.signal.aborted) {
-          console.log('🛑 Scan aborted by user');
-          break;
-        }
+        const children = await fileSystemService.loadFolderContents(path, true);
+        const loadTime = performance.now() - startTime;
         
-        allNodes.push(...chunk);
-        chunkCount++;
+        console.log(`📦 Loaded ${children.length} items from ${path} in ${loadTime.toFixed(1)}ms`);
         
-        console.log(`📦 Received chunk ${chunkCount}:`, {
-          chunkSize: chunk.length,
-          totalNodes: allNodes.length,
-          chunkSample: chunk.slice(0, 3).map(n => ({ name: n.name, isDirectory: n.isDirectory, depth: n.depth }))
+        setLoadedChildren(prev => new Map(prev).set(path, children));
+        
+      } catch (error) {
+        console.error('Failed to load folder contents:', error);
+      } finally {
+        setFolderLoadingPaths(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(path);
+          return newSet;
         });
-        
-        // Update UI progressively (VS Code style)
-        setNodes([...allNodes]);
-        setScanProgress({ 
-          current: allNodes.length, 
-          total: allNodes.length // Total updates as we discover more files
-        });
-        
-        // Log progress for large scans
-        if (chunkCount % 10 === 0) {
-          const elapsed = performance.now() - startTime;
-          console.log(`📊 Chunk ${chunkCount}: ${allNodes.length} files in ${elapsed.toFixed(0)}ms`);
-        }
-        
-        // VS Code-style micro-delay to prevent UI blocking
-        await new Promise(resolve => setTimeout(resolve, 1));
       }
-      
-      const totalTime = performance.now() - startTime;
-      console.log(`✅ VS Code-style scan complete: ${allNodes.length} files in ${chunkCount} chunks (${totalTime.toFixed(0)}ms)`);
-      
-      // Show completion feedback
-      if (allNodes.length > 1000) {
-        console.log(`🎯 Large project handled: ${allNodes.length} files (VS Code-optimized)`);
-      }
-      
-    } catch (err) {
-      if (err instanceof Error && err.name !== 'AbortError') {
-        setError(err.message);
-        console.error('❌ VS Code-style scan error:', err);
-      }
-    } finally {
-      setIsLoading(false);
     }
-  }, []);
+    
+    onDirectoryToggle?.(path, shouldExpand);
+  }, [loadedChildren, onDirectoryToggle]);
   
-  // Initial scan
+  // Initial load when rootPath changes
   useEffect(() => {
-    scanDirectory(rootPath);
+    loadRootItems(rootPath);
     
     return () => {
       abortControllerRef.current?.abort();
     };
-  }, [rootPath, scanDirectory]);
+  }, [rootPath, loadRootItems]);
   
   // Scroll to selected item
   useEffect(() => {
@@ -386,19 +467,15 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
   // Handle file click with VS Code-style error handling
   const handleFileClick = useCallback(async (node: FileNode) => {
     if (node.isDirectory) {
-      setExpandedPaths(prev => {
-        const newSet = new Set(prev);
-        newSet.add(node.path);
-        return newSet;
-      });
+      await handleDirectoryToggle(node.path, !expandedPaths.has(node.path));
       return;
     }
 
     try {
-      setFileError(null); // Clear any previous file errors
+      setFileError(null);
       console.log('📖 Opening file:', node.path);
       
-      // Call the backend directly since readFile is not in the service
+      // Call the backend directly for file reading
       const { invoke } = await import('@tauri-apps/api/core');
       const result = await invoke<{
         success: boolean;
@@ -409,17 +486,15 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
       if (result.success && result.data !== undefined) {
         onFileSelect?.(node);
       } else {
-        // Display the friendly error message from the backend
         setFileError(result.error || 'Failed to open file');
         console.error('Failed to read file:', result.error);
       }
     } catch (err) {
-      // Fallback error handling
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
       setFileError(`Unable to open file: ${errorMessage}`);
       console.error('File operation error:', err);
     }
-  }, [onFileSelect]);
+  }, [expandedPaths, handleDirectoryToggle, onFileSelect]);
 
   // Prepare data for list items
   const listItemData: ListItemData = useMemo(() => ({
@@ -431,15 +506,46 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
   }), [flatNodes, selectedPath, expandedPaths, handleFileClick, handleDirectoryToggle]);
   
   return (
-    <div className={`virtualized-file-explorer ${className}`}>
-      {/* Header */}
-      <div className="file-explorer-header">
-        <div className="flex items-center justify-between">
-          <span className="font-medium">Explorer</span>
-          {isLoading && (
-            <div className="flex items-center space-x-2 text-xs text-gray-400">
-              <div className="animate-spin w-3 h-3 border border-gray-400 border-t-transparent rounded-full"></div>
-              <span>{scanProgress.current} files</span>
+    <div className={`file-explorer-virtualized h-full relative ${className}`}>
+      {/* SINGLE Professional Loading Overlay - only for initial load */}
+      {isInitialLoading && (
+        <div className="absolute inset-0 z-50 bg-vscode-bg/80 backdrop-blur-sm flex items-center justify-center">
+          <div className="text-center">
+            {/* Animated VS Code-style loader */}
+            <div className="relative mb-4">
+              <div className="w-12 h-12 border-3 border-vscode-accent/30 border-t-vscode-accent rounded-full animate-spin mx-auto"></div>
+              <div className="absolute inset-0 w-8 h-8 border-2 border-vscode-accent/20 border-t-transparent rounded-full animate-spin mx-auto mt-2 ml-2"></div>
+            </div>
+            
+            {/* Progress text */}
+            <div className="text-vscode-fg text-sm font-medium mb-2">
+              Loading Project Root
+            </div>
+            
+            {/* Scanning indicator */}
+            <div className="text-vscode-fg-muted text-xs">
+              Instant VS Code-style loading...
+            </div>
+            
+            {/* VS Code style progress dots */}
+            <div className="flex justify-center mt-3 space-x-1">
+              <div className="w-2 h-2 bg-vscode-accent rounded-full animate-pulse"></div>
+              <div className="w-2 h-2 bg-vscode-accent/60 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+              <div className="w-2 h-2 bg-vscode-accent/30 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* File Explorer Header */}
+      <div className="file-explorer-header px-3 py-2 bg-vscode-sidebar border-b border-vscode-border text-xs font-medium text-vscode-fg flex items-center justify-between">
+        <span>EXPLORER</span>
+        <div className="flex items-center gap-2">
+          {/* Show folder loading indicator in header for ongoing operations */}
+          {folderLoadingPaths.size > 0 && (
+            <div className="flex items-center text-vscode-accent">
+              <div className="w-3 h-3 border border-vscode-accent border-t-transparent rounded-full animate-spin mr-2"></div>
+              <span className="text-xs">Loading {folderLoadingPaths.size} folder{folderLoadingPaths.size > 1 ? 's' : ''}...</span>
             </div>
           )}
         </div>
@@ -454,11 +560,11 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
         />
       )}
       
-      {/* Scanning Error Display */}
-      {error && (
+      {/* Load Error Display */}
+      {loadError && (
         <FileErrorNotification
-          error={error}
-          onDismiss={() => scanDirectory(rootPath)}
+          error={loadError}
+          onDismiss={() => setLoadError(null)}
           type="warning"
         />
       )}
@@ -469,7 +575,7 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
           <List
             ref={listRef}
             height={height - 60} // Account for header
-            width="100%" // Add required width property
+            width="100%"
             itemCount={flatNodes.length}
             itemSize={24} // Height per item in pixels
             itemData={listItemData}
@@ -478,11 +584,12 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
           >
             {FileExplorerItem}
           </List>
-        ) : !isLoading ? (
+        ) : !isInitialLoading ? (
           <div className="empty-state">
             <div className="text-center py-8 text-gray-400">
               <div className="text-2xl mb-2">📁</div>
               <div className="text-sm">No files found</div>
+              <div className="text-xs mt-2 text-gray-500">Try selecting a different folder</div>
             </div>
           </div>
         ) : null}
@@ -491,8 +598,9 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
       {/* Footer with stats */}
       <div className="file-explorer-footer">
         <div className="text-xs text-gray-400">
-          {flatNodes.length} items
-          {isLoading && ' (scanning...)'}
+          {flatNodes.length} items visible
+          {isInitialLoading && ' (loading...)'}
+          {folderLoadingPaths.size > 0 && ` • ${folderLoadingPaths.size} folder${folderLoadingPaths.size > 1 ? 's' : ''} expanding`}
         </div>
       </div>
     </div>
