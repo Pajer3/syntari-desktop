@@ -201,7 +201,7 @@ export const useChatViewModel = (
     try {
       // Check for sensitive data patterns
       const sensitivePatterns = [
-        /(?:api[_-]?key|token|secret|password)\s*[:=]\s*["']?[\w\-]{8,}["']?/gi,
+        /(?:api[_-]?key|token|secret|password)\s*[:=]\s*["']?[\w-]{8,}["']?/gi,
         /[A-Z0-9]{20,}/g, // Potential API keys
         /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g, // Credit card patterns
       ];

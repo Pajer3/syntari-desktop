@@ -255,7 +255,6 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
   const [error, setError] = useState<string | null>(null);
   const [fileError, setFileError] = useState<string | null>(null); // Separate error for file operations
   const [scanProgress, setScanProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
-  const [searchTerm, setSearchTerm] = useState('');
   
   // Refs for performance optimization
   const listRef = useRef<List>(null);

@@ -1,7 +1,7 @@
 // Syntari AI IDE - Enterprise Context Menu Hook
 // Professional context menu with accessibility, security, and performance optimization
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 
 // ================================
 // ENTERPRISE CONFIGURATION

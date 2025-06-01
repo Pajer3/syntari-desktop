@@ -283,7 +283,7 @@ export class HighPerformanceFileSystemService implements FileSystemService {
   }
   
   // Fallback chunked scanning for compatibility
-  private async* scanFilesChunkedFallback(path: string, options: ScanOptions): AsyncIterableIterator<FileNode[]> {
+  private async* _scanFilesChunkedFallback(path: string, options: ScanOptions): AsyncIterableIterator<FileNode[]> {
     try {
       let offset = 0;
       const chunkSize = options.chunkSize || 50;
@@ -419,7 +419,7 @@ export class HighPerformanceFileSystemService implements FileSystemService {
     return { ...this.metrics };
   }
   
-  private async scanDirectoriesFirst(path: string, options: ScanOptions): Promise<FileNode[]> {
+  private async _scanDirectoriesFirst(path: string, options: ScanOptions): Promise<FileNode[]> {
     try {
       const result = await invoke<{
         success: boolean;

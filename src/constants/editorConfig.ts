@@ -216,11 +216,11 @@ export const EDITOR_OPTIONS = {
   wordBasedSuggestions: 'currentDocument' as const,
   
   // Word separators
-  wordSeparators: '`~!@#$%^&*()-=+[{]}\\|;:\'",.<>/?',
+  wordSeparators: '`~!@#$%^&*()-=+[{]}\\|;:\'",./<>/?',
   
   // Word wrap break characters
   wordWrapBreakAfterCharacters: '\t})]?|/&.,;¢°′″‰℃、。｡､￠，．：；？！％・･ゝゞヽヾーァィゥェォッャュョヮヵヶぁぃぅぇぉっゃゅょゎゕゖㇰㇱㇲㇳㇴㇵㇶㇷㇸㇹㇺㇻㇼㇽㇾㇿ々〻ｧｨｩｪｫｬｭｮｯｰ"〉》」』】〕）］｝｠',
-  wordWrapBreakBeforeCharacters: '([{\'\"〈《「『【〔（［｛｟',
+  wordWrapBreakBeforeCharacters: '([{\'"〈《「『【〔（［｛｟',
   
   // Wrapping indent
   wrappingIndent: 'indent' as const,
