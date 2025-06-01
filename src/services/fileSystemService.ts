@@ -297,21 +297,25 @@ export class HighPerformanceFileSystemService implements FileSystemService {
     try {
       const result = await invoke<{
         success: boolean;
-        directories: Array<{
+        data?: Array<{
           path: string;
           name: string;
           depth: number;
           last_modified: number;
         }>;
+        error?: string;
       }>('scan_directories_only', { 
         path, 
         maxDepth: options.maxDepth || 3,
         ignorePatterns: options.ignorePatterns 
       });
       
-      if (!result.success) return [];
+      if (!result.success || !result.data) {
+        console.warn('Failed to scan directories:', result.error);
+        return [];
+      }
       
-      return result.directories.map(dir => ({
+      return result.data.map(dir => ({
         id: this.generateId(dir.path),
         path: dir.path,
         name: dir.name,
@@ -338,15 +342,18 @@ export class HighPerformanceFileSystemService implements FileSystemService {
       while (true) {
         const result = await invoke<{
           success: boolean;
-          files: Array<{
-            path: string;
-            name: string;
-            depth: number;
-            size: number;
-            last_modified: number;
-            extension: string;
-          }>;
-          hasMore: boolean;
+          data?: {
+            files: Array<{
+              path: string;
+              name: string;
+              depth: number;
+              size: number;
+              last_modified: number;
+              extension: string;
+            }>;
+            has_more: boolean;
+          };
+          error?: string;
         }>('scan_files_chunked', { 
           path, 
           offset, 
@@ -355,9 +362,14 @@ export class HighPerformanceFileSystemService implements FileSystemService {
           includeHidden: options.includeHidden
         });
         
-        if (!result.success || result.files.length === 0) break;
+        if (!result.success || !result.data || result.data.files.length === 0) {
+          if (!result.success) {
+            console.warn('Failed to scan files:', result.error);
+          }
+          break;
+        }
         
-        const nodes: FileNode[] = result.files.map(file => ({
+        const nodes: FileNode[] = result.data.files.map(file => ({
           id: this.generateId(file.path),
           path: file.path,
           name: file.name,
@@ -371,7 +383,7 @@ export class HighPerformanceFileSystemService implements FileSystemService {
         
         yield nodes;
         
-        if (!result.hasMore) break;
+        if (!result.data.has_more) break;
         offset += chunkSize;
         
         // Small delay to prevent blocking

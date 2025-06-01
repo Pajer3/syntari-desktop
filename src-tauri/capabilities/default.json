@@ -16,6 +16,7 @@
     "dialog:allow-message",
     "dialog:allow-ask",
     "dialog:allow-confirm",
+    "fs:default",
     "fs:allow-read-file",
     "fs:allow-write-file",
     "fs:allow-read-dir",
@@ -24,6 +25,28 @@
     "fs:allow-copy-file",
     "fs:allow-create",
     "fs:allow-remove",
-    "fs:allow-rename"
+    "fs:allow-rename",
+    "fs:allow-mkdir",
+    "fs:allow-read-text-file",
+    "fs:allow-write-text-file",
+    "fs:allow-read-text-file-lines",
+    "fs:allow-watch",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "/**" },
+        { "path": "$HOME/**" },
+        { "path": "$APPDATA/**" },
+        { "path": "$LOCALDATA/**" },
+        { "path": "$CACHE/**" },
+        { "path": "$CONFIG/**" },
+        { "path": "$DATA/**" },
+        { "path": "$DOCUMENT/**" },
+        { "path": "$DOWNLOAD/**" },
+        { "path": "$DESKTOP/**" },
+        { "path": "$RUNTIME/**" },
+        { "path": "$TEMPLATE/**" }
+      ]
+    }
   ]
 }
