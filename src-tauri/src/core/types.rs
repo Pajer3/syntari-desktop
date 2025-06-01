@@ -94,6 +94,7 @@ pub struct FileInfoChunk {
     pub size: u64,
     pub last_modified: u64,
     pub extension: String,
+    pub is_directory: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

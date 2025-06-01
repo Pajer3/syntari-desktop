@@ -64,6 +64,12 @@ dirs = "6.0.0"
 # Time and date handling
 chrono = { version = "0.4.41", features = ["serde"] }
 
+# Aggressive filtering
+ignore = "0.4.23"
+
+# Parallel processing
+rayon = "1.10.0"
+
 [features]
 default = []
 git-integration = ["git2"]
@@ -71,10 +77,15 @@ git-integration = ["git2"]
 enterprise = []
 compliance = []
 
+[profile.dev]
+incremental = true # Compile in smaller steps for faster builds
+opt-level = 1 # Basic optimizations for dev builds
+
 [profile.release]
-# Optimize for size and performance
-opt-level = 3
-lto = true
-codegen-units = 1
-panic = "abort"
+codegen-units = 1 # Better optimization
+lto = true # Link-time optimizations
+opt-level = 3 # Optimize for speed (important for large file scanning)
+panic = "abort" # Faster performance by removing panic handlers
+strip = true # Remove debug symbols
+overflow-checks = false # Disable overflow checks for performance
 

@@ -2,7 +2,8 @@
 // File system commands exposed to the frontend
 
 use std::path::Path;
-use crate::core::{TauriResult, DirectoryInfo, ScanFilesResult, FileInfoChunk};
+use crate::core::types::{TauriResult, DirectoryInfo, FileInfoChunk, ScanFilesResult};
+use ignore::WalkBuilder;
 
 #[tauri::command]
 pub async fn read_file(path: String) -> std::result::Result<TauriResult<String>, String> {
@@ -210,50 +211,289 @@ pub async fn scan_files_chunked(
     ignore_patterns: Option<Vec<String>>,
     include_hidden: Option<bool>
 ) -> std::result::Result<TauriResult<ScanFilesResult>, String> {
-    tracing::debug!("Scanning files in: {} (offset: {}, limit: {})", path, offset, limit);
+    tracing::debug!("VS Code-style scan: {} (offset: {}, limit: {})", path, offset, limit);
     
     let include_hidden = include_hidden.unwrap_or(false);
-    let ignore_list = ignore_patterns.unwrap_or_else(|| vec![
-        ".git".to_string(),
-        "node_modules".to_string(),
-        "target".to_string(),
-        ".next".to_string(),
-        "dist".to_string(),
-        "build".to_string(),
-    ]);
     
-    let mut all_files = Vec::new();
+    // Build ignore walker with aggressive VS Code-style filtering
+    let mut builder = WalkBuilder::new(&path);
+    builder
+        .hidden(!include_hidden)  // Skip hidden files unless explicitly requested
+        .ignore(true)            // Respect .gitignore
+        .git_ignore(true)        // Respect .gitignore in parent directories
+        .git_global(true)        // Respect global .gitignore
+        .git_exclude(true)       // Respect .git/info/exclude
+        .require_git(false)      // Don't require being in a git repo
+        .follow_links(false)     // Don't follow symlinks to avoid cycles
+        .max_depth(Some(50));    // Prevent infinite recursion
     
-    fn scan_files_recursive(
-        dir_path: &Path,
-        depth: u32,
-        include_hidden: bool,
-        ignore_list: &[String],
-        files: &mut Vec<FileInfoChunk>,
+    // Add custom ignore patterns (VS Code style noise filtering)
+    let default_ignores = vec![
+        // Development artifacts
+        ".git", "node_modules", "target", ".next", "dist", "build",
+        // Python
+        "__pycache__", ".pytest_cache", ".mypy_cache", ".venv", "venv", 
+        ".env", "*.pyc", "*.pyo", "*.egg-info",
+        // JavaScript/TypeScript
+        ".turbo", ".vercel", ".nuxt", ".output", "coverage",
+        // Rust
+        "target", "Cargo.lock",
+        // C/C++
+        "build", "cmake-build-debug", "cmake-build-release", ".vs",
+        // Java
+        ".gradle", ".m2", "out",
+        // IDEs
+        ".vscode", ".idea", ".eclipse", "*.swp", "*.swo",
+        // OS
+        ".DS_Store", "Thumbs.db", "desktop.ini",
+        // Logs
+        "logs", "*.log",
+        // Archives & Media (large files)
+        "*.zip", "*.tar.gz", "*.rar", "*.7z", "*.mp4", "*.avi", "*.mkv",
+        "*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.tiff",
+        "*.pdf", "*.doc", "*.docx", "*.xls", "*.xlsx"
+    ];
+    
+    let ignore_list = ignore_patterns.unwrap_or(default_ignores.iter().map(|s| s.to_string()).collect());
+    
+    // Apply custom ignore patterns
+    for pattern in &ignore_list {
+        builder.add_custom_ignore_filename(&format!(".{}ignore", pattern.replace("*", "").replace(".", "")));
+    }
+    
+    // Stream files with aggressive early filtering
+    let walker = builder.build();
+    let mut all_files: Vec<FileInfoChunk> = Vec::new();
+    
+    // Collect files with early bailout if too many (VS Code style)
+    const MAX_FILES_SCAN: usize = 100_000; // VS Code-style limit
+    let mut scanned_count = 0;
+    
+    for result in walker {
+        // Early bailout for massive directories
+        if scanned_count > MAX_FILES_SCAN {
+            tracing::warn!("Hit file limit ({}), truncating scan", MAX_FILES_SCAN);
+            break;
+        }
+        
+        match result {
+            Ok(entry) => {
+                let path = entry.path();
+                
+                // Skip directories - we only want files for this command
+                if !path.is_file() {
+                    continue;
+
+                }
+                
+                // Additional size filtering (skip huge files like VS Code does)
+                if let Ok(metadata) = path.metadata() {
+                    const MAX_FILE_SIZE: u64 = 64 * 1024 * 1024; // 64MB limit like VS Code
+                    if metadata.len() > MAX_FILE_SIZE {
+                        continue;
+                    }
+                }
+                
+                let name = path.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("")
+                    .to_string();
+                
+                // Skip files matching ignore patterns
+                if ignore_list.iter().any(|pattern| {
+                    if pattern.contains('*') {
+                        // Simple wildcard matching
+                        if pattern.starts_with("*.") {
+                            let ext = &pattern[2..];
+                            name.ends_with(ext)
+                        } else {
+                            false
+                        }
+                    } else {
+                        name == *pattern || name.starts_with(pattern)
+                    }
+                }) {
+                    continue;
+                }
+                
+                if let Ok(metadata) = path.metadata() {
+                    let size = metadata.len();
+                    let last_modified = metadata
+                        .modified()
+                        .unwrap_or(std::time::UNIX_EPOCH)
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+                    
+                    let extension = path.extension()
+                        .and_then(|ext| ext.to_str())
+                        .unwrap_or("")
+                        .to_string();
+                    
+                    // Calculate depth from root
+                    let depth = path.strip_prefix(&path)
+                        .map(|p| p.components().count() as u32)
+                        .unwrap_or(0);
+                    
+                    all_files.push(FileInfoChunk {
+                        path: path.to_string_lossy().to_string(),
+                        name,
+                        depth,
+                        size,
+                        last_modified,
+                        extension,
+                        is_directory: false,
+                    });
+                    
+                    scanned_count += 1;
+                }
+            }
+            Err(err) => {
+                tracing::debug!("Skipping inaccessible path: {}", err);
+                continue;
+            }
+        }
+    }
+    
+    // Apply pagination AFTER filtering (much more efficient)
+    let total_files = all_files.len();
+    let end_index = std::cmp::min(offset + limit, total_files);
+    let has_more = end_index < total_files;
+    
+    let files = if offset < total_files {
+        all_files[offset..end_index].to_vec()
+    } else {
+        Vec::new()
+    };
+    
+    tracing::info!("VS Code-style scan: {} files (showing {}-{} of {}, scanned {})", 
+                   files.len(), offset, end_index, total_files, scanned_count);
+    
+    Ok(TauriResult::success(ScanFilesResult {
+        files,
+        has_more,
+    }))
+}
+
+// NEW: Streaming scanner command for progressive loading
+#[tauri::command]
+pub async fn scan_files_streaming(
+    path: String,
+    chunk_size: Option<usize>,
+    _ignore_patterns: Option<Vec<String>>, // Prefixed with _ to indicate intentionally unused
+    include_hidden: Option<bool>
+) -> std::result::Result<TauriResult<Vec<FileInfoChunk>>, String> {
+    tracing::debug!("Streaming scan: {}", path);
+    
+    let chunk_size = chunk_size.unwrap_or(50); // Small chunks for responsiveness
+    let include_hidden = include_hidden.unwrap_or(false);
+    
+    // Use same aggressive filtering as above
+    let mut builder = WalkBuilder::new(&path);
+    builder
+        .hidden(!include_hidden)
+        .ignore(true)
+        .git_ignore(true)
+        .git_global(true)
+        .git_exclude(true)
+        .require_git(false)
+        .follow_links(false)
+        .max_depth(Some(20)); // Shallower for streaming
+    
+    let walker = builder.build();
+    let mut files = Vec::with_capacity(chunk_size);
+    let mut count = 0;
+    
+    for result in walker {
+        if count >= chunk_size {
+            break; // Return first chunk immediately
+        }
+        
+        if let Ok(entry) = result {
+            let path = entry.path();
+            if path.is_file() {
+                if let Ok(metadata) = path.metadata() {
+                    // Skip large files
+                    if metadata.len() > 10 * 1024 * 1024 { // 10MB limit for streaming
+                        continue;
+                    }
+                    
+                    let name = path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("")
+                        .to_string();
+                    
+                    files.push(FileInfoChunk {
+                        path: path.to_string_lossy().to_string(),
+                        name,
+                        depth: 0, // Simplified for streaming
+                        size: metadata.len(),
+                        last_modified: metadata
+                            .modified()
+                            .unwrap_or(std::time::UNIX_EPOCH)
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs(),
+                        extension: path.extension()
+                            .and_then(|ext| ext.to_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        is_directory: false, // This function only scans files
+                    });
+                    
+                    count += 1;
+                }
+            }
+        }
+    }
+    
+    tracing::info!("Streaming chunk: {} files", files.len());
+    Ok(TauriResult::success(files))
+}
+
+// Clean unified scanner following ChatGPT's advice - no file content reading!
+#[tauri::command]
+pub async fn scan_everything_clean(
+    path: String,
+    include_hidden: Option<bool>
+) -> std::result::Result<TauriResult<Vec<FileInfoChunk>>, String> {
+    tracing::info!("🚀 Clean scan (no file content reading): {}", path);
+    
+    let include_hidden = include_hidden.unwrap_or(true);
+    let root_path = Path::new(&path);
+    let mut all_items = Vec::new();
+    
+    // Simple recursive scan - NEVER read file contents, only metadata
+    fn scan_recursive(
+        dir: &Path, 
+        root: &Path, 
+        include_hidden: bool, 
+        items: &mut Vec<FileInfoChunk>
     ) -> std::io::Result<()> {
-        let entries = std::fs::read_dir(dir_path)?;
+        let entries = std::fs::read_dir(dir)?;
         
         for entry in entries {
             let entry = entry?;
-            let path = entry.path();
-            let name = path.file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("")
-                .to_string();
+            let entry_path = entry.path();
+            let file_type = entry.file_type()?;
             
-            // Skip hidden files/directories unless explicitly included
+            // Use OsString and convert with to_string_lossy (never panics!)
+            let name = entry.file_name().to_string_lossy().to_string();
+            
+            // Skip hidden files if not requested
             if !include_hidden && name.starts_with('.') {
                 continue;
             }
             
-            // Skip ignored directories
-            if ignore_list.contains(&name) {
-                continue;
-            }
+            // Calculate depth from root
+            let depth = entry_path.strip_prefix(root)
+                .map(|p| p.components().count().saturating_sub(1) as u32)
+                .unwrap_or(0);
             
-            if path.is_file() {
-                let metadata = entry.metadata()?;
-                let size = metadata.len();
+            // Get metadata - but NEVER read file contents!
+            if let Ok(metadata) = entry.metadata() {
+                let is_directory = file_type.is_dir();
+                let size = if is_directory { 0 } else { metadata.len() };
                 let last_modified = metadata
                     .modified()
                     .unwrap_or(std::time::UNIX_EPOCH)
@@ -261,52 +501,52 @@ pub async fn scan_files_chunked(
                     .unwrap_or_default()
                     .as_secs();
                 
-                let extension = path.extension()
-                    .and_then(|ext| ext.to_str())
-                    .unwrap_or("")
-                    .to_string();
+                // Get extension safely - DON'T filter on extension!
+                let extension = if is_directory {
+                    String::new()
+                } else {
+                    entry_path.extension()
+                        .and_then(|ext| ext.to_str())
+                        .unwrap_or("")
+                        .to_string()
+                };
                 
-                files.push(FileInfoChunk {
-                    path: path.to_string_lossy().to_string(),
+                items.push(FileInfoChunk {
+                    path: entry_path.to_string_lossy().to_string(), // Never panics!
                     name,
                     depth,
                     size,
                     last_modified,
                     extension,
+                    is_directory,
                 });
-            } else if path.is_dir() {
-                // Recursively scan subdirectories
-                scan_files_recursive(&path, depth + 1, include_hidden, ignore_list, files)?;
+                
+                // Recurse into directories
+                if is_directory {
+                    let _ = scan_recursive(&entry_path, root, include_hidden, items);
+                }
             }
         }
         
         Ok(())
     }
     
-    let path_obj = Path::new(&path);
-    match scan_files_recursive(path_obj, 0, include_hidden, &ignore_list, &mut all_files) {
+    match scan_recursive(root_path, root_path, include_hidden, &mut all_items) {
         Ok(_) => {
-            // Apply pagination
-            let total_files = all_files.len();
-            let end_index = std::cmp::min(offset + limit, total_files);
-            let has_more = end_index < total_files;
+            // Sort for consistent tree order
+            all_items.sort_by(|a, b| a.path.cmp(&b.path));
             
-            let files = if offset < total_files {
-                all_files[offset..end_index].to_vec()
-            } else {
-                Vec::new()
-            };
+            tracing::info!("✅ Clean scan complete: {} items", all_items.len());
+            if all_items.len() > 0 {
+                let sample: Vec<_> = all_items.iter().take(5).map(|f| &f.name).collect();
+                tracing::info!("📋 Sample items: {:?}", sample);
+            }
             
-            tracing::info!("Scanned {} files (showing {}-{} of {})", files.len(), offset, end_index, total_files);
-            
-            Ok(TauriResult::success(ScanFilesResult {
-                files,
-                has_more,
-            }))
+            Ok(TauriResult::success(all_items))
         }
         Err(e) => {
-            tracing::error!("Failed to scan files in {}: {:?}", path, e);
-            Ok(TauriResult::error(format!("Failed to scan files: {}", e)))
+            tracing::error!("Failed clean scan: {}", e);
+            Ok(TauriResult::error(format!("Failed to scan directory: {}", e)))
         }
     }
 } 

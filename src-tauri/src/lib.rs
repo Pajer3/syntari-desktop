@@ -57,6 +57,8 @@ pub fn run() {
             filesystem::commands::get_directory_mtime,
             filesystem::commands::scan_directories_only,
             filesystem::commands::scan_files_chunked,
+            filesystem::commands::scan_files_streaming,
+            filesystem::commands::scan_everything_clean,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

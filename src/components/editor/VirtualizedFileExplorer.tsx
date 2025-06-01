@@ -5,6 +5,7 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { FixedSizeList as List } from 'react-window';
 import type { FileNode } from '../../types/fileSystem';
 import { fileSystemService } from '../../services/fileSystemService';
+import { AlertCircle } from 'lucide-react';
 
 // ================================
 // TYPES
@@ -23,7 +24,7 @@ interface ListItemData {
   nodes: readonly FileNode[];
   selectedPath?: string;
   expandedPaths: Set<string>;
-  onFileSelect: (node: FileNode) => void;
+  onFileClick: (node: FileNode) => Promise<void>;
   onDirectoryToggle: (path: string, expanded: boolean) => void;
 }
 
@@ -73,7 +74,7 @@ const FileExplorerItem: React.FC<{
   style: React.CSSProperties;
   data: ListItemData;
 }> = ({ index, style, data }) => {
-  const { nodes, selectedPath, expandedPaths, onFileSelect, onDirectoryToggle } = data;
+  const { nodes, selectedPath, expandedPaths, onFileClick, onDirectoryToggle } = data;
   const node = nodes[index];
   
   if (!node) return null;
@@ -86,9 +87,9 @@ const FileExplorerItem: React.FC<{
     if (node.isDirectory) {
       onDirectoryToggle(node.path, !isExpanded);
     } else {
-      onFileSelect(node);
+      onFileClick(node);
     }
-  }, [node, isExpanded, onFileSelect, onDirectoryToggle]);
+  }, [node, isExpanded, onFileClick, onDirectoryToggle]);
   
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -199,6 +200,42 @@ const buildFlatList = (nodes: readonly FileNode[], expandedPaths: Set<string>): 
   return result;
 };
 
+// VS Code-style error notification component
+const FileErrorNotification: React.FC<{ 
+  error: string; 
+  onDismiss: () => void; 
+  type?: 'error' | 'warning' | 'info' 
+}> = ({ error, onDismiss, type = 'error' }) => {
+  const bgColor = type === 'error' ? 'bg-red-50 border-red-200' : 
+                  type === 'warning' ? 'bg-yellow-50 border-yellow-200' : 
+                  'bg-blue-50 border-blue-200';
+  const textColor = type === 'error' ? 'text-red-800' : 
+                    type === 'warning' ? 'text-yellow-800' : 
+                    'text-blue-800';
+  const iconColor = type === 'error' ? 'text-red-500' : 
+                    type === 'warning' ? 'text-yellow-500' : 
+                    'text-blue-500';
+
+  return (
+    <div className={`${bgColor} border rounded-md p-4 mb-4 relative`}>
+      <div className="flex items-start">
+        <AlertCircle className={`${iconColor} h-5 w-5 flex-shrink-0 mt-0.5`} />
+        <div className="ml-3 flex-1">
+          <p className={`text-sm font-medium ${textColor}`}>
+            {error}
+          </p>
+        </div>
+        <button
+          onClick={onDismiss}
+          className={`${textColor} hover:opacity-75 text-lg font-bold leading-none`}
+        >
+          ×
+        </button>
+      </div>
+    </div>
+  );
+};
+
 // ================================
 // MAIN COMPONENT
 // ================================
@@ -216,7 +253,9 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set([rootPath]));
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [scanProgress, setScanProgress] = useState({ current: 0, total: 0 });
+  const [fileError, setFileError] = useState<string | null>(null); // Separate error for file operations
+  const [scanProgress, setScanProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
+  const [searchTerm, setSearchTerm] = useState('');
   
   // Refs for performance optimization
   const listRef = useRef<List>(null);
@@ -262,33 +301,64 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
     try {
       const allNodes: FileNode[] = [];
       let chunkCount = 0;
+      const startTime = performance.now();
+      
+      console.log('🚀 Starting VS Code-style progressive scan...');
+      console.log('📋 Scan parameters:', {
+        path,
+        chunkSize: 25,
+        ignorePatterns: [],  // Empty array - showing everything
+        includeHidden: true
+      });
       
       for await (const chunk of fileSystemService.scanDirectory(path, {
-        chunkSize: 50, // Smaller chunks for better responsiveness
-        ignorePatterns: ['.git', 'node_modules', '.DS_Store', 'target', '.next', 'dist', 'build'],
-        includeHidden: false
+        chunkSize: 25,
+        ignorePatterns: [],
+        includeHidden: true
       })) {
         if (abortControllerRef.current?.signal.aborted) {
+          console.log('🛑 Scan aborted by user');
           break;
         }
         
         allNodes.push(...chunk);
         chunkCount++;
         
-        // Update UI progressively
-        setNodes([...allNodes]);
-        setScanProgress({ current: allNodes.length, total: allNodes.length });
+        console.log(`📦 Received chunk ${chunkCount}:`, {
+          chunkSize: chunk.length,
+          totalNodes: allNodes.length,
+          chunkSample: chunk.slice(0, 3).map(n => ({ name: n.name, isDirectory: n.isDirectory, depth: n.depth }))
+        });
         
-        // Small delay to allow UI updates
+        // Update UI progressively (VS Code style)
+        setNodes([...allNodes]);
+        setScanProgress({ 
+          current: allNodes.length, 
+          total: allNodes.length // Total updates as we discover more files
+        });
+        
+        // Log progress for large scans
+        if (chunkCount % 10 === 0) {
+          const elapsed = performance.now() - startTime;
+          console.log(`📊 Chunk ${chunkCount}: ${allNodes.length} files in ${elapsed.toFixed(0)}ms`);
+        }
+        
+        // VS Code-style micro-delay to prevent UI blocking
         await new Promise(resolve => setTimeout(resolve, 1));
       }
       
-      console.log(`📁 Scanned ${allNodes.length} files/directories in ${chunkCount} chunks`);
+      const totalTime = performance.now() - startTime;
+      console.log(`✅ VS Code-style scan complete: ${allNodes.length} files in ${chunkCount} chunks (${totalTime.toFixed(0)}ms)`);
+      
+      // Show completion feedback
+      if (allNodes.length > 1000) {
+        console.log(`🎯 Large project handled: ${allNodes.length} files (VS Code-optimized)`);
+      }
       
     } catch (err) {
       if (err instanceof Error && err.name !== 'AbortError') {
         setError(err.message);
-        console.error('File scan error:', err);
+        console.error('❌ VS Code-style scan error:', err);
       }
     } finally {
       setIsLoading(false);
@@ -314,14 +384,52 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
     }
   }, [selectedPath, flatNodes]);
   
+  // Handle file click with VS Code-style error handling
+  const handleFileClick = useCallback(async (node: FileNode) => {
+    if (node.isDirectory) {
+      setExpandedPaths(prev => {
+        const newSet = new Set(prev);
+        newSet.add(node.path);
+        return newSet;
+      });
+      return;
+    }
+
+    try {
+      setFileError(null); // Clear any previous file errors
+      console.log('📖 Opening file:', node.path);
+      
+      // Call the backend directly since readFile is not in the service
+      const { invoke } = await import('@tauri-apps/api/core');
+      const result = await invoke<{
+        success: boolean;
+        data?: string;
+        error?: string;
+      }>('read_file', { path: node.path });
+      
+      if (result.success && result.data !== undefined) {
+        onFileSelect?.(node);
+      } else {
+        // Display the friendly error message from the backend
+        setFileError(result.error || 'Failed to open file');
+        console.error('Failed to read file:', result.error);
+      }
+    } catch (err) {
+      // Fallback error handling
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+      setFileError(`Unable to open file: ${errorMessage}`);
+      console.error('File operation error:', err);
+    }
+  }, [onFileSelect]);
+
   // Prepare data for list items
   const listItemData: ListItemData = useMemo(() => ({
     nodes: flatNodes,
     selectedPath,
     expandedPaths,
-    onFileSelect,
+    onFileClick: handleFileClick,
     onDirectoryToggle: handleDirectoryToggle
-  }), [flatNodes, selectedPath, expandedPaths, onFileSelect, handleDirectoryToggle]);
+  }), [flatNodes, selectedPath, expandedPaths, handleFileClick, handleDirectoryToggle]);
   
   return (
     <div className={`virtualized-file-explorer ${className}`}>
@@ -338,17 +446,22 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
         </div>
       </div>
       
-      {/* Error Display */}
+      {/* File Operation Error Display */}
+      {fileError && (
+        <FileErrorNotification
+          error={fileError}
+          onDismiss={() => setFileError(null)}
+          type="error"
+        />
+      )}
+      
+      {/* Scanning Error Display */}
       {error && (
-        <div className="error-banner">
-          <span className="text-red-400 text-xs">⚠ {error}</span>
-          <button 
-            onClick={() => scanDirectory(rootPath)}
-            className="text-blue-400 text-xs hover:underline"
-          >
-            Retry
-          </button>
-        </div>
+        <FileErrorNotification
+          error={error}
+          onDismiss={() => scanDirectory(rootPath)}
+          type="warning"
+        />
       )}
       
       {/* Virtualized List */}

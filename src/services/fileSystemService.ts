@@ -163,57 +163,183 @@ export class HighPerformanceFileSystemService implements FileSystemService {
     memoryUsage: 0
   };
   
+  // VS Code-style progressive scanning with streaming
   async* scanDirectory(path: string, options: ScanOptions = {
-    chunkSize: 100,
-    ignorePatterns: ['.git', 'node_modules', '.DS_Store', 'target'],
+    chunkSize: 50, // Smaller chunks for better responsiveness
+    ignorePatterns: [
+      // Core development artifacts
+      '.git', 'node_modules', 'target', '.next', 'dist', 'build',
+      // Python noise
+      '__pycache__', '.pytest_cache', '.mypy_cache', '.venv', 'venv', '.env',
+      // JavaScript/TypeScript noise  
+      '.turbo', '.vercel', '.nuxt', '.output', 'coverage', '.eslintcache',
+      // Rust noise
+      'target', 'Cargo.lock',
+      // IDE noise
+      '.vscode', '.idea', '.eclipse', '*.swp', '*.swo',
+      // OS noise
+      '.DS_Store', 'Thumbs.db', 'desktop.ini',
+      // Large file types
+      '*.zip', '*.tar.gz', '*.rar', '*.7z', '*.mp4', '*.avi', '*.mkv',
+      '*.jpg', '*.jpeg', '*.png', '*.gif', '*.pdf', '*.doc', '*.docx'
+    ],
     includeHidden: false
   }): AsyncIterableIterator<FileNode[]> {
     const startTime = performance.now();
     
     try {
-      // Try cache first
+      // Try cache first (VS Code warm start pattern)
       const snapshot = await this.cache.load(path);
       if (snapshot && await this.cache.isValid(snapshot, path)) {
-        console.log('📦 Using cached filesystem snapshot');
+        console.log('📦 Using cached filesystem snapshot (VS Code style)');
         this.metrics.cacheHitRate = 1;
-        yield snapshot.nodes.slice(); // Return all at once from cache
+        
+        // Yield in chunks even from cache for consistent UX
+        const chunkSize = options.chunkSize || 50;
+        for (let i = 0; i < snapshot.nodes.length; i += chunkSize) {
+          yield snapshot.nodes.slice(i, i + chunkSize);
+          // Small delay to prevent blocking UI
+          await new Promise(resolve => setTimeout(resolve, 1));
+        }
         return;
       }
       
       this.metrics.cacheHitRate = 0;
-      console.log('🔍 Scanning filesystem (cache miss)');
+      console.log('🚀 VS Code-style unified scan (show everything!)');
       
-      // Start with directory structure only for instant tree
-      const directories = await this.scanDirectoriesFirst(path, options);
-      if (directories.length > 0) {
-        yield directories;
+      // Use the new unified scanner that shows directories + files together
+      const result = await invoke<{
+        success: boolean;
+        data?: Array<{
+          path: string;
+          name: string;
+          depth: number;
+          size: number;
+          last_modified: number;
+          extension: string;
+          is_directory: boolean;
+        }>;
+        error?: string;
+      }>('scan_everything_clean', { 
+        path, 
+        includeHidden: options.includeHidden 
+      });
+      
+      if (!result.success || !result.data || result.data.length === 0) {
+        console.warn('Scan failed:', result.error);
+        // Yield empty array to prevent UI blocking
+        yield [];
+        return;
       }
       
-      // Then scan files in chunks
-      const allNodes: FileNode[] = [...directories];
+      // Convert results to FileNodes with proper directory detection
+      const nodes: FileNode[] = result.data.map(item => {
+        return {
+          id: this.generateId(item.path),
+          path: item.path,
+          name: item.name,
+          depth: item.depth,
+          isDirectory: item.is_directory,
+          size: item.is_directory ? undefined : item.size,
+          lastModified: item.last_modified,
+          extension: item.extension,
+          iconId: this.getIconId(item.extension, item.is_directory),
+          hasChildren: item.is_directory
+        };
+      });
       
-      for await (const chunk of this.scanFilesChunked(path, options)) {
-        allNodes.push(...chunk);
+      console.log(`✅ Clean scan: ${nodes.length} items total`);
+      console.log(`📊 Breakdown: ${nodes.filter(n => n.isDirectory).length} directories, ${nodes.filter(n => !n.isDirectory).length} files`);
+      
+      // Yield in chunks for progressive loading
+      const chunkSize = options.chunkSize || 50;
+      for (let i = 0; i < nodes.length; i += chunkSize) {
+        const chunk = nodes.slice(i, i + chunkSize);
         yield chunk;
+        
+        // Small delay to prevent UI blocking
+        await new Promise(resolve => setTimeout(resolve, 1));
       }
       
-      // Cache the complete result
+      // Cache the complete result (VS Code-style persistent warm start)
       const finalSnapshot: FileSystemSnapshot = {
         version: 1,
         timestamp: Date.now(),
         rootPath: path,
-        checksum: this.calculateChecksum(allNodes),
-        nodes: allNodes
+        checksum: this.calculateChecksum(nodes),
+        nodes
       };
       
       await this.cache.save(finalSnapshot);
       
     } catch (error) {
-      console.error('Failed to scan directory:', error);
+      console.error('❌ VS Code-style scan failed:', error);
       // Yield empty array to prevent UI blocking
       yield [];
     } finally {
       this.metrics.scanTime = performance.now() - startTime;
+      console.log(`⏱️ Total scan time: ${this.metrics.scanTime.toFixed(2)}ms`);
+    }
+  }
+  
+  // Fallback chunked scanning for compatibility
+  private async* scanFilesChunkedFallback(path: string, options: ScanOptions): AsyncIterableIterator<FileNode[]> {
+    try {
+      let offset = 0;
+      const chunkSize = options.chunkSize || 50;
+      
+      while (true) {
+        const result = await invoke<{
+          success: boolean;
+          data?: {
+            files: Array<{
+              path: string;
+              name: string;
+              depth: number;
+              size: number;
+              last_modified: number;
+              extension: string;
+            }>;
+            has_more: boolean;
+          };
+          error?: string;
+        }>('scan_files_chunked', { 
+          path, 
+          offset, 
+          limit: chunkSize,
+          ignorePatterns: options.ignorePatterns,
+          includeHidden: options.includeHidden
+        });
+        
+        if (!result.success || !result.data || result.data.files.length === 0) {
+          if (!result.success) {
+            console.warn('Chunked scan failed:', result.error);
+          }
+          break;
+        }
+        
+        const nodes: FileNode[] = result.data.files.map(file => ({
+          id: this.generateId(file.path),
+          path: file.path,
+          name: file.name,
+          depth: file.depth,
+          isDirectory: false,
+          size: file.size,
+          lastModified: file.last_modified,
+          extension: file.extension,
+          iconId: this.getIconId(file.extension, false)
+        }));
+        
+        yield nodes;
+        
+        if (!result.data.has_more) break;
+        offset += chunkSize;
+        
+        // Small delay to prevent blocking
+        await new Promise(resolve => setTimeout(resolve, 2));
+      }
+    } catch (error) {
+      console.warn('Fallback chunked scan failed:', error);
     }
   }
   
@@ -330,67 +456,6 @@ export class HighPerformanceFileSystemService implements FileSystemService {
     } catch (error) {
       console.warn('Failed to scan directories:', error);
       return [];
-    }
-  }
-  
-  private async* scanFilesChunked(path: string, options: ScanOptions): AsyncIterableIterator<FileNode[]> {
-    try {
-      // Use Tauri command for chunked file scanning
-      let offset = 0;
-      const chunkSize = options.chunkSize;
-      
-      while (true) {
-        const result = await invoke<{
-          success: boolean;
-          data?: {
-            files: Array<{
-              path: string;
-              name: string;
-              depth: number;
-              size: number;
-              last_modified: number;
-              extension: string;
-            }>;
-            has_more: boolean;
-          };
-          error?: string;
-        }>('scan_files_chunked', { 
-          path, 
-          offset, 
-          limit: chunkSize,
-          ignorePatterns: options.ignorePatterns,
-          includeHidden: options.includeHidden
-        });
-        
-        if (!result.success || !result.data || result.data.files.length === 0) {
-          if (!result.success) {
-            console.warn('Failed to scan files:', result.error);
-          }
-          break;
-        }
-        
-        const nodes: FileNode[] = result.data.files.map(file => ({
-          id: this.generateId(file.path),
-          path: file.path,
-          name: file.name,
-          depth: file.depth,
-          isDirectory: false,
-          size: file.size,
-          lastModified: file.last_modified,
-          extension: file.extension,
-          iconId: this.getIconId(file.extension, false)
-        }));
-        
-        yield nodes;
-        
-        if (!result.data.has_more) break;
-        offset += chunkSize;
-        
-        // Small delay to prevent blocking
-        await new Promise(resolve => setTimeout(resolve, 1));
-      }
-    } catch (error) {
-      console.warn('Failed to scan files:', error);
     }
   }
   
