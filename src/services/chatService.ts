@@ -4,7 +4,6 @@
 import type {
   ChatSession,
   AiProvider,
-  AiRequest,
   AiResponse,
   ProjectContext,
   SecurityContext,
@@ -21,10 +20,45 @@ const AI_CONFIG = {
   SECURITY_SCAN_TIMEOUT: 5000,
 } as const;
 
+// Backend types that come from Tauri commands
+interface BackendConsensusResult {
+  readonly id: string;
+  readonly response: string;
+  readonly confidence: number;
+  readonly provider_results: readonly BackendProviderResponse[];
+  readonly total_cost: number;
+  readonly processing_time_ms: number;
+  readonly routing_decision: string;
+  readonly quality_metrics: {
+    readonly accuracy_score: number;
+    readonly coherence_score: number;
+    readonly relevance_score: number;
+    readonly cost_efficiency: number;
+  };
+}
+
+interface BackendProviderResponse {
+  readonly provider_id: string;
+  readonly response: string;
+  readonly confidence: number;
+  readonly cost: number;
+  readonly latency_ms: number;
+  readonly tokens_used: number;
+}
+
+interface ProviderRecommendationOptions {
+  readonly preferCostOptimization?: boolean;
+  readonly minimumQuality?: number;
+  readonly maxBudget?: number;
+  readonly excludeProviders?: readonly string[];
+}
+
 export class ChatService {
   private static instance: ChatService;
   private providers: readonly AiProvider[] = [];
   private rateLimit: number[] = [];
+  private providerCache = new Map<string, AiProvider>();
+  private isInitialized = false;
 
   static getInstance(): ChatService {
     if (!ChatService.instance) {
@@ -33,51 +67,51 @@ export class ChatService {
     return ChatService.instance;
   }
 
-  // Provider Management
+  // ================================
+  // PROVIDER MANAGEMENT (CENTRALIZED)
+  // ================================
+
   async initializeProviders(): Promise<readonly AiProvider[]> {
+    if (this.isInitialized && this.providers.length > 0) {
+      return this.providers;
+    }
+
     try {
-      // Mock providers for demo - in real app, this would call Tauri commands
-      const mockProviders: AiProvider[] = [
+      // Use real backend providers instead of mocks
+      const { invoke } = await import('@tauri-apps/api/core');
+      const result = await invoke<{
+        success: boolean;
+        data?: AiProvider[];
+        error?: string;
+      }>('get_ai_providers');
+
+      if (!result.success || !result.data) {
+        throw new Error(result.error || 'Failed to get providers from backend');
+      }
+
+      this.providers = result.data;
+      this.rebuildProviderCache();
+      this.isInitialized = true;
+      
+      console.log(`✅ Loaded ${this.providers.length} AI providers:`, 
+        this.providers.map(p => `${p.name} (${p.type})`));
+      
+      return this.providers;
+    } catch (error) {
+      console.error('Error initializing providers:', error);
+      
+      // Fallback to basic providers if backend unavailable
+      const fallbackProviders: AiProvider[] = [
         {
-          id: 'claude-3',
-          name: 'Claude 3 Sonnet',
-          type: 'claude',
-          isAvailable: true,
-          costPerToken: 0.00001102,
-          latency: 1200,
-          specialties: ['reasoning', 'code', 'analysis'],
-          securityLevel: 'enterprise',
-          complianceFeatures: ['SOC2', 'GDPR'],
-          rateLimit: {
-            requestsPerMinute: 50,
-            tokensPerMinute: 40000,
-          },
-        },
-        {
-          id: 'gpt-4',
-          name: 'GPT-4 Turbo',
-          type: 'openai',
-          isAvailable: true,
-          costPerToken: 0.00003000,
-          latency: 1800,
-          specialties: ['general', 'creative', 'reasoning'],
-          securityLevel: 'enterprise',
-          complianceFeatures: ['SOC2'],
-          rateLimit: {
-            requestsPerMinute: 40,
-            tokensPerMinute: 30000,
-          },
-        },
-        {
-          id: 'gemini-pro',
-          name: 'Gemini Pro',
-          type: 'gemini',
+          id: 'syntari-consensus',
+          name: 'Syntari AI Consensus',
+          type: 'consensus',
           isAvailable: true,
           costPerToken: 0.00000037,
           latency: 800,
-          specialties: ['fast', 'cost-effective', 'multimodal'],
-          securityLevel: 'basic',
-          complianceFeatures: [],
+          specialties: ['consensus', 'cost-effective', 'quality-assured'],
+          securityLevel: 'enterprise',
+          complianceFeatures: ['SOC2', 'GDPR'],
           rateLimit: {
             requestsPerMinute: 60,
             tokensPerMinute: 50000,
@@ -85,47 +119,178 @@ export class ChatService {
         },
       ];
 
-      this.providers = mockProviders;
+      this.providers = fallbackProviders;
+      this.rebuildProviderCache();
+      this.isInitialized = true;
+      
       return this.providers;
-    } catch (error) {
-      console.error('Error initializing providers:', error);
-      throw new Error('Failed to initialize AI providers');
     }
   }
 
-  // Smart Provider Routing
-  getProviderRecommendation(prompt: string): string | null {
-    if (this.providers.length === 0) return null;
+  // Rebuild provider cache for fast lookups
+  private rebuildProviderCache(): void {
+    this.providerCache.clear();
+    this.providers.forEach(provider => {
+      this.providerCache.set(provider.id, provider);
+    });
+  }
+
+  // Get provider by ID (cached lookup)
+  getProvider(providerId: string): AiProvider | undefined {
+    return this.providerCache.get(providerId);
+  }
+
+  // Get available providers
+  getAvailableProviders(): readonly AiProvider[] {
+    return this.providers.filter(p => p.isAvailable);
+  }
+
+  // Get providers by type
+  getProvidersByType(type: AiProvider['type']): readonly AiProvider[] {
+    return this.providers.filter(p => p.type === type && p.isAvailable);
+  }
+
+  // ================================
+  // SMART PROVIDER ROUTING (UNIFIED)
+  // ================================
+
+  getProviderRecommendation(
+    prompt: string, 
+    options: ProviderRecommendationOptions = {}
+  ): string | null {
+    const availableProviders = this.getAvailableProviders();
+    
+    if (availableProviders.length === 0) return null;
+
+    // Filter excluded providers
+    const candidateProviders = options.excludeProviders 
+      ? availableProviders.filter(p => !options.excludeProviders!.includes(p.id))
+      : availableProviders;
+
+    if (candidateProviders.length === 0) return null;
 
     const promptLower = prompt.toLowerCase();
-    
-    // Code-related queries -> Claude
-    if (promptLower.includes('code') || promptLower.includes('function') || promptLower.includes('debug')) {
-      const claude = this.providers.find(p => p.type === 'claude' && p.isAvailable);
-      if (claude) return claude.id;
+    const promptLength = prompt.length;
+    const hasCodeBlocks = /```/.test(prompt);
+    const hasMathContent = /\$\$|\\\(|\\\[/.test(prompt);
+    const isComplexQuery = promptLength > 100 || hasCodeBlocks || hasMathContent;
+
+    // Apply recommendation logic with unified strategy
+    const recommendation = this.selectOptimalProvider(
+      candidateProviders,
+      promptLower,
+      isComplexQuery,
+      options
+    );
+
+    if (recommendation) {
+      console.log(`🎯 Provider recommendation: ${recommendation.name} for "${prompt.substring(0, 50)}..."`);
+      console.log(`   Reason: ${this.getRecommendationReason(recommendation, promptLower, isComplexQuery, options)}`);
     }
-    
-    // Creative tasks -> GPT-4
-    if (promptLower.includes('creative') || promptLower.includes('story') || promptLower.includes('design')) {
-      const openai = this.providers.find(p => p.type === 'openai' && p.isAvailable);
-      if (openai) return openai.id;
-    }
-    
-    // Quick questions -> Gemini (cost-effective)
-    if (prompt.length < 100) {
-      const gemini = this.providers.find(p => p.type === 'gemini' && p.isAvailable);
-      if (gemini) return gemini.id;
-    }
-    
-    // Default: cheapest available provider
-    const cheapestProvider = this.providers
-      .filter(p => p.isAvailable)
-      .sort((a, b) => a.costPerToken - b.costPerToken)[0];
-    
-    return cheapestProvider?.id || null;
+
+    return recommendation?.id || null;
   }
 
-  // Session Management
+  private selectOptimalProvider(
+    providers: readonly AiProvider[],
+    promptLower: string,
+    isComplexQuery: boolean,
+    options: ProviderRecommendationOptions
+  ): AiProvider | null {
+    // Priority 1: Cost optimization for simple queries
+    if (!isComplexQuery && options.preferCostOptimization !== false) {
+      const gemini = providers.find(p => p.type === 'gemini');
+      if (gemini) return gemini;
+      
+      const consensus = providers.find(p => p.type === 'consensus');
+      if (consensus) return consensus;
+    }
+
+    // Priority 2: Code-related queries -> Claude
+    if (this.isCodeRelated(promptLower)) {
+      const claude = providers.find(p => p.type === 'claude');
+      if (claude && this.meetsBudgetRequirements(claude, options)) return claude;
+    }
+    
+    // Priority 3: Creative tasks -> GPT-4
+    if (this.isCreativeTask(promptLower)) {
+      const openai = providers.find(p => p.type === 'openai');
+      if (openai && this.meetsBudgetRequirements(openai, options)) return openai;
+    }
+    
+    // Priority 4: Complex queries -> best available
+    if (isComplexQuery) {
+      const bestForComplex = providers
+        .filter(p => this.meetsBudgetRequirements(p, options))
+        .sort((a, b) => this.calculateComplexityScore(b) - this.calculateComplexityScore(a))[0];
+      
+      if (bestForComplex) return bestForComplex;
+    }
+    
+    // Fallback: cheapest available provider that meets requirements
+    const cheapest = providers
+      .filter(p => this.meetsBudgetRequirements(p, options))
+      .sort((a, b) => a.costPerToken - b.costPerToken)[0];
+    
+    return cheapest || null;
+  }
+
+  private isCodeRelated(promptLower: string): boolean {
+    const codeKeywords = ['code', 'function', 'debug', 'implement', 'refactor', 'class', 'method', 'variable', 'syntax'];
+    return codeKeywords.some(keyword => promptLower.includes(keyword));
+  }
+
+  private isCreativeTask(promptLower: string): boolean {
+    const creativeKeywords = ['creative', 'story', 'design', 'write', 'generate', 'brainstorm', 'idea'];
+    return creativeKeywords.some(keyword => promptLower.includes(keyword));
+  }
+
+  private calculateComplexityScore(provider: AiProvider): number {
+    // Higher score = better for complex tasks
+    let score = 0;
+    
+    if (provider.type === 'claude') score += 3; // Excellent for reasoning
+    if (provider.type === 'openai') score += 2; // Good general capability
+    if (provider.specialties.includes('reasoning')) score += 2;
+    if (provider.specialties.includes('code')) score += 1;
+    if (provider.securityLevel === 'enterprise') score += 1;
+    
+    return score;
+  }
+
+  private meetsBudgetRequirements(provider: AiProvider, options: ProviderRecommendationOptions): boolean {
+    if (!options.maxBudget) return true;
+    
+    // Estimate cost for typical query (1000 tokens)
+    const estimatedCost = provider.costPerToken * 1000;
+    return estimatedCost <= options.maxBudget;
+  }
+
+  private getRecommendationReason(
+    provider: AiProvider,
+    promptLower: string,
+    isComplexQuery: boolean,
+    _options: ProviderRecommendationOptions
+  ): string {
+    if (this.isCodeRelated(promptLower) && provider.type === 'claude') {
+      return 'Claude optimized for code tasks';
+    }
+    if (this.isCreativeTask(promptLower) && provider.type === 'openai') {
+      return 'GPT-4 optimized for creative tasks';
+    }
+    if (!isComplexQuery && (provider.type === 'gemini' || provider.type === 'consensus')) {
+      return 'Cost optimization for simple query';
+    }
+    if (isComplexQuery) {
+      return 'Best available for complex reasoning';
+    }
+    return 'Cheapest available option';
+  }
+
+  // ================================
+  // SESSION MANAGEMENT
+  // ================================
+
   async createSession(project: ProjectContext): Promise<string> {
     try {
       const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -140,7 +305,10 @@ export class ChatService {
     }
   }
 
-  // Message Sending
+  // ================================
+  // MESSAGE SENDING
+  // ================================
+
   async sendMessage(
     sessionId: string,
     content: string,
@@ -162,52 +330,95 @@ export class ChatService {
     this.addToRateLimit();
 
     try {
-      const selectedProvider = providerId || this.getProviderRecommendation(content);
-      if (!selectedProvider) {
-        throw new Error('No available AI provider');
-      }
-
-      const provider = this.providers.find(p => p.id === selectedProvider);
-      if (!provider) {
-        throw new Error('Selected provider not found');
-      }
-
-      // Create AI request
-      const request: AiRequest = {
+      // Create AI request for the backend
+      const request = {
         id: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         prompt: content,
-        context,
+        context: {
+          current_file: context.openFiles[0] || null,
+          language: this.detectLanguage(context),
+          selected_text: null, // Could be enhanced later
+        },
         timestamp: Date.now(),
         sessionId,
         securityContext,
-        provider: selectedProvider,
+        provider: providerId,
         maxTokens: 4000,
         temperature: 0.7,
       };
 
-      // Mock AI response - in real app, this would call actual AI service
-      const mockResponse: AiResponse = {
+      // Call the real AI backend that integrates with the CLI system
+      const { invoke } = await import('@tauri-apps/api/core');
+      const result = await invoke<{
+        success: boolean;
+        data?: BackendConsensusResult;
+        error?: string;
+      }>('generate_ai_response', { request });
+
+      if (!result.success || !result.data) {
+        throw new Error(result.error || 'AI response generation failed');
+      }
+
+      const consensusResult = result.data;
+
+      // Convert backend response to frontend format
+      const aiResponse: AiResponse = {
         id: `resp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         requestId: request.id,
-        provider: selectedProvider,
-        content: this.generateMockResponse(content, provider),
-        confidence: 0.9 + Math.random() * 0.1,
-        cost: this.calculateCost(content, provider),
-        responseTime: provider.latency + Math.random() * 500,
+        provider: consensusResult.provider_results[0]?.provider_id || 'unknown',
+        content: consensusResult.response,
+        confidence: consensusResult.confidence,
+        cost: consensusResult.total_cost,
+        responseTime: consensusResult.processing_time_ms,
         timestamp: Date.now(),
         tokenUsage: {
-          prompt: Math.ceil(content.length / 4), // Rough token estimation
-          completion: Math.ceil(this.generateMockResponse(content, provider).length / 4),
-          total: Math.ceil((content.length + this.generateMockResponse(content, provider).length) / 4),
+          prompt: consensusResult.provider_results[0]?.tokens_used || 0,
+          completion: Math.ceil(consensusResult.response.length / 4), // Estimate
+          total: (consensusResult.provider_results[0]?.tokens_used || 0) + Math.ceil(consensusResult.response.length / 4),
         },
-        qualityScore: 0.85 + Math.random() * 0.15,
+        qualityScore: consensusResult.quality_metrics.accuracy_score,
       };
 
-      return mockResponse;
+      return aiResponse;
+
     } catch (error) {
-      console.error('Error sending message:', error);
-      throw error;
+      console.error('Error in sendMessage:', error);
+      throw error instanceof Error ? error : new Error('Failed to send message');
     }
+  }
+
+  // ================================
+  // UTILITY METHODS
+  // ================================
+
+  // Helper function to detect language from project context
+  private detectLanguage(context: ProjectContext): string {
+    if (context.openFiles.length > 0) {
+      const file = context.openFiles[0];
+      const extension = file.path.split('.').pop()?.toLowerCase();
+      
+      const languageMap: Record<string, string> = {
+        'ts': 'typescript',
+        'tsx': 'tsx', 
+        'js': 'javascript',
+        'jsx': 'jsx',
+        'rs': 'rust',
+        'py': 'python',
+        'go': 'go',
+        'java': 'java',
+        'c': 'c',
+        'cpp': 'cpp',
+        'cs': 'csharp',
+        'html': 'html',
+        'css': 'css',
+        'md': 'markdown',
+        'json': 'json',
+      };
+      
+      return languageMap[extension || ''] || 'text';
+    }
+    
+    return 'text';
   }
 
   // Security validation
@@ -240,43 +451,9 @@ export class ChatService {
   }
 
   // Cost calculation
-  private calculateCost(content: string, provider: AiProvider): number {
+  calculateCost(content: string, provider: AiProvider): number {
     const estimatedTokens = Math.ceil(content.length / 4) * 2; // Input + output estimation
     return estimatedTokens * provider.costPerToken;
-  }
-
-  // Mock response generation
-  private generateMockResponse(prompt: string, provider: AiProvider): string {
-    const responses = {
-      claude: [
-        "I understand your question about the code. Let me help you with that...",
-        "Based on the code context you've provided, here's my analysis...",
-        "I can help you debug this issue. The problem appears to be...",
-      ],
-      openai: [
-        "Great question! Here's a creative approach to solve this...",
-        "I'd be happy to help with that. Let me think through this step by step...",
-        "That's an interesting challenge. Here's how I would approach it...",
-      ],
-      gemini: [
-        "Quick answer: Here's what you need to know...",
-        "I can help with that efficiently. The solution is...",
-        "Fast response: The key point is...",
-      ],
-      local: [
-        "Local model response: Here's my analysis...",
-        "Processing locally: The solution is...",
-        "Local AI: Here's what I found...",
-      ],
-    };
-
-    const providerResponses = responses[provider.type] || responses.claude;
-    const baseResponse = providerResponses[Math.floor(Math.random() * providerResponses.length)];
-    
-    // Include a relevant snippet from the prompt to show we're processing it
-    const promptSnippet = prompt.length > 50 ? prompt.substring(0, 50) + "..." : prompt;
-    
-    return `${baseResponse}\n\nRegarding your query: "${promptSnippet}"\n\n*This is a mock response for development purposes.*`;
   }
 
   // Export conversation
@@ -302,8 +479,17 @@ export class ChatService {
     }
   }
 
-  // Get available providers
-  getAvailableProviders(): readonly AiProvider[] {
-    return this.providers;
+  // ================================
+  // PROVIDER ANALYTICS
+  // ================================
+
+  getProviderStats(): Record<string, { usage: number; cost: number; avgLatency: number }> {
+    // This would be implemented with real usage tracking
+    return {};
+  }
+
+  getCostBreakdown(): Record<string, number> {
+    // This would return actual cost breakdown by provider
+    return {};
   }
 } 

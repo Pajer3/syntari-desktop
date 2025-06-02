@@ -4,7 +4,7 @@
 export interface AiProvider {
   readonly id: string;
   readonly name: string;
-  readonly type: 'claude' | 'openai' | 'gemini' | 'local';
+  readonly type: 'claude' | 'openai' | 'gemini' | 'local' | 'consensus';
   readonly isAvailable: boolean;
   readonly costPerToken: number;
   readonly latency: number;

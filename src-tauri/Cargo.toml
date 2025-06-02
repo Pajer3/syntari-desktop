@@ -85,6 +85,10 @@ ignore = "0.4.23"
 # Parallel processing
 rayon = "1.10.0"
 
+# Local workspace dependencies
+syntari-cli = { path = "../../syntari-cli" }
+consensus_engine = { path = "../../kernel/consensus_engine" }
+
 [features]
 default = []
 git-integration = ["git2"]

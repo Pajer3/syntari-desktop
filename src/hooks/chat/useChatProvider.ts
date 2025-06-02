@@ -1,8 +1,9 @@
 // Syntari AI IDE - Chat Provider Management Hook
-// Extracted from useChatViewModel.ts for better separation of concerns
+// Thin React wrapper around ChatService for provider management
 
 import { useState, useCallback, useRef } from 'react';
 import type { AiProvider, AppError } from '../../types/core';
+import { ChatService } from '../../services/chatService';
 
 interface UseChatProviderReturn {
   readonly availableProviders: readonly AiProvider[];
@@ -10,8 +11,14 @@ interface UseChatProviderReturn {
   readonly smartRouting: boolean;
   readonly selectProvider: (providerId: string) => void;
   readonly toggleSmartRouting: () => void;
-  readonly getProviderRecommendation: (prompt: string) => Promise<string | null>;
+  readonly getProviderRecommendation: (prompt: string, options?: {
+    preferCostOptimization?: boolean;
+    maxBudget?: number;
+    excludeProviders?: readonly string[];
+  }) => Promise<string | null>;
   readonly initializeProviders: () => Promise<void>;
+  readonly getProvider: (providerId: string) => AiProvider | undefined;
+  readonly getProvidersByType: (type: AiProvider['type']) => readonly AiProvider[];
 }
 
 export const useChatProvider = (
@@ -21,124 +28,109 @@ export const useChatProvider = (
   const [selectedProvider, setSelectedProvider] = useState<string | undefined>();
   const [smartRouting, setSmartRouting] = useState(true);
   const initializeRef = useRef(false);
+  
+  // Get centralized service instance
+  const chatService = ChatService.getInstance();
 
   const selectProvider = useCallback((providerId: string) => {
+    const provider = chatService.getProvider(providerId);
+    if (!provider) {
+      const error: AppError = {
+        code: 'PROVIDER_NOT_FOUND',
+        message: `Provider not found: ${providerId}`,
+        severity: 'error',
+        timestamp: Date.now(),
+        context: { providerId },
+        recoverable: true,
+      };
+      onError?.(error);
+      return;
+    }
+
     setSelectedProvider(providerId);
     setSmartRouting(false); // Disable smart routing when manually selecting
-  }, []);
+    
+    console.log(`🎯 Provider selected: ${provider.name} (${provider.type})`);
+    console.log(`💰 Cost per token: $${provider.costPerToken.toFixed(8)}`);
+  }, [chatService, onError]);
 
   const toggleSmartRouting = useCallback(() => {
     setSmartRouting(prev => {
-      if (!prev) {
+      const newSmartRouting = !prev;
+      
+      if (newSmartRouting) {
         setSelectedProvider(undefined); // Clear manual selection when enabling smart routing
+        console.log('🧠 Smart routing enabled - AI will choose optimal providers');
+        console.log('💎 Cost optimization active - targeting 97% savings');
+      } else {
+        console.log('🧠 Smart routing disabled - manual provider selection');
       }
-      return !prev;
+      
+      return newSmartRouting;
     });
   }, []);
 
-  const getProviderRecommendation = useCallback(async (prompt: string): Promise<string | null> => {
-    if (!smartRouting || availableProviders.length === 0) {
+  const getProviderRecommendation = useCallback(async (
+    prompt: string, 
+    options: {
+      preferCostOptimization?: boolean;
+      maxBudget?: number;
+      excludeProviders?: readonly string[];
+    } = {}
+  ): Promise<string | null> => {
+    if (!smartRouting) {
       return selectedProvider || null;
     }
 
     try {
-      // Simple heuristic-based routing
-      const promptLower = prompt.toLowerCase();
-      
-      // For code-related queries, prefer Claude
-      if (promptLower.includes('code') || promptLower.includes('function') || promptLower.includes('debug')) {
-        const claude = availableProviders.find(p => p.type === 'claude' && p.isAvailable);
-        if (claude) return claude.id;
-      }
-      
-      // For creative tasks, prefer GPT-4
-      if (promptLower.includes('creative') || promptLower.includes('story') || promptLower.includes('design')) {
-        const openai = availableProviders.find(p => p.type === 'openai' && p.isAvailable);
-        if (openai) return openai.id;
-      }
-      
-      // For quick questions, prefer Gemini (cost-effective)
-      if (prompt.length < 100) {
-        const gemini = availableProviders.find(p => p.type === 'gemini' && p.isAvailable);
-        if (gemini) return gemini.id;
-      }
-      
-      // Default: cheapest available provider
-      const cheapestProvider = availableProviders
-        .filter(p => p.isAvailable)
-        .sort((a, b) => a.costPerToken - b.costPerToken)[0];
-      
-      return cheapestProvider?.id || null;
+      // Delegate to centralized service logic
+      return chatService.getProviderRecommendation(prompt, options);
     } catch (error) {
       console.error('Error in provider recommendation:', error);
-      return selectedProvider || availableProviders.find(p => p.isAvailable)?.id || null;
+      const appError: AppError = {
+        code: 'PROVIDER_RECOMMENDATION_FAILED',
+        message: error instanceof Error ? error.message : 'Failed to get provider recommendation',
+        severity: 'warning',
+        timestamp: Date.now(),
+        context: { 
+          smartRouting, 
+          selectedProvider,
+          promptLength: prompt.length,
+          options 
+        },
+        recoverable: true,
+      };
+      onError?.(appError);
+      
+      // Fallback to any available provider
+      return availableProviders.find(p => p.isAvailable)?.id || null;
     }
-  }, [smartRouting, availableProviders, selectedProvider]);
+  }, [smartRouting, selectedProvider, availableProviders, chatService, onError]);
 
   const initializeProviders = useCallback(async (): Promise<void> => {
     if (initializeRef.current) return;
     initializeRef.current = true;
 
     try {
-      // Mock providers for demo
-      const mockProviders: AiProvider[] = [
-        {
-          id: 'claude-3',
-          name: 'Claude 3 Sonnet',
-          type: 'claude',
-          isAvailable: true,
-          costPerToken: 0.00001102,
-          latency: 1200,
-          specialties: ['reasoning', 'code', 'analysis'],
-          securityLevel: 'enterprise',
-          complianceFeatures: ['SOC2', 'GDPR'],
-          rateLimit: {
-            requestsPerMinute: 50,
-            tokensPerMinute: 40000,
-          },
-        },
-        {
-          id: 'gpt-4',
-          name: 'GPT-4 Turbo',
-          type: 'openai',
-          isAvailable: true,
-          costPerToken: 0.00003000,
-          latency: 1800,
-          specialties: ['general', 'creative', 'reasoning'],
-          securityLevel: 'enterprise',
-          complianceFeatures: ['SOC2'],
-          rateLimit: {
-            requestsPerMinute: 40,
-            tokensPerMinute: 30000,
-          },
-        },
-        {
-          id: 'gemini-pro',
-          name: 'Gemini Pro',
-          type: 'gemini',
-          isAvailable: true,
-          costPerToken: 0.00000037,
-          latency: 800,
-          specialties: ['fast', 'cost-effective', 'multimodal'],
-          securityLevel: 'basic',
-          complianceFeatures: [],
-          rateLimit: {
-            requestsPerMinute: 60,
-            tokensPerMinute: 50000,
-          },
-        },
-      ];
-
-      setAvailableProviders(mockProviders);
+      console.log('📡 Initializing AI providers via ChatService...');
       
-      // Auto-select the cheapest provider initially
-      const cheapest = mockProviders
-        .filter(p => p.isAvailable)
-        .sort((a, b) => a.costPerToken - b.costPerToken)[0];
+      // Delegate to centralized service
+      const providers = await chatService.initializeProviders();
+      setAvailableProviders(providers);
       
-      if (cheapest && smartRouting) {
-        setSelectedProvider(cheapest.id);
+      // Auto-select the cheapest provider initially if smart routing is enabled
+      if (smartRouting && providers.length > 0) {
+        const cheapest = providers
+          .filter(p => p.isAvailable)
+          .sort((a, b) => a.costPerToken - b.costPerToken)[0];
+        
+        if (cheapest) {
+          setSelectedProvider(cheapest.id);
+          console.log(`💰 Auto-selected cheapest provider: ${cheapest.name} ($${cheapest.costPerToken.toFixed(8)}/token)`);
+        }
       }
+
+      console.log(`✅ Loaded ${providers.length} AI providers`);
 
     } catch (error) {
       const appError: AppError = {
@@ -151,8 +143,18 @@ export const useChatProvider = (
       };
       
       onError?.(appError);
+      console.error('❌ Failed to initialize providers:', error);
     }
-  }, [smartRouting, onError]);
+  }, [smartRouting, chatService, onError]);
+
+  // Thin wrappers around service methods
+  const getProvider = useCallback((providerId: string): AiProvider | undefined => {
+    return chatService.getProvider(providerId);
+  }, [chatService]);
+
+  const getProvidersByType = useCallback((type: AiProvider['type']): readonly AiProvider[] => {
+    return chatService.getProvidersByType(type);
+  }, [chatService]);
 
   return {
     availableProviders,
@@ -162,5 +164,7 @@ export const useChatProvider = (
     toggleSmartRouting,
     getProviderRecommendation,
     initializeProviders,
+    getProvider,
+    getProvidersByType,
   };
 }; 
