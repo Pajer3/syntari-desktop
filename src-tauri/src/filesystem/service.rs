@@ -100,7 +100,6 @@ impl FilesystemService {
         
         let mut nodes = Vec::new();
         let mut total_string_bytes: u64 = 0;
-        let interned_bytes: u64 = 0;
         
         // Use walkdir with ignore patterns (like VS Code)
         let walker = ignore::WalkBuilder::new(root_path)

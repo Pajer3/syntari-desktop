@@ -1,17 +1,17 @@
-// Syntari AI IDE - VS Code-Style Lazy File System Service
-// Implements instant loading with on-demand folder expansion
+// Syntari AI IDE - VS Code-style File System Service
+// High-performance filesystem operations with intelligent caching
 
-import { invoke } from '@tauri-apps/api/core';
 import type { 
   FileNode, 
-  FileSystemDiff, 
-  FileSystemSnapshot, 
-  FileWatchEvent, 
-  FileSystemCache, 
   FileSystemService, 
+  FileSystemSnapshot, 
+  FileSystemDiff, 
+  FileWatchEvent, 
   ScanOptions,
-  FileSystemMetrics 
+  FileSystemCache,
+  FileSystemMetrics
 } from '../types/fileSystem';
+import { invoke } from '@tauri-apps/api/core';
 
 // Cache implementation using localStorage with LRU eviction
 class LocalFileSystemCache implements FileSystemCache {
@@ -245,8 +245,43 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
       console.log('🎯 Cache hit for folder:', folderPath);
       return this.folderContentsCache.get(cacheKey)!;
     }
+
+    return this.loadDirectoryContents('load_folder_contents', {
+      folderPath: folderPath,
+      includeHidden: includeHidden,
+      showHiddenFolders: true
+    }, cacheKey, folderPath);
+  }
+
+  // VS Code-style root project loading
+  async loadRootItems(rootPath: string, includeHidden: boolean = true): Promise<FileNode[]> {
+    console.log('🚀 VS Code instant root load for path:', rootPath);
     
+    // Check cache first
+    const cacheKey = `root:${rootPath}:${includeHidden}`;
+    if (this.folderContentsCache.has(cacheKey)) {
+      console.log('🎯 Cache hit for root:', rootPath);
+      return this.folderContentsCache.get(cacheKey)!;
+    }
+
+    return this.loadDirectoryContents('load_root_items', {
+      rootPath: rootPath,
+      includeHidden: includeHidden,
+      showHiddenFolders: true
+    }, cacheKey, rootPath);
+  }
+
+  // Unified directory loading with consistent error handling and transformation
+  private async loadDirectoryContents(
+    command: 'load_folder_contents' | 'load_root_items',
+    params: Record<string, any>,
+    cacheKey: string,
+    pathForLogging: string
+  ): Promise<FileNode[]> {
     try {
+      console.log(`📁 Loading ${command} for:`, pathForLogging);
+      console.log('📁 Parameters:', params);
+      
       const result = await invoke<{
         success: boolean;
         data?: Array<{
@@ -259,16 +294,12 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
           is_directory: boolean;
         }>;
         error?: string;
-      }>('load_folder_contents', { 
-        folderPath: folderPath,
-        includeHidden: includeHidden,
-        showHiddenFolders: true  // Show all folders including __pycache__, node_modules, etc.
-      });
+      }>(command, params);
       
-      console.log('📋 Folder contents response:', result);
+      console.log(`📋 ${command} response:`, result);
       
       if (result.success && result.data) {
-        const folderContents: FileNode[] = result.data.map(item => ({
+        const items: FileNode[] = result.data.map(item => ({
           id: this.generateId(item.path),
           path: item.path,
           name: item.name,
@@ -279,35 +310,22 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
           extension: item.extension,
           iconId: this.getIconId(item.extension, item.is_directory),
           hasChildren: item.is_directory,
-          isExpanded: false, // Start collapsed
-          children: undefined // Lazy loaded when expanded
+          isExpanded: false,
+          children: undefined
         }));
         
         // Cache the results
-        this.folderContentsCache.set(cacheKey, folderContents);
-        console.log(`📦 Loaded ${folderContents.length} items from ${folderPath}`);
+        this.folderContentsCache.set(cacheKey, items);
+        console.log(`✅ Loaded ${items.length} items from ${pathForLogging}`);
         
-        return folderContents;
+        return items;
       } else {
-        console.warn('❌ Failed to load folder contents:', result.error);
-        return [];
+        console.warn(`❌ Failed to ${command}:`, result.error);
+        throw new Error(result.error || `Failed to load ${pathForLogging}`);
       }
     } catch (error) {
-      console.error('❌ Error loading folder contents:', error);
-      return [];
-    }
-  }
-  
-  // Clear folder cache when needed
-  clearFolderCache(folderPath?: string): void {
-    if (folderPath) {
-      // Clear specific folder and its children
-      const keysToDelete = Array.from(this.folderContentsCache.keys())
-        .filter(key => key.startsWith(folderPath));
-      keysToDelete.forEach(key => this.folderContentsCache.delete(key));
-    } else {
-      // Clear all
-      this.folderContentsCache.clear();
+      console.error(`❌ Error in ${command}:`, error);
+      throw error instanceof Error ? error : new Error(`Unknown error loading ${pathForLogging}`);
     }
   }
   
@@ -422,6 +440,112 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
       hash = hash & hash;
     }
     return Math.abs(hash).toString(36);
+  }
+
+  // Clear folder cache when needed
+  clearFolderCache(folderPath?: string): void {
+    if (folderPath) {
+      // Clear specific folder and its children
+      const keysToDelete = Array.from(this.folderContentsCache.keys())
+        .filter(key => key.startsWith(folderPath));
+      keysToDelete.forEach(key => this.folderContentsCache.delete(key));
+    } else {
+      // Clear all
+      this.folderContentsCache.clear();
+    }
+  }
+
+  // VS Code-style smart file reading with size guards
+  async readFile(filePath: string): Promise<{
+    content: string;
+    size: number;
+    isBinary: boolean;
+    isTooLarge: boolean;
+    shouldUseHexMode: boolean;
+    warning?: string;
+  }> {
+    console.log('📖 Reading file:', filePath);
+    
+    try {
+      const result = await invoke<{
+        success: boolean;
+        data?: {
+          content?: string;
+          size: number;
+          is_binary: boolean;
+          is_too_large: boolean;
+          should_use_hex_mode: boolean;
+          warning?: string;
+        };
+        error?: string;
+      }>('read_file_smart', { path: filePath });
+      
+      if (result.success && result.data) {
+        const data = result.data;
+        return {
+          content: data.content || '',
+          size: data.size,
+          isBinary: data.is_binary,
+          isTooLarge: data.is_too_large,
+          shouldUseHexMode: data.should_use_hex_mode,
+          warning: data.warning
+        };
+      } else {
+        throw new Error(result.error || `Failed to read file: ${filePath}`);
+      }
+    } catch (error) {
+      console.error('❌ Error reading file:', error);
+      throw error instanceof Error ? error : new Error(`Unknown error reading ${filePath}`);
+    }
+  }
+
+  // Simple file reading for compatibility (throws on large/binary files)
+  async readFileSimple(filePath: string): Promise<string> {
+    console.log('📖 Reading file (simple):', filePath);
+    
+    try {
+      const result = await invoke<{
+        success: boolean;
+        data?: string;
+        error?: string;
+      }>('read_file', { path: filePath });
+      
+      if (result.success && result.data !== undefined) {
+        return result.data;
+      } else {
+        throw new Error(result.error || `Failed to read file: ${filePath}`);
+      }
+    } catch (error) {
+      console.error('❌ Error reading file:', error);
+      throw error instanceof Error ? error : new Error(`Unknown error reading ${filePath}`);
+    }
+  }
+
+  // File saving
+  async saveFile(filePath: string, content: string): Promise<void> {
+    console.log('💾 Saving file:', filePath);
+    
+    try {
+      const result = await invoke<{
+        success: boolean;
+        data?: string;
+        error?: string;
+      }>('save_file', { path: filePath, content });
+      
+      if (!result.success) {
+        throw new Error(result.error || `Failed to save file: ${filePath}`);
+      }
+      
+      console.log('✅ File saved successfully:', filePath);
+      
+      // Clear cache for parent directory to reflect changes
+      const parentDir = filePath.split('/').slice(0, -1).join('/');
+      this.clearFolderCache(parentDir);
+      
+    } catch (error) {
+      console.error('❌ Error saving file:', error);
+      throw error instanceof Error ? error : new Error(`Unknown error saving ${filePath}`);
+    }
   }
 }
 

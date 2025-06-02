@@ -4,8 +4,8 @@
 use std::path::Path;
 use crate::core::types::{TauriResult, DirectoryInfo, FileInfoChunk, ScanFilesResult};
 use ignore::WalkBuilder;
-use tauri::State;
-use crate::filesystem::service::FilesystemService;
+// use tauri::State;
+// use crate::filesystem::service::FilesystemService;
 
 // VS Code file size limits
 const MAX_EDITOR_FILE_SIZE: u64 = 64 * 1024 * 1024; // 64MB - refuse to tokenize
@@ -135,8 +135,6 @@ pub async fn save_file(path: String, content: String) -> std::result::Result<Tau
 #[tauri::command]
 pub async fn open_folder_dialog() -> std::result::Result<TauriResult<Option<String>>, String> {
     tracing::debug!("Opening folder dialog");
-    
-    use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
     
     // Use the proper Tauri 2.x dialog API
     // Note: This should actually be called from the frontend, but providing backend fallback

@@ -261,138 +261,32 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
     setLoadError(null);
     
     try {
-      console.log('🚀 STEP 1: Starting VS Code instant root load for path:', path);
-      console.log('🚀 STEP 1.1: Path type:', typeof path, 'Path length:', path.length);
+      console.log('🚀 Starting VS Code instant root load for path:', path);
       
-      // Test 1: Direct backend call
-      const { invoke } = await import('@tauri-apps/api/core');
-      console.log('🚀 STEP 2: Tauri invoke imported successfully');
+      // Use the centralized service layer
+      const rootItems = await fileSystemService.loadRootItems(path, true);
       
-      // Test 2: Try the debug command first
-      console.log('🧪 STEP 3: Testing backend connectivity...');
-      try {
-        const debugResult = await invoke('debug_test_command', { testPath: path });
-        console.log('🧪 STEP 4: Debug test result:', debugResult);
-      } catch (debugError) {
-        console.error('❌ STEP 4 FAILED: Debug test failed:', debugError);
-      }
-      
-      // Test 3: Try load_root_items with detailed logging
-      console.log('📁 STEP 5: Calling load_root_items...');
-      console.log('📁 STEP 5.1: Parameters:', { rootPath: path, includeHidden: true, showHiddenFolders: true });
-      
-      const result = await invoke<{
-        success: boolean;
-        data?: Array<{
-          path: string;
-          name: string;
-          depth: number;
-          size: number;
-          last_modified: number;
-          extension: string;
-          is_directory: boolean;
-        }>;
-        error?: string;
-      }>('load_root_items', { 
-        rootPath: path,
-        includeHidden: true,
-        showHiddenFolders: true
+      console.log(`✅ Successfully loaded ${rootItems.length} items via service layer`);
+      console.log('📊 Items breakdown:', {
+        total: rootItems.length,
+        directories: rootItems.filter(n => n.isDirectory).length,
+        files: rootItems.filter(n => !n.isDirectory).length
       });
       
-      console.log('📁 STEP 6: Backend response from load_root_items:', JSON.stringify(result, null, 2));
-      console.log('📁 STEP 6.1: Response type check:', {
-        isObject: typeof result === 'object',
-        hasSuccess: 'success' in result,
-        successValue: result.success,
-        hasData: 'data' in result,
-        dataType: typeof result.data,
-        dataLength: result.data?.length,
-        hasError: 'error' in result,
-        errorValue: result.error
-      });
+      setRootNodes(rootItems);
+      setLoadedChildren(new Map());
+      setExpandedPaths(new Set());
       
-      if (result.success && result.data && result.data.length > 0) {
-        console.log('✅ STEP 7: Converting backend data to FileNode format...');
-        console.log('✅ STEP 7.1: First few items:', result.data.slice(0, 3));
+      console.log('✅ State updated successfully!');
         
-        // Use direct backend result instead of fileSystemService
-        const rootItems: FileNode[] = result.data.map(item => {
-          // Generate stable ID from path hash
-          let hash = 0;
-          for (let i = 0; i < item.path.length; i++) {
-            const char = item.path.charCodeAt(i);
-            hash = ((hash << 5) - hash) + char;
-            hash = hash & hash;
-          }
-          const id = Math.abs(hash).toString(36);
-          
-          return {
-            id,
-            path: item.path,
-            name: item.name,
-            depth: item.depth,
-            isDirectory: item.is_directory,
-            size: item.is_directory ? undefined : item.size,
-            lastModified: item.last_modified,
-            extension: item.extension,
-            iconId: item.is_directory ? 'folder' : 'file',
-            hasChildren: item.is_directory,
-            isExpanded: false,
-            children: undefined
-          };
-        });
-        
-        console.log(`✅ STEP 8: Successfully converted ${rootItems.length} items`);
-        console.log('📊 STEP 9: Items breakdown:', {
-          total: rootItems.length,
-          directories: rootItems.filter(n => n.isDirectory).length,
-          files: rootItems.filter(n => !n.isDirectory).length
-        });
-        console.log('📊 STEP 9.1: First converted item:', rootItems[0]);
-        
-        setRootNodes(rootItems);
-        setLoadedChildren(new Map());
-        setExpandedPaths(new Set());
-        
-        console.log('✅ STEP 10: State updated successfully!');
-        
-      } else {
-        console.error('❌ STEP 7 FAILED: No data or unsuccessful response');
-        console.error('❌ Response details:', {
-          success: result.success,
-          dataLength: result.data?.length,
-          dataExists: !!result.data,
-          error: result.error
-        });
-        
-        // More descriptive error message
-        let errorMsg = `Failed to load files from: ${path}`;
-        if (!result.success) {
-          errorMsg += ` - Backend reported failure`;
-        }
-        if (result.error) {
-          errorMsg += ` - Error: ${result.error}`;
-        }
-        if (!result.data || result.data.length === 0) {
-          errorMsg += ` - No files returned`;
-        }
-        
-        setLoadError(errorMsg);
-      }
-      
     } catch (err) {
       if (err instanceof Error && err.name !== 'AbortError') {
-        console.error('❌ STEP ERROR: Complete failure in loadRootItems:', err);
-        console.error('❌ Error details:', {
-          name: err.name,
-          message: err.message,
-          stack: err.stack
-        });
-        setLoadError(`Failed to load folder: ${err.message}`);
+        console.error('❌ Failed to load root items:', err);
+        setLoadError(`Failed to load files from: ${path} - ${err.message}`);
       }
     } finally {
       setIsInitialLoading(false);
-      console.log('🏁 STEP FINAL: Loading process completed');
+      console.log('🏁 Loading process completed');
     }
   }, []);
   
@@ -475,20 +369,33 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
       setFileError(null);
       console.log('📖 Opening file:', node.path);
       
-      // Call the backend directly for file reading
-      const { invoke } = await import('@tauri-apps/api/core');
-      const result = await invoke<{
-        success: boolean;
-        data?: string;
-        error?: string;
-      }>('read_file', { path: node.path });
+      // Use the centralized service layer for smart file reading
+      const fileData = await fileSystemService.readFile(node.path);
       
-      if (result.success && result.data !== undefined) {
-        onFileSelect?.(node);
-      } else {
-        setFileError(result.error || 'Failed to open file');
-        console.error('Failed to read file:', result.error);
+      if (fileData.isTooLarge) {
+        setFileError(`File too large (${(fileData.size / 1024 / 1024).toFixed(1)} MB). Maximum supported size is 256 MB.`);
+        return;
       }
+      
+      if (fileData.shouldUseHexMode) {
+        setFileError(`Large file (${(fileData.size / 1024 / 1024).toFixed(1)} MB). Opening in read-only mode for performance.`);
+        // Could trigger hex mode in the future
+        return;
+      }
+      
+      if (fileData.isBinary) {
+        setFileError('Cannot open binary file in text editor');
+        return;
+      }
+      
+      if (fileData.warning) {
+        // Show warning but still allow opening
+        console.warn('File warning:', fileData.warning);
+      }
+      
+      // File is safe to open
+      onFileSelect?.(node);
+      
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
       setFileError(`Unable to open file: ${errorMessage}`);
