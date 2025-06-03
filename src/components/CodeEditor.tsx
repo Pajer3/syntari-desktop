@@ -18,6 +18,7 @@ import {
   MonacoEditorWrapper,
   type EditorFile,
 } from './editor';
+import { SearchPanel } from './editor/search';
 
 // ================================
 // TYPES
@@ -42,6 +43,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const [selectedFile, setSelectedFile] = useState<EditorFile | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
   const [isModified, setIsModified] = useState(false);
+  const [showSearchPanel, setShowSearchPanel] = useState(false);
   
   // Custom hooks for focused functionality
   const fileCache = useFileCache();
@@ -80,6 +82,37 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       setIsModified(false);
     }
   }, [selectedFile, convertFileNode, fileLoader, fileCache]);
+
+  // Handle navigation from search results
+  const handleNavigateToFile = useCallback(async (filePath: string, line?: number, column?: number) => {
+    // Find the file node (simplified for now - in production this would use the file explorer state)
+    const fileInfo: FileInfo = {
+      path: filePath,
+      name: filePath.split('/').pop() || filePath,
+      extension: filePath.split('.').pop() || '',
+      size: 0,
+      lastModified: Date.now(),
+      content: undefined,
+    };
+    
+    const loadedFile = await fileLoader.loadFileContent(
+      fileInfo,
+      fileCache.getCachedContent,
+      fileCache.setCachedContent
+    );
+    
+    if (loadedFile) {
+      setSelectedFile(loadedFile);
+      setFileContent(loadedFile.content);
+      setIsModified(false);
+      
+      // TODO: Navigate to specific line/column in Monaco editor
+      if (line && column) {
+        console.log(`Navigate to line ${line}, column ${column} in ${filePath}`);
+        // This will be implemented when we add the editor reference
+      }
+    }
+  }, [fileLoader, fileCache]);
   
   // File save handler
   const handleSave = useCallback(async () => {
@@ -167,6 +200,12 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
             break;
         }
       }
+      
+      // Search panel toggle (Ctrl+Shift+F)
+      if (e.ctrlKey && e.shiftKey && e.key === 'F') {
+        e.preventDefault();
+        setShowSearchPanel(prev => !prev);
+      }
     };
     
     window.addEventListener('keydown', handleKeyDown);
@@ -202,6 +241,18 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           className="h-full"
         />
       </div>
+      
+      {/* Search Panel (Collapsible) */}
+      {showSearchPanel && (
+        <div className="w-80 flex-shrink-0">
+          <SearchPanel
+            projectPath={project.rootPath}
+            onNavigateToFile={handleNavigateToFile}
+            isVisible={showSearchPanel}
+            onToggleVisibility={() => setShowSearchPanel(false)}
+          />
+        </div>
+      )}
       
       {/* Main Editor Area */}
       <div className="flex-1 flex flex-col min-w-0">

@@ -861,17 +861,447 @@ pub async fn load_root_items(
 // DEBUG: Simple test command to verify Tauri command system is working
 #[tauri::command]
 pub async fn debug_test_command(test_path: String) -> std::result::Result<TauriResult<String>, String> {
-    tracing::info!("🧪 Debug test command called with path: {}", test_path);
-    
     let path = Path::new(&test_path);
     
-    if path.exists() {
-        if path.is_dir() {
-            Ok(TauriResult::success(format!("✅ Path exists and is a directory: {}", test_path)))
-        } else {
-            Ok(TauriResult::success(format!("✅ Path exists but is NOT a directory: {}", test_path)))
+    if !path.exists() {
+        return Ok(TauriResult::error("Test path does not exist".to_string()));
+    }
+    
+    let metadata = match std::fs::metadata(&path) {
+        Ok(m) => m,
+        Err(e) => return Ok(TauriResult::error(format!("Failed to get metadata: {}", e))),
+    };
+    
+    let info = format!(
+        "Path: {}\nExists: {}\nIs file: {}\nIs dir: {}\nSize: {} bytes",
+        test_path,
+        path.exists(),
+        path.is_file(),
+        path.is_dir(),
+        metadata.len()
+    );
+    
+    Ok(TauriResult::success(info))
+}
+
+// Search functionality for project-wide search
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct SearchOptions {
+    #[serde(rename = "caseSensitive")]
+    case_sensitive: bool,
+    #[serde(rename = "wholeWord")]
+    whole_word: bool,
+    #[serde(rename = "useRegex")]
+    use_regex: bool,
+    #[serde(rename = "includeFileTypes")]
+    include_file_types: Vec<String>,
+    #[serde(rename = "excludeFileTypes")]
+    exclude_file_types: Vec<String>,
+    #[serde(rename = "excludeDirectories")]
+    exclude_directories: Vec<String>,
+}
+
+#[derive(serde::Serialize)]
+pub struct SearchMatch {
+    file: String,
+    line: u32,
+    column: u32,
+    text: String,
+    #[serde(rename = "matchStart")]
+    match_start: u32,
+    #[serde(rename = "matchEnd")]
+    match_end: u32,
+}
+
+#[derive(serde::Serialize)]
+pub struct SearchResult {
+    file: String,
+    matches: Vec<SearchMatch>,
+    #[serde(rename = "totalMatches")]
+    total_matches: u32,
+}
+
+#[derive(serde::Serialize)]
+pub struct SearchData {
+    results: Vec<SearchResult>,
+    #[serde(rename = "totalMatches")]
+    total_matches: u32,
+    #[serde(rename = "filesSearched")]
+    files_searched: u32,
+    #[serde(rename = "totalFiles")]
+    total_files: u32,
+}
+
+#[tauri::command]
+pub async fn search_in_project(
+    project_path: String,
+    query: String,
+    options: SearchOptions,
+) -> std::result::Result<TauriResult<SearchData>, String> {
+    use regex::Regex;
+    use std::collections::HashSet;
+    
+    tracing::debug!("Starting project search: {} in {}", query, project_path);
+    
+    if query.trim().is_empty() {
+        return Ok(TauriResult::error("Search query cannot be empty".to_string()));
+    }
+    
+    let project_path = Path::new(&project_path);
+    if !project_path.exists() || !project_path.is_dir() {
+        return Ok(TauriResult::error("Invalid project path".to_string()));
+    }
+    
+    // Build search regex
+    let search_regex = if options.use_regex {
+        match Regex::new(&query) {
+            Ok(r) => r,
+            Err(e) => return Ok(TauriResult::error(format!("Invalid regex: {}", e))),
         }
     } else {
-        Ok(TauriResult::success(format!("❌ Path does NOT exist: {}", test_path)))
+        let escaped_query = regex::escape(&query);
+        let pattern = if options.whole_word {
+            format!(r"\b{}\b", escaped_query)
+        } else {
+            escaped_query
+        };
+        
+        let flags = if options.case_sensitive { "" } else { "(?i)" };
+        match Regex::new(&format!("{}{}", flags, pattern)) {
+            Ok(r) => r,
+            Err(e) => return Ok(TauriResult::error(format!("Failed to create search regex: {}", e))),
+        }
+    };
+    
+    // Convert file type filters to sets for faster lookup
+    let include_types: HashSet<_> = options.include_file_types.iter().map(|s| s.as_str()).collect();
+    let exclude_types: HashSet<_> = options.exclude_file_types.iter().map(|s| s.as_str()).collect();
+    let exclude_dirs: HashSet<_> = options.exclude_directories.iter().map(|s| s.as_str()).collect();
+    
+    // Use ignore crate for gitignore support and better performance
+    let mut builder = WalkBuilder::new(project_path);
+    builder
+        .hidden(false) // Include hidden files for now
+        .git_ignore(true)
+        .git_exclude(true)
+        .git_global(true)
+        .max_depth(Some(20)); // Reasonable depth limit
+    
+    let walker = builder.build();
+    
+    let mut results = Vec::new();
+    let mut total_matches = 0;
+    let mut files_searched = 0;
+    let mut total_files = 0;
+    
+    // Count total files first (for progress)
+    for entry in builder.build() {
+        if let Ok(entry) = entry {
+            if entry.path().is_file() {
+                total_files += 1;
+            }
+        }
     }
+    
+    // Perform search
+    for entry in walker {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        
+        let path = entry.path();
+        
+        // Skip directories
+        if !path.is_file() {
+            continue;
+        }
+        
+        // Check excluded directories
+        if let Some(parent) = path.parent() {
+            if exclude_dirs.iter().any(|&dir| parent.to_string_lossy().contains(dir)) {
+                continue;
+            }
+        }
+        
+        // Check file extension filters
+        if let Some(extension) = path.extension().and_then(|ext| ext.to_str()) {
+            let ext_with_dot = format!(".{}", extension);
+            
+            // If include filters are specified, file must match one of them
+            if !include_types.is_empty() && !include_types.contains(ext_with_dot.as_str()) {
+                continue;
+            }
+            
+            // Skip if file matches exclude filter
+            if exclude_types.contains(ext_with_dot.as_str()) {
+                continue;
+            }
+        }
+        
+        files_searched += 1;
+        
+        // Read and search file content
+        let content = match std::fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(_) => continue, // Skip binary files or files we can't read
+        };
+        
+        let mut file_matches = Vec::new();
+        
+        // Search line by line for better match reporting
+        for (line_num, line) in content.lines().enumerate() {
+            for mat in search_regex.find_iter(line) {
+                let match_obj = SearchMatch {
+                    file: path.to_string_lossy().to_string(),
+                    line: (line_num + 1) as u32,
+                    column: (mat.start() + 1) as u32,
+                    text: line.to_string(),
+                    match_start: mat.start() as u32,
+                    match_end: mat.end() as u32,
+                };
+                file_matches.push(match_obj);
+                total_matches += 1;
+            }
+        }
+        
+        // Add file result if matches found
+        if !file_matches.is_empty() {
+            let file_result = SearchResult {
+                file: path.to_string_lossy().to_string(),
+                total_matches: file_matches.len() as u32,
+                matches: file_matches,
+            };
+            results.push(file_result);
+        }
+        
+        // Prevent excessive memory usage for very large searches
+        if total_matches > 10000 {
+            tracing::warn!("Search stopped at 10,000 matches to prevent memory issues");
+            break;
+        }
+    }
+    
+    let search_data = SearchData {
+        results,
+        total_matches,
+        files_searched,
+        total_files,
+    };
+    
+    tracing::debug!(
+        "Search completed: {} matches in {} files (searched {} of {} files)",
+        total_matches, search_data.results.len(), files_searched, total_files
+    );
+    
+    Ok(TauriResult::success(search_data))
+}
+
+// Streaming/chunked search for better performance
+#[tauri::command]
+pub async fn search_in_project_streaming(
+    project_path: String,
+    query: String,
+    options: SearchOptions,
+    max_results: Option<u32>,
+) -> std::result::Result<TauriResult<SearchData>, String> {
+    use regex::Regex;
+    use std::collections::HashSet;
+    
+    tracing::debug!("Starting streaming project search: {} in {} (max: {:?})", query, project_path, max_results);
+    
+    if query.trim().is_empty() || query.trim().len() < 2 {
+        return Ok(TauriResult::error("Search query must be at least 2 characters".to_string()));
+    }
+    
+    let project_path = Path::new(&project_path);
+    if !project_path.exists() || !project_path.is_dir() {
+        return Ok(TauriResult::error("Invalid project path".to_string()));
+    }
+    
+    let max_results = max_results.unwrap_or(50); // Reduced default for better performance
+    
+    // Build search regex (same as original but with early validation)
+    let search_regex = if options.use_regex {
+        match Regex::new(&query) {
+            Ok(r) => r,
+            Err(e) => return Ok(TauriResult::error(format!("Invalid regex: {}", e))),
+        }
+    } else {
+        let escaped_query = regex::escape(&query);
+        let pattern = if options.whole_word {
+            format!(r"\b{}\b", escaped_query)
+        } else {
+            escaped_query
+        };
+        
+        let flags = if options.case_sensitive { "" } else { "(?i)" };
+        match Regex::new(&format!("{}{}", flags, pattern)) {
+            Ok(r) => r,
+            Err(e) => return Ok(TauriResult::error(format!("Failed to create search regex: {}", e))),
+        }
+    };
+    
+    // Convert file type filters to sets for faster lookup
+    let include_types: HashSet<_> = options.include_file_types.iter().map(|s| s.as_str()).collect();
+    let exclude_types: HashSet<_> = options.exclude_file_types.iter().map(|s| s.as_str()).collect();
+    let exclude_dirs: HashSet<_> = options.exclude_directories.iter().map(|s| s.as_str()).collect();
+    
+    // More aggressive filtering for performance and non-blocking operation
+    let mut builder = WalkBuilder::new(project_path);
+    builder
+        .hidden(false)
+        .git_ignore(true)
+        .git_exclude(true)
+        .git_global(true)
+        .max_depth(Some(10)) // Reduced depth for streaming - prevents deep recursion
+        .follow_links(false);
+    
+    let walker = builder.build();
+    
+    let mut results = Vec::new();
+    let mut total_matches = 0;
+    let mut files_searched = 0;
+    let mut files_with_matches = 0;
+    let mut total_files = 0;
+    
+    // Process files in very small chunks for true non-blocking behavior
+    const TINY_CHUNK_SIZE: usize = 5; // Even smaller chunks - process only 5 files at a time
+    const MAX_FILES_TO_PROCESS: usize = 200; // Limit total files processed for streaming
+    let mut current_chunk = 0;
+    let mut processed_files = 0;
+    
+    for entry in walker {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        
+        let path = entry.path();
+        
+        // Skip directories
+        if !path.is_file() {
+            continue;
+        }
+        
+        total_files += 1;
+        
+        // Early exit if we have enough results (performance optimization)
+        if files_with_matches >= max_results || processed_files >= MAX_FILES_TO_PROCESS {
+            tracing::debug!("Reached limits: results={}, processed={}", files_with_matches, processed_files);
+            break;
+        }
+        
+        // Yield control back to UI very frequently - every 5 files
+        if current_chunk % TINY_CHUNK_SIZE == 0 && current_chunk > 0 {
+            tokio::task::yield_now().await;
+        }
+        current_chunk += 1;
+        processed_files += 1;
+        
+        // Skip very large files for performance (even smaller limit for streaming)
+        if let Ok(metadata) = path.metadata() {
+            const MAX_FILE_SIZE_STREAMING: u64 = 512 * 1024; // 512KB limit for true streaming
+            if metadata.len() > MAX_FILE_SIZE_STREAMING {
+                continue;
+            }
+        }
+        
+        // Check excluded directories
+        if let Some(parent) = path.parent() {
+            if exclude_dirs.iter().any(|&dir| parent.to_string_lossy().contains(dir)) {
+                continue;
+            }
+        }
+        
+        // Check file extension filters
+        if let Some(extension) = path.extension().and_then(|ext| ext.to_str()) {
+            let ext_with_dot = format!(".{}", extension);
+            
+            // If include filters are specified, file must match one of them
+            if !include_types.is_empty() && !include_types.contains(ext_with_dot.as_str()) {
+                continue;
+            }
+            
+            // Skip if file matches exclude filter
+            if exclude_types.contains(ext_with_dot.as_str()) {
+                continue;
+            }
+        }
+        
+        files_searched += 1;
+        
+        // Read and search file content with size limit check
+        let content = match std::fs::read_to_string(path) {
+            Ok(c) => {
+                // Additional content size check after reading
+                if c.len() > 100_000 { // 100KB content limit
+                    continue;
+                }
+                c
+            },
+            Err(_) => continue, // Skip binary files or files we can't read
+        };
+        
+        let mut file_matches = Vec::new();
+        let mut matches_in_file = 0;
+        
+        // Limit matches per file to prevent massive results (reduced for streaming)
+        const MAX_MATCHES_PER_FILE: usize = 10; // Reduced from 20 to 10
+        
+        // Search line by line with early exit and yield points
+        for (line_num, line) in content.lines().enumerate() {
+            if matches_in_file >= MAX_MATCHES_PER_FILE {
+                break; // Stop searching this file if too many matches
+            }
+            
+            // Yield control every 100 lines to prevent blocking
+            if line_num % 100 == 0 && line_num > 0 {
+                tokio::task::yield_now().await;
+            }
+            
+            for mat in search_regex.find_iter(line) {
+                if matches_in_file >= MAX_MATCHES_PER_FILE {
+                    break;
+                }
+                
+                let match_obj = SearchMatch {
+                    file: path.to_string_lossy().to_string(),
+                    line: (line_num + 1) as u32,
+                    column: (mat.start() + 1) as u32,
+                    text: line.to_string(),
+                    match_start: mat.start() as u32,
+                    match_end: mat.end() as u32,
+                };
+                file_matches.push(match_obj);
+                total_matches += 1;
+                matches_in_file += 1;
+            }
+        }
+        
+        // Add file result if matches found
+        if !file_matches.is_empty() {
+            let file_result = SearchResult {
+                file: path.to_string_lossy().to_string(),
+                total_matches: file_matches.len() as u32,
+                matches: file_matches,
+            };
+            results.push(file_result);
+            files_with_matches += 1;
+        }
+    }
+    
+    let search_data = SearchData {
+        results,
+        total_matches,
+        files_searched,
+        total_files,
+    };
+    
+    tracing::debug!(
+        "Streaming search completed: {} matches in {} files (searched {} of {} files, processed {} files)",
+        total_matches, search_data.results.len(), files_searched, total_files, processed_files
+    );
+    
+    Ok(TauriResult::success(search_data))
 } 

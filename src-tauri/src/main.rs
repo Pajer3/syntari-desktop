@@ -49,6 +49,8 @@ fn main() {
             filesystem::commands::load_folder_contents,
             filesystem::commands::load_root_items,
             filesystem::commands::debug_test_command,
+            filesystem::commands::search_in_project,
+            filesystem::commands::search_in_project_streaming,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
