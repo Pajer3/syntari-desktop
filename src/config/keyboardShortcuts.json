@@ -1,0 +1,361 @@
+{
+  "version": "1.0.0",
+  "description": "Syntari AI IDE - Keyboard Shortcuts Configuration",
+  "lastUpdated": "2024-12-19",
+  "categories": {
+    "tabManagement": {
+      "name": "Tab Management",
+      "description": "Enhanced VS Code-style tab navigation and management",
+      "shortcuts": {
+        "nextTab": {
+          "key": "Ctrl+Tab",
+          "description": "Switch to next tab",
+          "implemented": true,
+          "component": "TabLayout"
+        },
+        "previousTab": {
+          "key": "Ctrl+Shift+Tab",
+          "description": "Switch to previous tab",
+          "implemented": true,
+          "component": "TabLayout"
+        },
+        "nextTabAlt": {
+          "key": "Ctrl+PageDown",
+          "description": "Switch to next tab (alternative)",
+          "implemented": true,
+          "component": "TabLayout"
+        },
+        "previousTabAlt": {
+          "key": "Ctrl+PageUp",
+          "description": "Switch to previous tab (alternative)",
+          "implemented": true,
+          "component": "TabLayout"
+        },
+        "closeTab": {
+          "key": "Ctrl+W",
+          "description": "Close current tab (with unsaved changes warning)",
+          "implemented": true,
+          "component": "TabLayout"
+        },
+        "newTab": {
+          "key": "Ctrl+T",
+          "description": "Open new tab",
+          "implemented": false,
+          "planned": true,
+          "component": "TabLayout"
+        }
+      },
+      "contextMenu": {
+        "trigger": "Right-click on tab",
+        "actions": {
+          "close": "Close Tab",
+          "closeOthers": "Close Others",
+          "closeToRight": "Close Tabs to the Right",
+          "closeAll": "Close All Tabs",
+          "pin": "Pin/Unpin Tab",
+          "splitHorizontal": "Split Right",
+          "splitVertical": "Split Down",
+          "copyPath": "Copy File Path",
+          "revealExplorer": "Reveal in File Explorer"
+        }
+      }
+    },
+    "search": {
+      "name": "Project Search",
+      "description": "Project-wide search with performance optimizations",
+      "shortcuts": {
+        "projectSearch": {
+          "key": "Ctrl+Shift+F",
+          "description": "Open project-wide search panel",
+          "implemented": true,
+          "component": "CodeEditor",
+          "features": [
+            "800ms debounce for performance",
+            "1-character minimum search",
+            "Lazy loading results",
+            "Streaming backend search",
+            "Context menu navigation"
+          ]
+        },
+        "findInFile": {
+          "key": "Ctrl+F",
+          "description": "Find in current file",
+          "implemented": false,
+          "planned": true,
+          "component": "MonacoEditor"
+        },
+        "replaceInProject": {
+          "key": "Ctrl+Shift+H",
+          "description": "Project-wide find and replace",
+          "implemented": false,
+          "planned": true,
+          "priority": "P2"
+        }
+      }
+    },
+    "navigation": {
+      "name": "Navigation & Go-To",
+      "description": "Quick navigation and file jumping features",
+      "shortcuts": {
+        "goToLine": {
+          "key": "Ctrl+G",
+          "description": "Go to line dialog",
+          "implemented": false,
+          "planned": true,
+          "priority": "P0",
+          "nextImplementation": true
+        },
+        "quickOpen": {
+          "key": "Ctrl+P",
+          "description": "Quick file open with fuzzy search",
+          "implemented": false,
+          "planned": true,
+          "priority": "P0",
+          "nextImplementation": true
+        },
+        "jumpToMatchingBracket": {
+          "key": "Ctrl+]",
+          "description": "Jump to matching bracket",
+          "implemented": false,
+          "planned": true,
+          "priority": "P0"
+        },
+        "toggleBookmark": {
+          "key": "Ctrl+Shift+K",
+          "description": "Toggle bookmark on current line",
+          "implemented": false,
+          "planned": true,
+          "priority": "P0"
+        },
+        "nextBookmark": {
+          "key": "F2",
+          "description": "Navigate to next bookmark",
+          "implemented": false,
+          "planned": true,
+          "priority": "P0"
+        },
+        "previousBookmark": {
+          "key": "Shift+F2",
+          "description": "Navigate to previous bookmark",
+          "implemented": false,
+          "planned": true,
+          "priority": "P0"
+        }
+      }
+    },
+    "fileManagement": {
+      "name": "File Operations",
+      "description": "File and folder management operations",
+      "shortcuts": {
+        "saveFile": {
+          "key": "Ctrl+S",
+          "description": "Save current file",
+          "implemented": true,
+          "component": "FileSaver"
+        },
+        "saveAs": {
+          "key": "Ctrl+Shift+S",
+          "description": "Save file as...",
+          "implemented": false,
+          "planned": true,
+          "priority": "P1"
+        },
+        "newFile": {
+          "key": "Ctrl+N",
+          "description": "Create new file",
+          "implemented": false,
+          "planned": true,
+          "priority": "P1"
+        },
+        "openFile": {
+          "key": "Ctrl+O",
+          "description": "Open file dialog",
+          "implemented": false,
+          "planned": true,
+          "priority": "P1"
+        }
+      }
+    },
+    "editing": {
+      "name": "Code Editing",
+      "description": "Advanced text editing and code manipulation",
+      "shortcuts": {
+        "selectAllOccurrences": {
+          "key": "Ctrl+Shift+L",
+          "description": "Select all occurrences of current selection",
+          "implemented": false,
+          "planned": true,
+          "priority": "P1"
+        },
+        "addCursorAbove": {
+          "key": "Ctrl+Alt+Up",
+          "description": "Add cursor above current line",
+          "implemented": false,
+          "planned": true,
+          "priority": "P1"
+        },
+        "addCursorBelow": {
+          "key": "Ctrl+Alt+Down",
+          "description": "Add cursor below current line",
+          "implemented": false,
+          "planned": true,
+          "priority": "P1"
+        },
+        "moveLineUp": {
+          "key": "Alt+Up",
+          "description": "Move current line up",
+          "implemented": false,
+          "planned": true,
+          "priority": "P1"
+        },
+        "moveLineDown": {
+          "key": "Alt+Down",
+          "description": "Move current line down",
+          "implemented": false,
+          "planned": true,
+          "priority": "P1"
+        },
+        "copyLineUp": {
+          "key": "Shift+Alt+Up",
+          "description": "Copy current line up",
+          "implemented": false,
+          "planned": true,
+          "priority": "P1"
+        },
+        "copyLineDown": {
+          "key": "Shift+Alt+Down",
+          "description": "Copy current line down",
+          "implemented": false,
+          "planned": true,
+          "priority": "P1"
+        },
+        "deleteLine": {
+          "key": "Ctrl+Shift+K",
+          "description": "Delete current line",
+          "implemented": false,
+          "planned": true,
+          "priority": "P1"
+        },
+        "joinLines": {
+          "key": "Ctrl+J",
+          "description": "Join current line with next",
+          "implemented": false,
+          "planned": true,
+          "priority": "P1"
+        }
+      }
+    },
+    "ai": {
+      "name": "AI Features",
+      "description": "AI-powered coding assistance",
+      "shortcuts": {
+        "askAI": {
+          "key": "Ctrl+K",
+          "description": "Ask AI about current file/selection",
+          "implemented": true,
+          "component": "EditorHeader"
+        },
+        "switchToAI": {
+          "key": "Alt+A",
+          "description": "Switch to AI Assistant tab",
+          "implemented": false,
+          "planned": true,
+          "priority": "P2"
+        }
+      }
+    },
+    "views": {
+      "name": "View Management",
+      "description": "Panel and view management",
+      "shortcuts": {
+        "toggleSidebar": {
+          "key": "Ctrl+B",
+          "description": "Toggle file explorer sidebar",
+          "implemented": false,
+          "planned": true,
+          "priority": "P2"
+        },
+        "toggleSearchPanel": {
+          "key": "Ctrl+Shift+F",
+          "description": "Toggle search panel (same as project search)",
+          "implemented": true,
+          "component": "CodeEditor"
+        },
+        "splitEditorRight": {
+          "key": "Ctrl+\\",
+          "description": "Split editor to the right",
+          "implemented": false,
+          "planned": true,
+          "priority": "P2"
+        },
+        "splitEditorDown": {
+          "key": "Ctrl+Shift+\\",
+          "description": "Split editor downward",
+          "implemented": false,
+          "planned": true,
+          "priority": "P2"
+        }
+      }
+    },
+    "dialog": {
+      "name": "Dialog Controls",
+      "description": "Modal and dialog keyboard controls",
+      "shortcuts": {
+        "unsavedChangesDialog": {
+          "description": "Unsaved Changes Warning Dialog",
+          "shortcuts": {
+            "save": {
+              "key": "Enter",
+              "description": "Save file and close",
+              "implemented": true,
+              "component": "UnsavedChangesDialog"
+            },
+            "saveAlt": {
+              "key": "Ctrl+S",
+              "description": "Save file and close (alternative)",
+              "implemented": true,
+              "component": "UnsavedChangesDialog"
+            },
+            "cancel": {
+              "key": "Escape",
+              "description": "Cancel close operation",
+              "implemented": true,
+              "component": "UnsavedChangesDialog"
+            }
+          }
+        }
+      }
+    }
+  },
+  "implementation": {
+    "completed": [
+      "Tab Management (Enhanced)",
+      "Project Search (Optimized)",
+      "File Save Operations",
+      "AI Integration (Basic)",
+      "Unsaved Changes Warnings"
+    ],
+    "inProgress": [],
+    "planned": [
+      "Navigation & Go-To",
+      "Advanced Code Editing",
+      "Split View Management",
+      "File Management Operations",
+      "View Controls"
+    ]
+  },
+  "notes": {
+    "performance": {
+      "search": "800ms debounce, 1-char minimum, streaming backend, lazy loading",
+      "tabs": "Virtual rendering for large tab counts, efficient drag/drop"
+    },
+    "customization": {
+      "future": "This config file designed for future keyboard customization features",
+      "themes": "Shortcuts will integrate with theme system for visual feedback"
+    },
+    "accessibility": {
+      "screenReader": "All shortcuts include aria-labels and screen reader support",
+      "focusManagement": "Proper focus management for keyboard-only navigation"
+    }
+  }
+} 

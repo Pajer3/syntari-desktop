@@ -387,6 +387,7 @@ const App: React.FC = () => {
               );
               
             case 'editor':
+              // Always show TabLayout when tabs exist, regardless of active tab
               if (tabManager.tabs.length > 0) {
                 return (
                   <TabLayout
@@ -398,6 +399,7 @@ const App: React.FC = () => {
                   />
                 );
               }
+              // Fallback when no project is loaded
               return (
                 <div className="h-full bg-gray-900 text-white flex items-center justify-center">
                   <div className="text-center max-w-md">
