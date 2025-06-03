@@ -260,9 +260,91 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
     onClose();
   }, [onFileSelect, onClose]);
 
-  // Keyboard navigation
+  // Global keyboard handler for the dialog
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      console.log('🎮 Global QuickOpen key:', e.key, 'Target:', e.target?.constructor.name);
+      
+      // Only handle arrow keys if QuickOpen is open
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        if (searchResults.length > 0) {
+          if (e.key === 'ArrowDown') {
+            setSelectedIndex(prev => {
+              const newIndex = Math.min(prev + 1, searchResults.length - 1);
+              console.log('🎮 Global Arrow Down: moving from', prev, 'to', newIndex);
+              return newIndex;
+            });
+          } else if (e.key === 'ArrowUp') {
+            setSelectedIndex(prev => {
+              const newIndex = Math.max(prev - 1, 0);
+              console.log('🎮 Global Arrow Up: moving from', prev, 'to', newIndex);
+              return newIndex;
+            });
+          }
+        }
+        return;
+      }
+      
+      switch (e.key) {
+        case 'Escape':
+          e.preventDefault();
+          e.stopPropagation();
+          onClose();
+          break;
+          
+        case 'Enter':
+          e.preventDefault();
+          e.stopPropagation();
+          if (searchResults[selectedIndex]) {
+            const selectedFile = searchResults[selectedIndex].file;
+            console.log('🎮 Global Enter: selecting file', selectedFile.name);
+            sessionPriority.markFileOpened(selectedFile.path);
+            onFileSelect(selectedFile);
+            onClose();
+          }
+          break;
+      }
+    };
+
+    // Add event listener with high priority (capture=true)
+    document.addEventListener('keydown', handleGlobalKeyDown, true);
+    
+    return () => {
+      document.removeEventListener('keydown', handleGlobalKeyDown, true);
+    };
+  }, [isOpen, onClose, onFileSelect, searchResults, selectedIndex]);
+
+  // Keyboard navigation (keeping this for the input field)
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    console.log('🎮 QuickOpen key pressed:', e.key, 'Results:', searchResults.length, 'Selected:', selectedIndex);
+    console.log('🎮 Input QuickOpen key pressed:', e.key, 'Results:', searchResults.length, 'Selected:', selectedIndex);
+    
+    // Handle arrow keys specially to prevent scrolling
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      if (searchResults.length > 0) {
+        if (e.key === 'ArrowDown') {
+          setSelectedIndex(prev => {
+            const newIndex = Math.min(prev + 1, searchResults.length - 1);
+            console.log('🎮 Input Arrow Down: moving from', prev, 'to', newIndex);
+            return newIndex;
+          });
+        } else if (e.key === 'ArrowUp') {
+          setSelectedIndex(prev => {
+            const newIndex = Math.max(prev - 1, 0);
+            console.log('🎮 Input Arrow Up: moving from', prev, 'to', newIndex);
+            return newIndex;
+          });
+        }
+      }
+      return;
+    }
     
     switch (e.key) {
       case 'Escape':
@@ -271,36 +353,12 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
         onClose();
         break;
         
-      case 'ArrowDown':
-        e.preventDefault();
-        e.stopPropagation();
-        if (searchResults.length > 0) {
-          setSelectedIndex(prev => {
-            const newIndex = Math.min(prev + 1, searchResults.length - 1);
-            console.log('🎮 Arrow Down: moving from', prev, 'to', newIndex);
-            return newIndex;
-          });
-        }
-        break;
-        
-      case 'ArrowUp':
-        e.preventDefault();
-        e.stopPropagation();
-        if (searchResults.length > 0) {
-          setSelectedIndex(prev => {
-            const newIndex = Math.max(prev - 1, 0);
-            console.log('🎮 Arrow Up: moving from', prev, 'to', newIndex);
-            return newIndex;
-          });
-        }
-        break;
-        
       case 'Enter':
         e.preventDefault();
         e.stopPropagation();
         if (searchResults[selectedIndex]) {
           const selectedFile = searchResults[selectedIndex].file;
-          console.log('🎮 Enter: selecting file', selectedFile.name);
+          console.log('🎮 Input Enter: selecting file', selectedFile.name);
           sessionPriority.markFileOpened(selectedFile.path);
           onFileSelect(selectedFile);
           onClose();
@@ -363,7 +421,17 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
         WebkitBackdropFilter: 'blur(4px)',
       }}
     >
-      <div className="bg-vscode-bg border border-vscode-border rounded-lg shadow-2xl w-full max-w-2xl max-h-[70vh] flex flex-col">
+      <div 
+        className="bg-vscode-bg border border-vscode-border rounded-lg shadow-2xl w-full max-w-2xl max-h-[70vh] flex flex-col"
+        tabIndex={-1}
+        onKeyDown={(e) => {
+          // Prevent arrow keys from bubbling up
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }}
+      >
         {/* Header */}
         <div className="p-4 border-b border-vscode-border">
           <input
@@ -390,7 +458,19 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
         <div 
           ref={listRef}
           className="flex-1 overflow-y-auto"
-          style={{ maxHeight: 'calc(70vh - 120px)' }}
+          style={{ 
+            maxHeight: 'calc(70vh - 120px)',
+            scrollBehavior: 'smooth',
+            // Prevent arrow key scrolling, only allow programmatic scrolling
+            overflowX: 'hidden'
+          }}
+          onKeyDown={(e) => {
+            // Completely block arrow keys from scrolling this container
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          }}
         >
           {error ? (
             <div className="p-4 text-center">
