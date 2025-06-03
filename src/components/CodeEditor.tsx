@@ -8,6 +8,7 @@ import { useFileCache, type EditorFile } from './editor/useFileCache';
 import { useFileLoader } from './editor/useFileLoader';
 import { useFileSave } from './editor/useFileSave';
 import { usePerformanceConfig } from './editor/usePerformanceConfig';
+import { useShortcut } from '../hooks/useKeyboardShortcuts';
 import { VirtualizedFileExplorer } from './editor/VirtualizedFileExplorer';
 import { EmptyEditorState } from './editor/EmptyEditorState';
 import { PerformanceModeIndicator } from './editor/PerformanceModeIndicator';
@@ -329,6 +330,50 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [fileTabs, activeTabIndex, handleTabClose, handleSave, handleAskAI]);
+
+  // Configuration-based keyboard shortcuts
+  useShortcut('tabManagement', 'nextTab', (e) => {
+    if (fileTabs.length === 0) return false;
+    e.preventDefault?.();
+    const nextIndex = activeTabIndex >= fileTabs.length - 1 ? 0 : activeTabIndex + 1;
+    setActiveTabIndex(nextIndex);
+    return true;
+  }, [fileTabs, activeTabIndex]);
+
+  useShortcut('tabManagement', 'previousTab', (e) => {
+    if (fileTabs.length === 0) return false;
+    e.preventDefault?.();
+    const prevIndex = activeTabIndex <= 0 ? fileTabs.length - 1 : activeTabIndex - 1;
+    setActiveTabIndex(prevIndex);
+    return true;
+  }, [fileTabs, activeTabIndex]);
+
+  useShortcut('tabManagement', 'closeTab', (e) => {
+    if (fileTabs.length === 0 || activeTabIndex < 0) return false;
+    e.preventDefault?.();
+    handleTabClose(activeTabIndex);
+    return true;
+  }, [fileTabs, activeTabIndex, handleTabClose]);
+
+  useShortcut('fileManagement', 'saveFile', (e) => {
+    if (fileTabs.length === 0) return false;
+    e.preventDefault?.();
+    handleSave();
+    return true;
+  }, [fileTabs, handleSave]);
+
+  useShortcut('ai', 'askAI', (e) => {
+    if (fileTabs.length === 0) return false;
+    e.preventDefault?.();
+    handleAskAI();
+    return true;
+  }, [fileTabs, handleAskAI]);
+
+  useShortcut('search', 'projectSearch', (e) => {
+    e.preventDefault?.();
+    setShowSearchPanel(prev => !prev);
+    return true;
+  }, []);
 
   // Dialog handlers
   const handleDialogSave = useCallback(async () => {

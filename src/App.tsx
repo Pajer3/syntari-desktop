@@ -6,6 +6,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useAppViewModel } from './hooks/useAppViewModel';
 import { useChatViewModel } from './hooks/useChatViewModel';
+import { useGlobalKeyboardShortcuts, useShortcut } from './hooks/useKeyboardShortcuts';
 // DISABLED: Custom context menu
 // import { useContextMenu } from './hooks/useContextMenu';
 // import { ContextMenu, getDefaultContextMenuItems } from './components/ContextMenu';
@@ -36,6 +37,13 @@ const App: React.FC = () => {
   );
   // DISABLED: Custom context menu
   // const contextMenu = useContextMenu();
+  
+  // ================================
+  // GLOBAL KEYBOARD SHORTCUTS
+  // ================================
+  
+  // Initialize global keyboard shortcuts system
+  useGlobalKeyboardShortcuts();
   
   // ================================
   // TAB MANAGEMENT
@@ -317,6 +325,26 @@ const App: React.FC = () => {
   // KEYBOARD SHORTCUTS
   // ================================
   
+  // Configuration-based keyboard shortcuts
+  useShortcut('fileManagement', 'openFile', () => {
+    handleOpenProject();
+    return true;
+  }, [handleOpenProject]);
+
+  useShortcut('views', 'toggleSettings', () => {
+    handleSettings();
+    return true;
+  }, [handleSettings]);
+
+  useShortcut('ai', 'switchToAI', () => {
+    if (appViewModel.viewModel.currentView === 'editor') {
+      tabManager.switchToTab('ai-assistant');
+      return true;
+    }
+    return false;
+  }, [appViewModel.viewModel.currentView, tabManager]);
+
+  // Legacy keyboard handler (to be removed once all shortcuts are migrated)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey) {
