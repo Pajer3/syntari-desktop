@@ -17,6 +17,7 @@ import { ErrorNotification } from './editor/ErrorNotification';
 import { MonacoEditorWrapper } from './editor/MonacoEditorWrapper';
 import { SearchPanel } from './editor/search/SearchPanel';
 import { UnsavedChangesDialog } from './editor/UnsavedChangesDialog';
+import { QuickOpen } from './QuickOpen';
 import { getFileIcon } from '../utils/editorUtils';
 
 // ================================
@@ -49,6 +50,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const [fileTabs, setFileTabs] = useState<FileTab[]>([]);
   const [activeTabIndex, setActiveTabIndex] = useState<number>(-1);
   const [showSearchPanel, setShowSearchPanel] = useState(false);
+  const [showQuickOpen, setShowQuickOpen] = useState(false);
   const [currentError, setCurrentError] = useState<Error | null>(null);
   const [draggedTabIndex, setDraggedTabIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -71,6 +73,9 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
 
   // Get active tab
   const activeTab = activeTabIndex >= 0 ? fileTabs[activeTabIndex] : null;
+
+  // Get recently opened files for QuickOpen prioritization
+  const recentFiles = fileTabs.map(tab => tab.file.path);
 
   // Convert FileNode to FileInfo for compatibility
   const convertFileNode = useCallback((node: FileNode): FileInfo => ({
@@ -116,6 +121,11 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       
       // Notify parent of file change
       onFileChange?.(fileInfo, loadedFile.content);
+      
+      // Notify QuickOpen session priority system (for priority tracking)
+      if ((window as any).quickOpenSessionPriority) {
+        (window as any).quickOpenSessionPriority.markFileOpened(fileInfo.path);
+      }
     }
   }, [fileTabs, convertFileNode, fileLoader, fileCache, onFileChange]);
 
@@ -277,6 +287,16 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Handle Esc key for closing QuickOpen
+      if (e.key === 'Escape') {
+        if (showQuickOpen) {
+          e.preventDefault();
+          e.stopPropagation();
+          setShowQuickOpen(false);
+          return;
+        }
+      }
+      
       // Only handle if we have tabs and are focused
       if (fileTabs.length === 0) return;
       
@@ -315,6 +335,10 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
             e.stopPropagation();
             handleAskAI();
             break;
+          case 'p':
+            // QuickOpen (Ctrl+P) - Let useShortcut handle this
+            // Remove this case to avoid conflicts
+            break;
         }
       }
       
@@ -329,7 +353,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     // Add event listener with capture=true to handle events before app-level handlers
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [fileTabs, activeTabIndex, handleTabClose, handleSave, handleAskAI]);
+  }, [fileTabs, activeTabIndex, handleTabClose, handleSave, handleAskAI, showQuickOpen]);
 
   // Configuration-based keyboard shortcuts
   useShortcut('tabManagement', 'nextTab', (e) => {
@@ -373,6 +397,23 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     e.preventDefault?.();
     setShowSearchPanel(prev => !prev);
     return true;
+  }, []);
+
+  // QuickOpen (Ctrl+P) shortcut
+  useShortcut('navigation', 'quickOpen', (e) => {
+    e.preventDefault?.();
+    setShowQuickOpen(true);
+    return true;
+  }, []);
+
+  // QuickOpen handlers
+  const handleQuickOpenFileSelect = useCallback(async (node: FileNode) => {
+    setShowQuickOpen(false);
+    await handleFileSelect(node);
+  }, [handleFileSelect]);
+
+  const handleQuickOpenClose = useCallback(() => {
+    setShowQuickOpen(false);
   }, []);
 
   // Dialog handlers
@@ -420,7 +461,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     fileLoader.clearError();
     fileSaver.clearSaveError();
   }, [fileLoader, fileSaver]);
-
+  
   return (
     <div className={`flex h-full bg-vscode-bg text-vscode-fg font-mono ${performanceConfig.performanceMode ? 'performance-mode' : ''}`}>
       {/* High-Performance File Explorer Sidebar */}
@@ -448,7 +489,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           />
         </div>
       )}
-
+      
       {/* Main Editor Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Performance Mode Indicator */}
@@ -504,7 +545,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
                 )}
                 
                 {/* Close Button */}
-                <button
+            <button 
                   onClick={(e) => {
                     e.stopPropagation();
                     handleTabClose(index);
@@ -513,12 +554,12 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
                   title="Close tab"
                 >
                   <span className="text-xs text-vscode-fg-muted hover:text-vscode-fg">×</span>
-                </button>
+            </button>
               </div>
             ))}
           </div>
         )}
-
+        
         {/* Editor Content */}
         <div className="flex-1 relative">
           {activeTab ? (
@@ -548,6 +589,15 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         isVisible={performanceConfig.performanceMode}
         cacheSize={fileCache.getCacheSize()}
         perfConfig={performanceConfig.perfConfig}
+      />
+
+      {/* Quick Open Dialog (Ctrl+P) */}
+      <QuickOpen
+        isOpen={showQuickOpen}
+        projectPath={project.rootPath}
+        onClose={handleQuickOpenClose}
+        onFileSelect={handleQuickOpenFileSelect}
+        recentFiles={recentFiles}
       />
 
       {/* Unsaved Changes Dialog */}

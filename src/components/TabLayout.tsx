@@ -349,8 +349,6 @@ export const TabLayout: React.FC<TabLayoutProps> = ({
     setDragOverIndex(null);
   }, [draggedTab, tabs, onTabReorder]);
 
-  const activeTab = tabs.find(tab => tab.id === activeTabId);
-
   return (
     <div className={`flex flex-col h-full bg-vscode-bg ${className}`}>
       {/* Enhanced Tab Bar */}
@@ -423,7 +421,7 @@ export const TabLayout: React.FC<TabLayoutProps> = ({
             <button
               onClick={onNewTab}
               className="px-3 py-2 text-vscode-fg-muted hover:text-vscode-fg hover:bg-vscode-button-hover transition-colors"
-              title="New Tab (Ctrl+T)"
+              title="New Tab"
             >
               <span className="text-sm">+</span>
             </button>

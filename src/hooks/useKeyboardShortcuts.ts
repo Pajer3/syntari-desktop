@@ -40,15 +40,17 @@ export interface ShortcutHandler {
 }
 
 // ================================
-// KEYBOARD SHORTCUTS HOOK
+// SINGLETON KEYBOARD SHORTCUTS MANAGER
 // ================================
 
-export const useKeyboardShortcuts = () => {
-  const [shortcuts, setShortcuts] = useState<Record<string, Record<string, KeyboardShortcut>>>({});
-  const [handlers, setHandlers] = useState<Record<string, ShortcutHandler>>({});
+class KeyboardShortcutsManager {
+  private shortcuts: Record<string, Record<string, KeyboardShortcut>> = {};
+  private handlers: Record<string, ShortcutHandler> = {};
+  private isInitialized = false;
 
-  // Load shortcuts from config on mount
-  useEffect(() => {
+  initialize() {
+    if (this.isInitialized) return;
+    
     const loadedShortcuts: Record<string, Record<string, KeyboardShortcut>> = {};
     
     Object.entries(keyboardConfig.categories).forEach(([categoryId, category]) => {
@@ -57,29 +59,71 @@ export const useKeyboardShortcuts = () => {
       }
     });
     
-    setShortcuts(loadedShortcuts);
-    console.log('🎮 Loaded keyboard shortcuts from config:', loadedShortcuts);
-  }, []);
+    this.shortcuts = loadedShortcuts;
+    this.isInitialized = true;
+    console.log('🎮 Initialized keyboard shortcuts manager:', loadedShortcuts);
+  }
 
-  // Register a handler for a specific shortcut
-  const registerHandler = useCallback((shortcutId: string, handler: ShortcutHandler) => {
-    setHandlers(prev => ({
-      ...prev,
-      [shortcutId]: handler,
-    }));
-  }, []);
+  getShortcuts() {
+    this.initialize();
+    return this.shortcuts;
+  }
 
-  // Unregister a handler
-  const unregisterHandler = useCallback((shortcutId: string) => {
-    setHandlers(prev => {
-      const newHandlers = { ...prev };
-      delete newHandlers[shortcutId];
-      return newHandlers;
+  registerHandler(shortcutId: string, handler: ShortcutHandler) {
+    this.handlers[shortcutId] = handler;
+    console.log(`🎮 Registered handler for: ${shortcutId}`);
+  }
+
+  unregisterHandler(shortcutId: string) {
+    delete this.handlers[shortcutId];
+    console.log(`🎮 Unregistered handler for: ${shortcutId}`);
+  }
+
+  handleKeyboard(event: KeyboardEvent): boolean {
+    this.initialize();
+    
+    // Debug logging for Ctrl+P specifically
+    if (event.ctrlKey && event.key.toLowerCase() === 'p') {
+      console.log('🎮 Ctrl+P detected, checking handlers...');
+      console.log('🎮 Available handlers:', Object.keys(this.handlers));
+    }
+    
+    // Find matching shortcuts
+    const matches: string[] = [];
+    
+    Object.entries(this.shortcuts).forEach(([categoryId, categoryShortcuts]) => {
+      Object.entries(categoryShortcuts).forEach(([shortcutId, shortcut]) => {
+        if (shortcut.implemented && this.matchesShortcut(event, shortcut.key)) {
+          const fullId = `${categoryId}.${shortcutId}`;
+          matches.push(fullId);
+          
+          // Debug logging for matches
+          if (event.ctrlKey && event.key.toLowerCase() === 'p') {
+            console.log(`🎮 Found match: ${fullId} for shortcut ${shortcut.key}`);
+          }
+        }
+      });
     });
-  }, []);
 
-  // Check if a keyboard event matches a shortcut
-  const matchesShortcut = useCallback((event: KeyboardEvent, shortcutKey: string): boolean => {
+    // Execute handlers for matches
+    let handled = false;
+    matches.forEach(shortcutId => {
+      const handler = this.handlers[shortcutId];
+      if (handler) {
+        console.log(`🎮 Executing handler for: ${shortcutId}`);
+        const result = handler(event);
+        if (result !== false) {
+          handled = true;
+        }
+      } else {
+        console.warn(`🎮 No handler found for matched shortcut: ${shortcutId}`);
+      }
+    });
+
+    return handled;
+  }
+
+  matchesShortcut(event: KeyboardEvent, shortcutKey: string): boolean {
     const parts = shortcutKey.toLowerCase().split('+');
     const modifiers = parts.slice(0, -1);
     const key = parts[parts.length - 1];
@@ -103,48 +147,51 @@ export const useKeyboardShortcuts = () => {
     const normalizedShortcutKey = key.toLowerCase();
 
     return normalizedEventKey === normalizedShortcutKey;
+  }
+
+  getShortcut(category: string, shortcutId: string): KeyboardShortcut | null {
+    this.initialize();
+    return this.shortcuts[category]?.[shortcutId] || null;
+  }
+}
+
+// Singleton instance
+const keyboardManager = new KeyboardShortcutsManager();
+
+// ================================
+// KEYBOARD SHORTCUTS HOOK
+// ================================
+
+export const useKeyboardShortcuts = () => {
+  const [, forceUpdate] = useState({});
+  
+  // Initialize only once
+  useEffect(() => {
+    keyboardManager.initialize();
+    forceUpdate({}); // Force re-render after initialization
   }, []);
 
-  // Handle keyboard events
+  const registerHandler = useCallback((shortcutId: string, handler: ShortcutHandler) => {
+    keyboardManager.registerHandler(shortcutId, handler);
+  }, []);
+
+  const unregisterHandler = useCallback((shortcutId: string) => {
+    keyboardManager.unregisterHandler(shortcutId);
+  }, []);
+
   const handleKeyboard = useCallback((event: KeyboardEvent): boolean => {
-    // Find matching shortcuts
-    const matches: string[] = [];
-    
-    Object.entries(shortcuts).forEach(([categoryId, categoryShortcuts]) => {
-      Object.entries(categoryShortcuts).forEach(([shortcutId, shortcut]) => {
-        if (shortcut.implemented && matchesShortcut(event, shortcut.key)) {
-          const fullId = `${categoryId}.${shortcutId}`;
-          matches.push(fullId);
-        }
-      });
-    });
+    return keyboardManager.handleKeyboard(event);
+  }, []);
 
-    // Execute handlers for matches
-    let handled = false;
-    matches.forEach(shortcutId => {
-      const handler = handlers[shortcutId];
-      if (handler) {
-        const result = handler(event);
-        if (result !== false) {
-          handled = true;
-        }
-      }
-    });
-
-    return handled;
-  }, [shortcuts, handlers, matchesShortcut]);
-
-  // Get shortcut by category and id
   const getShortcut = useCallback((category: string, shortcutId: string): KeyboardShortcut | null => {
-    return shortcuts[category]?.[shortcutId] || null;
-  }, [shortcuts]);
+    return keyboardManager.getShortcut(category, shortcutId);
+  }, []);
 
-  // Get all shortcuts for a category
   const getCategoryShortcuts = useCallback((category: string): Record<string, KeyboardShortcut> => {
+    const shortcuts = keyboardManager.getShortcuts();
     return shortcuts[category] || {};
-  }, [shortcuts]);
+  }, []);
 
-  // Get human-readable shortcut description
   const getShortcutDisplay = useCallback((shortcutKey: string): string => {
     return shortcutKey
       .replace(/ctrl/gi, '⌘')
@@ -156,13 +203,13 @@ export const useKeyboardShortcuts = () => {
       .replace(/pagedown/gi, 'Page Down');
   }, []);
 
-  // Check if shortcut is implemented
   const isImplemented = useCallback((category: string, shortcutId: string): boolean => {
-    return shortcuts[category]?.[shortcutId]?.implemented || false;
-  }, [shortcuts]);
+    const shortcut = keyboardManager.getShortcut(category, shortcutId);
+    return shortcut?.implemented || false;
+  }, []);
 
-  // Get all implemented shortcuts
   const getImplementedShortcuts = useCallback(() => {
+    const shortcuts = keyboardManager.getShortcuts();
     const implemented: Record<string, KeyboardShortcut> = {};
     
     Object.entries(shortcuts).forEach(([categoryId, categoryShortcuts]) => {
@@ -174,10 +221,14 @@ export const useKeyboardShortcuts = () => {
     });
 
     return implemented;
-  }, [shortcuts]);
+  }, []);
+
+  const matchesShortcut = useCallback((event: KeyboardEvent, shortcutKey: string): boolean => {
+    return keyboardManager.matchesShortcut(event, shortcutKey);
+  }, []);
 
   return {
-    shortcuts,
+    shortcuts: keyboardManager.getShortcuts(),
     registerHandler,
     unregisterHandler,
     handleKeyboard,

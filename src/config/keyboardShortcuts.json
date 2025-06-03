@@ -108,10 +108,11 @@
         "quickOpen": {
           "key": "Ctrl+P",
           "description": "Quick file open with fuzzy search",
-          "implemented": false,
-          "planned": true,
+          "implemented": true,
+          "planned": false,
           "priority": "P0",
-          "nextImplementation": true
+          "nextImplementation": false,
+          "component": "CodeEditor"
         },
         "jumpToMatchingBracket": {
           "key": "Ctrl+]",

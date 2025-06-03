@@ -523,29 +523,106 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
 
   // File saving
   async saveFile(filePath: string, content: string): Promise<void> {
-    console.log('💾 Saving file:', filePath);
+    try {
+      console.log('💾 Saving file:', filePath);
+      
+      await invoke('write_file', {
+        path: filePath,
+        content: content
+      });
+      
+      console.log('✅ File saved successfully');
+    } catch (error) {
+      console.error('❌ Failed to save file:', error);
+      throw new Error(`Failed to save file: ${error}`);
+    }
+  }
+
+  // Get all files recursively for QuickOpen feature
+  async getAllFiles(rootPath: string): Promise<FileNode[]> {
+    console.log('🔍 Loading all files for QuickOpen...');
+    
+    const allFiles: FileNode[] = [];
+    const visited = new Set<string>();
+    
+    // Recursive file collection with depth and pattern limits
+    const collectFiles = async (currentPath: string, depth: number = 0): Promise<void> => {
+      // Prevent infinite loops and excessive depth
+      if (visited.has(currentPath) || depth > 8) return;
+      visited.add(currentPath);
+      
+      try {
+        const items = await this.loadFolderContents(currentPath, false);
+        
+        for (const item of items) {
+          if (!item.isDirectory) {
+            // Add file to collection
+            allFiles.push(item);
+          } else if (depth < 8 && !this.shouldSkipDirectory(item.name)) {
+            // Recursively scan subdirectory
+            await collectFiles(item.path, depth + 1);
+          }
+        }
+      } catch (error) {
+        // Continue on permission errors or other issues
+        console.warn(`⚠️ Skipping directory ${currentPath}:`, error);
+      }
+    };
     
     try {
-      const result = await invoke<{
-        success: boolean;
-        data?: string;
-        error?: string;
-      }>('save_file', { path: filePath, content });
+      // Start with root directory
+      await collectFiles(rootPath);
       
-      if (!result.success) {
-        throw new Error(result.error || `Failed to save file: ${filePath}`);
-      }
+      // Sort files by path for consistent ordering
+      allFiles.sort((a, b) => a.path.localeCompare(b.path));
       
-      console.log('✅ File saved successfully:', filePath);
-      
-      // Clear cache for parent directory to reflect changes
-      const parentDir = filePath.split('/').slice(0, -1).join('/');
-      this.clearFolderCache(parentDir);
+      console.log(`🔍 Collected ${allFiles.length} files recursively for QuickOpen`);
+      return allFiles;
       
     } catch (error) {
-      console.error('❌ Error saving file:', error);
-      throw error instanceof Error ? error : new Error(`Unknown error saving ${filePath}`);
+      console.error('❌ Error during recursive file collection:', error);
+      
+      // Final fallback: Just get root files
+      try {
+        const rootItems = await this.loadRootItems(rootPath, false);
+        const filesOnly = rootItems.filter(item => !item.isDirectory);
+        console.log(`🔍 Final fallback: Found ${filesOnly.length} root files for QuickOpen`);
+        return filesOnly;
+      } catch (fallbackError) {
+        console.error('❌ All fallbacks failed:', fallbackError);
+        return [];
+      }
     }
+  }
+
+  // Helper to skip common directories that should not appear in QuickOpen
+  private shouldSkipDirectory(dirName: string): boolean {
+    const skipPatterns = [
+      'node_modules',
+      '.git',
+      '.svn',
+      '.hg',
+      'target',        // Rust
+      'build',
+      'dist',
+      '.next',         // Next.js
+      '.nuxt',         // Nuxt.js
+      '__pycache__',   // Python
+      '.pytest_cache',
+      'venv',
+      '.venv',
+      '.cargo',        // Rust
+      '.gradle',       // Java
+      '.maven',
+      'vendor',        // Various package managers
+      '.idea',         // JetBrains IDEs
+      '.vscode',       // VS Code settings (optional)
+      'coverage',
+      '.nyc_output',
+      '.DS_Store'
+    ];
+    
+    return skipPatterns.includes(dirName) || dirName.startsWith('.');
   }
 }
 
