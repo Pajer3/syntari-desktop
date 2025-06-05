@@ -1,6 +1,8 @@
 // Syntari AI IDE - File Management Service
 // Professional file operations with error handling and validation
 
+import { invoke } from '@tauri-apps/api/core';
+
 export interface FileCreateOptions {
   fileName: string;
   content?: string;
@@ -23,6 +25,12 @@ export interface FileOpenResult {
   lastModified: Date;
 }
 
+interface TauriResult<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
+
 export class FileManagementService {
   private static instance: FileManagementService;
 
@@ -31,6 +39,22 @@ export class FileManagementService {
       FileManagementService.instance = new FileManagementService();
     }
     return FileManagementService.instance;
+  }
+
+  /**
+   * Check if a file exists on the filesystem
+   */
+  async fileExists(filePath: string): Promise<boolean> {
+    try {
+      const result = await invoke<TauriResult<string>>('debug_test_command', { 
+        testPath: filePath 
+      });
+      
+      return result.success && result.data?.includes('Exists: true');
+    } catch (error) {
+      // If the command fails, assume file doesn't exist
+      return false;
+    }
   }
 
   /**
@@ -48,26 +72,38 @@ export class FileManagementService {
       // Construct full file path
       const fullPath = path ? `${path}/${fileName}` : fileName;
 
-      // Check if file already exists (simplified implementation)
-      // In real implementation, this would check the actual file system
-      const exists = false; // TODO: Implement actual file existence check
+      // Check if file already exists using actual filesystem
+      const exists = await this.fileExists(fullPath);
       
       if (exists && !overwrite) {
         throw new Error(`File '${fileName}' already exists`);
       }
 
-      // Create the file
-      // TODO: Replace with actual file system API
-      const mockResult: FileOpenResult = {
+      // Create the file using Tauri command
+      const result = await invoke<string>('create_file', {
+        path: fullPath,
+        content: content
+      });
+
+      // Read the file back to get actual metadata
+      const readResult = await invoke<TauriResult<any>>('read_file_smart', { 
+        path: fullPath 
+      });
+
+      if (!readResult.success || !readResult.data) {
+        throw new Error('Failed to read created file');
+      }
+
+      const fileResult: FileOpenResult = {
         path: fullPath,
         content: content,
         name: fileName,
-        size: new Blob([content]).size,
+        size: readResult.data.size || new Blob([content]).size,
         lastModified: new Date()
       };
 
       console.log('✅ File created successfully:', fullPath);
-      return mockResult;
+      return fileResult;
     } catch (error) {
       console.error('❌ Failed to create file:', error);
       throw error;
@@ -93,17 +129,31 @@ export class FileManagementService {
       // Construct full file path
       const fullPath = `${newFilePath}/${newFileName}`;
 
-      // TODO: Replace with actual file system API
-      const mockResult: FileOpenResult = {
+      // Save the file using Tauri command
+      const result = await invoke<TauriResult<string>>('save_file', {
+        path: fullPath,
+        content: content
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to save file');
+      }
+
+      // Read the file back to get actual metadata
+      const readResult = await invoke<TauriResult<any>>('read_file_smart', { 
+        path: fullPath 
+      });
+
+      const fileResult: FileOpenResult = {
         path: fullPath,
         content: content,
         name: newFileName,
-        size: new Blob([content]).size,
+        size: readResult.data?.size || new Blob([content]).size,
         lastModified: new Date()
       };
 
       console.log('✅ File saved as:', fullPath);
-      return mockResult;
+      return fileResult;
     } catch (error) {
       console.error('❌ Failed to save file as:', error);
       throw error;
@@ -119,20 +169,39 @@ export class FileManagementService {
         throw new Error('File path cannot be empty');
       }
 
-      // TODO: Replace with actual file system API
-      // This is a mock implementation
-      const mockContent = `// Mock content for ${filePath}\n// This would be loaded from the actual file system\n\nconsole.log('Hello from ${filePath.split('/').pop()}!');`;
+      // Read the file using Tauri command
+      const result = await invoke<TauriResult<any>>('read_file_smart', { 
+        path: filePath 
+      });
+
+      if (!result.success || !result.data) {
+        throw new Error(result.error || 'Failed to read file');
+      }
+
+      const data = result.data;
       
-      const mockResult: FileOpenResult = {
+      if (data.is_too_large) {
+        throw new Error('File is too large to open');
+      }
+
+      if (data.is_binary) {
+        throw new Error('Cannot open binary file in text editor');
+      }
+
+      if (!data.content) {
+        throw new Error('File has no readable content');
+      }
+
+      const fileResult: FileOpenResult = {
         path: filePath,
-        content: mockContent,
+        content: data.content,
         name: filePath.split('/').pop() || 'unknown',
-        size: new Blob([mockContent]).size,
+        size: data.size || 0,
         lastModified: new Date()
       };
 
       console.log('✅ File opened successfully:', filePath);
-      return mockResult;
+      return fileResult;
     } catch (error) {
       console.error('❌ Failed to open file:', error);
       throw error;

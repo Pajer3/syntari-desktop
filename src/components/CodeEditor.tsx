@@ -22,8 +22,9 @@ import { QuickOpen } from './QuickOpen';
 import { getFileIcon } from '../utils/editorUtils';
 import { SaveAsDialog } from './editor/dialogs/SaveAsDialog';
 import { OpenFileDialog } from './editor/dialogs/OpenFileDialog';
-import { NewFileDialog } from './editor/dialogs/NewFileDialog';
 import { FileManagementService } from '../services/fileManagementService';
+import { fileSystemService } from '../services/fileSystemService';
+
 
 // ================================
 // TYPES
@@ -98,13 +99,15 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   }>({ isOpen: false, tabIndex: -1, fileName: '' });
 
   // File Management Dialog States
-  const [isNewFileDialogOpen, setIsNewFileDialogOpen] = useState(false);
   const [isSaveAsDialogOpen, setIsSaveAsDialogOpen] = useState(false);
   const [isOpenFileDialogOpen, setIsOpenFileDialogOpen] = useState(false);
   const [recentFilePaths, setRecentFilePaths] = useState<string[]>([]);
   
   // File Management Service
   const fileService = useMemo(() => FileManagementService.getInstance(), []);
+
+  // Unsaved files counter for unique naming
+  const [unsavedFileCounter, setUnsavedFileCounter] = useState(1);
 
   // Get active tab
   const activeTab = activeTabIndex >= 0 ? fileTabs[activeTabIndex] : null;
@@ -210,7 +213,16 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     }
   }, [activeTabIndex, fileTabs, fileCache, onFileChange]);
 
-  // Handle saving
+  // Handle Save As - needs to be declared before handleSave
+  const handleSaveAs = useCallback(() => {
+    if (!activeTab) {
+      console.warn('No active tab to save');
+      return;
+    }
+    setIsSaveAsDialogOpen(true);
+  }, [activeTab]);
+
+  // Enhanced save function with conflict detection and proper file creation
   const handleSave = useCallback(async (tabIndex?: number) => {
     const targetIndex = tabIndex ?? activeTabIndex;
     if (targetIndex < 0) return;
@@ -219,6 +231,23 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     if (!tab) return;
 
     try {
+      // Check if this is an unsaved file (temporary path)
+      if (tab.file.path.startsWith('<unsaved>/')) {
+        // This is an unsaved file, need to save as new file
+        handleSaveAs();
+        return;
+      }
+
+      // Check if file exists and we're not the owner
+      const existingTabWithSamePath = fileTabs.find((t, i) => 
+        i !== targetIndex && t.file.path === tab.file.path
+      );
+      
+      if (existingTabWithSamePath) {
+        throw new Error(`Cannot save: Another tab is already editing "${tab.file.path}"`);
+      }
+
+      // Regular save for existing files
       const editorFile: EditorFile = {
         ...tab.file,
         content: tab.content,
@@ -237,12 +266,19 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           index === targetIndex ? { ...t, isModified: false } : t
         ));
         fileCache.setCachedContent(editorFile.path, tab.content);
+        
+        // Manually trigger file system cache invalidation for immediate updates
+        const parentDir = tab.file.path.substring(0, tab.file.path.lastIndexOf('/'));
+        fileSystemService.invalidateCache(parentDir);
+        
+        // Manually trigger file system event to update file explorer immediately
+        fileSystemService.handleFileSystemEvent('modified', tab.file.path, false);
       }
     } catch (error) {
       console.error('Failed to save file:', error);
       setCurrentError(error as Error);
     }
-  }, [activeTabIndex, fileTabs, fileSaver, fileCache]);
+  }, [activeTabIndex, fileTabs, fileSaver, fileCache, handleSaveAs]);
 
   // Handle AI requests
   const handleAskAI = useCallback(() => {
@@ -387,67 +423,75 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
 
   // File Management Handlers
   const handleNewFile = useCallback(() => {
-    setIsNewFileDialogOpen(true);
-  }, []);
-
-  const handleCreateFile = useCallback(async (fileName: string, content?: string) => {
-    try {
-      const result = await fileService.createFile({
-        fileName,
-        content: content || '',
-        path: currentDirectory // Use current directory instead of generic project path
-      });
-
-      // Convert FileOpenResult to FileInfo
-      const fileInfo: FileInfo = {
-        path: result.path,
-        name: result.name,
-        extension: result.name.split('.').pop() || '',
-        size: result.size,
-        lastModified: result.lastModified.getTime(),
-        content: result.content,
-        language: getLanguageFromFileName(result.name),
-      };
-
-      // Add the new file as a tab
-      const newTab: FileTab = {
-        file: fileInfo,
-        content: result.content,
-        isModified: false,
-        isPinned: false,
-      };
-
-      setFileTabs(prev => [...prev, newTab]);
-      setActiveTabIndex(fileTabs.length);
-
-      // Add to recent files
-      await fileService.addToRecentFiles(result.path);
-      setRecentFilePaths(prev => [result.path, ...prev.slice(0, 9)]);
-
-      // Force file explorer refresh to show the new file
-      setFileExplorerKey(prev => prev + 1);
-
-      // Notify parent
-      onFileChange?.(fileInfo, result.content);
-      
-    } catch (error) {
-      console.error('Failed to create file:', error);
-      throw error;
-    }
-  }, [fileService, fileTabs, onFileChange, currentDirectory]);
-
-  const handleSaveAs = useCallback(() => {
-    if (!activeTab) {
-      console.warn('No active tab to save');
+    // Create an unsaved file in memory with unique temporary name
+    const tempFileName = `Untitled-${unsavedFileCounter}`;
+    const tempPath = `<unsaved>/${tempFileName}`;
+    
+    // Check if this temp file is already open
+    const existingTempTab = fileTabs.find(tab => tab.file.path === tempPath);
+    if (existingTempTab) {
+      // Focus the existing unsaved tab
+      const index = fileTabs.indexOf(existingTempTab);
+      setActiveTabIndex(index);
       return;
     }
-    setIsSaveAsDialogOpen(true);
-  }, [activeTab]);
+    
+    // Create new unsaved file tab
+    const fileInfo: FileInfo = {
+      path: tempPath,
+      name: tempFileName,
+      extension: '',
+      size: 0,
+      lastModified: Date.now(),
+      content: '',
+      language: 'plaintext',
+    };
+
+    const newTab: FileTab = {
+      file: fileInfo,
+      content: '',
+      isModified: true, // Mark as modified since it's unsaved
+      isPinned: false,
+    };
+
+    setFileTabs(prev => [...prev, newTab]);
+    setActiveTabIndex(fileTabs.length);
+    setUnsavedFileCounter(prev => prev + 1);
+
+    // Notify parent
+    onFileChange?.(fileInfo, '');
+  }, [fileTabs, unsavedFileCounter, onFileChange]);
+
+  const handleCreateFile = useCallback(async (fileName: string, content?: string) => {
+    // This is only called from the NewFileDialog, which we'll remove
+    // Instead, we'll handle file creation through the save process
+    console.warn('handleCreateFile should not be called directly anymore');
+  }, []);
 
   const handleSaveAsFile = useCallback(async (filePath: string, fileName: string) => {
     try {
       if (!activeTab) {
         throw new Error('No active tab to save');
+      }
+
+      const fullPath = `${filePath}/${fileName}`;
+      
+      // Check if a file with this exact path already exists in another tab
+      const existingTab = fileTabs.find((tab, index) => 
+        index !== activeTabIndex && tab.file.path === fullPath
+      );
+      
+      if (existingTab) {
+        throw new Error(`Cannot save: File "${fullPath}" is already open in another tab`);
+      }
+
+      // Check if file exists on disk using proper file existence check
+      const fileExists = await fileService.fileExists(fullPath);
+      if (fileExists) {
+        const confirmed = confirm(`File "${fileName}" already exists. Do you want to overwrite it?`);
+        if (!confirmed) {
+          return;
+        }
       }
 
       const result = await fileService.saveFileAs({
@@ -468,7 +512,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         language: getLanguageFromFileName(result.name),
       };
 
-      // Update the tab with new file info
+      // Update the tab with new file info (converting from unsaved to saved)
       setFileTabs(prev => prev.map((tab, index) => 
         index === activeTabIndex 
           ? { ...tab, file: fileInfo, isModified: false }
@@ -482,6 +526,13 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       // Force file explorer refresh to show the saved file
       setFileExplorerKey(prev => prev + 1);
 
+      // Manually trigger file system cache invalidation for immediate updates
+      const parentDir = result.path.substring(0, result.path.lastIndexOf('/'));
+      fileSystemService.invalidateCache(parentDir);
+      
+      // Manually trigger file system event to update file explorer immediately
+      fileSystemService.handleFileSystemEvent('created', result.path, false);
+
       // Notify parent
       onFileChange?.(fileInfo, result.content);
       
@@ -489,7 +540,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       console.error('Failed to save file as:', error);
       throw error;
     }
-  }, [activeTab, activeTabIndex, fileService, onFileChange]);
+  }, [activeTab, activeTabIndex, fileTabs, fileService, onFileChange]);
 
   const handleOpenFile = useCallback(() => {
     setIsOpenFileDialogOpen(true);
@@ -574,6 +625,13 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   // Helper Functions
   const getCurrentFileDirectory = useCallback((): string => {
     if (activeTab?.file.path) {
+      // Check if this is an unsaved file
+      if (activeTab.file.path.startsWith('<unsaved>/')) {
+        // For unsaved files, return the current directory or project root
+        return currentDirectory || safeProject.rootPath || '';
+      }
+      
+      // For saved files, extract directory from path
       const lastSlashIndex = activeTab.file.path.lastIndexOf('/');
       if (lastSlashIndex > 0) {
         return activeTab.file.path.substring(0, lastSlashIndex);
@@ -586,6 +644,19 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     const fileInfo = fileService.getFileTypeInfo(fileName);
     return fileInfo.language;
   }, [fileService]);
+
+  // Get current file name for Save As dialog
+  const getCurrentFileName = useCallback((): string => {
+    if (!activeTab) return '';
+    
+    // For unsaved files, provide a better default name
+    if (activeTab.file.path.startsWith('<unsaved>/')) {
+      return ''; // Let the user enter a name from scratch
+    }
+    
+    // For saved files, use the current name
+    return activeTab.file.name;
+  }, [activeTab]);
 
   // Load recent files on mount
   useEffect(() => {
@@ -905,46 +976,56 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         {fileTabs.length > 0 && (
           <div className="flex items-center bg-vscode-tab-inactive border-b border-vscode-border">
             <div className="flex overflow-x-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-vscode-scrollbar">
-              {fileTabs.map((tab, index) => (
-                <div
-                  key={tab.file.path}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, index)}
-                  onDragEnd={handleDragEnd}
-                  onDragEnter={(e) => handleDragEnter(e, index)}
-                  onDragOver={(e) => handleDragOver(e, index)}
-                  onDragLeave={handleDragLeave}
-                  onDrop={(e) => handleDrop(e, index)}
-                  className={`
-                    group flex items-center px-3 py-2 text-sm border-r border-vscode-border
-                    cursor-pointer min-w-0 flex-shrink-0 relative
-                    ${index === activeTabIndex 
-                      ? 'bg-vscode-tab-active text-vscode-fg' 
-                      : 'bg-vscode-tab-inactive text-vscode-fg-muted hover:bg-vscode-tab-hover'
-                    }
-                    ${dragOverIndex === index ? 'border-l-2 border-l-vscode-accent' : ''}
-                    ${draggedTabIndex === index ? 'opacity-50' : ''}
-                  `}
-                  onClick={() => handleTabClick(index)}
-                  title={tab.file.path}
-                >
-                  <span className="mr-2 flex-shrink-0">{getFileIcon(tab.file.extension)}</span>
-                  <span className="truncate">
-                    {tab.file.name}
-                    {tab.isModified && <span className="ml-1 text-vscode-accent">●</span>}
-                  </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleTabClose(index);
-                    }}
-                    className="ml-2 opacity-0 group-hover:opacity-100 hover:bg-vscode-button-hover rounded p-1 transition-opacity"
-                    title="Close"
+              {fileTabs.map((tab, index) => {
+                const isUnsaved = tab.file.path.startsWith('<unsaved>/');
+                const displayName = isUnsaved ? tab.file.name : tab.file.name;
+                const tabTitle = isUnsaved ? `${tab.file.name} (unsaved)` : tab.file.path;
+                
+                return (
+                  <div
+                    key={tab.file.path}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, index)}
+                    onDragEnd={handleDragEnd}
+                    onDragEnter={(e) => handleDragEnter(e, index)}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, index)}
+                    className={`
+                      group flex items-center px-3 py-2 text-sm border-r border-vscode-border
+                      cursor-pointer min-w-0 flex-shrink-0 relative
+                      ${index === activeTabIndex 
+                        ? 'bg-vscode-tab-active text-vscode-fg' 
+                        : 'bg-vscode-tab-inactive text-vscode-fg-muted hover:bg-vscode-tab-hover'
+                      }
+                      ${dragOverIndex === index ? 'border-l-2 border-l-vscode-accent' : ''}
+                      ${draggedTabIndex === index ? 'opacity-50' : ''}
+                      ${isUnsaved ? 'italic' : ''}
+                    `}
+                    onClick={() => handleTabClick(index)}
+                    title={tabTitle}
                   >
-                    ✕
-                  </button>
-                </div>
-              ))}
+                    <span className="mr-2 flex-shrink-0">
+                      {isUnsaved ? '📄' : getFileIcon(tab.file.extension)}
+                    </span>
+                    <span className="truncate">
+                      {displayName}
+                      {tab.isModified && <span className="ml-1 text-vscode-accent">●</span>}
+                      {isUnsaved && <span className="ml-1 text-vscode-fg-muted text-xs">(unsaved)</span>}
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleTabClose(index);
+                      }}
+                      className="ml-2 opacity-0 group-hover:opacity-100 hover:bg-vscode-button-hover rounded p-1 transition-opacity"
+                      title="Close"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -1044,18 +1125,11 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       />
 
       {/* File Management Dialogs */}
-      <NewFileDialog
-        isOpen={isNewFileDialogOpen}
-        onClose={() => setIsNewFileDialogOpen(false)}
-        onCreateFile={handleCreateFile}
-        currentPath={currentDirectory}
-      />
-
       <SaveAsDialog
         isOpen={isSaveAsDialogOpen}
         onClose={() => setIsSaveAsDialogOpen(false)}
         onSaveAs={handleSaveAsFile}
-        currentFileName={activeTab?.file.name}
+        currentFileName={getCurrentFileName()}
         currentPath={getCurrentFileDirectory()}
         projectRootPath={safeProject.rootPath}
       />
