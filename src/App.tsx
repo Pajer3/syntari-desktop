@@ -423,6 +423,7 @@ const App: React.FC = () => {
                     activeTabId={tabManager.activeTabId}
                     onTabChange={tabManager.switchToTab}
                     onTabClose={tabManager.removeTab}
+                    onTabReorder={tabManager.reorderTabs}
                     className="h-full"
                   />
                 );

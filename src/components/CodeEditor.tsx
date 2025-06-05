@@ -17,6 +17,7 @@ import { ErrorNotification } from './editor/ErrorNotification';
 import { MonacoEditorWrapper } from './editor/MonacoEditorWrapper';
 import { SearchPanel } from './editor/search/SearchPanel';
 import { UnsavedChangesDialog } from './editor/UnsavedChangesDialog';
+import { GoToLineDialog } from './editor/GoToLineDialog';
 import { QuickOpen } from './QuickOpen';
 import { getFileIcon } from '../utils/editorUtils';
 
@@ -54,6 +55,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const [currentError, setCurrentError] = useState<Error | null>(null);
   const [draggedTabIndex, setDraggedTabIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [showGoToLine, setShowGoToLine] = useState(false);
   
   // Custom hooks for focused functionality
   const fileCache = useFileCache();
@@ -63,6 +65,9 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   
   // Refs for optimization
   const contentChangeTimeoutRef = useRef<number>();
+  const goToLineRef = useRef<((lineNumber: number, column?: number) => void) | null>(null);
+  const getCurrentLineRef = useRef<(() => number) | null>(null);
+  const getTotalLinesRef = useRef<(() => number) | null>(null);
   
   // Unsaved changes dialog
   const [unsavedDialog, setUnsavedDialog] = useState<{
@@ -211,6 +216,21 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     });
   }, [activeTab, onRequestAI]);
 
+  // Handle Go to Line
+  const handleGoToLine = useCallback((lineNumber: number, column?: number) => {
+    if (goToLineRef.current) {
+      goToLineRef.current(lineNumber, column);
+    } else {
+      console.warn('Monaco editor not ready for navigation');
+    }
+  }, []);
+
+  const handleShowGoToLine = useCallback(() => {
+    if (activeTab) {
+      setShowGoToLine(true);
+    }
+  }, [activeTab]);
+
   // Handle tab closing with unsaved changes check
   const handleTabClose = useCallback(async (index: number) => {
     const tab = fileTabs[index];
@@ -247,6 +267,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
     setDraggedTabIndex(index);
     e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', index.toString());
   }, []);
 
   const handleDragEnd = useCallback(() => {
@@ -254,15 +275,29 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     setDragOverIndex(null);
   }, []);
 
-  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
+  const handleDragEnter = useCallback((e: React.DragEvent, index: number) => {
     e.preventDefault();
     setDragOverIndex(index);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverIndex(index);
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverIndex(null);
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent, dropIndex: number) => {
     e.preventDefault();
     
-    if (draggedTabIndex === null || draggedTabIndex === dropIndex) return;
+    if (draggedTabIndex === null || draggedTabIndex === dropIndex) {
+      setDraggedTabIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
     
     setFileTabs(prev => {
       const newTabs = [...prev];
@@ -335,6 +370,11 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
             e.stopPropagation();
             handleAskAI();
             break;
+          case 'g':
+            e.preventDefault();
+            e.stopPropagation();
+            handleShowGoToLine();
+            break;
           case 'p':
             // QuickOpen (Ctrl+P) - Let useShortcut handle this
             // Remove this case to avoid conflicts
@@ -405,6 +445,14 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     setShowQuickOpen(true);
     return true;
   }, []);
+
+  // Go to Line (Ctrl+G) shortcut
+  useShortcut('navigation', 'goToLine', (e) => {
+    if (fileTabs.length === 0) return false;
+    e.preventDefault?.();
+    handleShowGoToLine();
+    return true;
+  }, [fileTabs, handleShowGoToLine]);
 
   // QuickOpen handlers
   const handleQuickOpenFileSelect = useCallback(async (node: FileNode) => {
@@ -513,7 +561,9 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
                 draggable
                 onDragStart={(e) => handleDragStart(e, index)}
                 onDragEnd={handleDragEnd}
+                onDragEnter={(e) => handleDragEnter(e, index)}
                 onDragOver={(e) => handleDragOver(e, index)}
+                onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDrop(e, index)}
                 onClick={() => handleTabClick(index)}
                 className={`
@@ -577,6 +627,9 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
               onSave={() => handleSave()}
               onAskAI={handleAskAI}
               isLoading={fileLoader.isLoading}
+              goToLineRef={goToLineRef}
+              getCurrentLineRef={getCurrentLineRef}
+              getTotalLinesRef={getTotalLinesRef}
             />
           ) : (
             <EmptyEditorState project={project} />
@@ -607,6 +660,15 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         onSave={handleDialogSave}
         onDontSave={handleDialogDontSave}
         onCancel={handleDialogCancel}
+      />
+
+      {/* Go to Line Dialog */}
+      <GoToLineDialog
+        isOpen={showGoToLine}
+        onClose={() => setShowGoToLine(false)}
+        onGoToLine={handleGoToLine}
+        currentLineNumber={getCurrentLineRef.current ? getCurrentLineRef.current() : 1}
+        totalLines={getTotalLinesRef.current ? getTotalLinesRef.current() : 100}
       />
     </div>
   );

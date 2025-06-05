@@ -17,6 +17,9 @@ interface MonacoEditorWrapperProps {
   onSave: () => void;
   onAskAI: () => void;
   isLoading?: boolean;
+  goToLineRef?: React.MutableRefObject<((lineNumber: number, column?: number) => void) | null>;
+  getCurrentLineRef?: React.MutableRefObject<(() => number) | null>;
+  getTotalLinesRef?: React.MutableRefObject<(() => number) | null>;
 }
 
 export const MonacoEditorWrapper: React.FC<MonacoEditorWrapperProps> = ({
@@ -28,6 +31,9 @@ export const MonacoEditorWrapper: React.FC<MonacoEditorWrapperProps> = ({
   onSave,
   onAskAI,
   isLoading = false,
+  goToLineRef,
+  getCurrentLineRef,
+  getTotalLinesRef,
 }) => {
   const editorRef = useRef<any>(null);
 
@@ -88,8 +94,58 @@ export const MonacoEditorWrapper: React.FC<MonacoEditorWrapperProps> = ({
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, onSave);
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, onAskAI);
     
+    // Add Go to Line shortcut for testing (Ctrl+G)
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyG, () => {
+      console.log('Go to Line shortcut triggered from Monaco editor');
+    });
+    
     editor.focus();
   }, [perfConfig.enableMinimap, performanceMode, onSave, onAskAI]);
+
+  // Go to line handler
+  const handleGoToLine = useCallback((lineNumber: number, column?: number) => {
+    if (editorRef.current) {
+      const editor = editorRef.current;
+      // Set cursor position
+      const position = { lineNumber, column: column || 1 };
+      editor.setPosition(position);
+      // Reveal the line in the center of the editor
+      editor.revealLineInCenter(lineNumber);
+      // Focus the editor
+      editor.focus();
+    }
+  }, []);
+
+  // Get current line number
+  const getCurrentLine = useCallback(() => {
+    if (editorRef.current) {
+      const position = editorRef.current.getPosition();
+      return position ? position.lineNumber : 1;
+    }
+    return 1;
+  }, []);
+
+  // Get total line count
+  const getTotalLines = useCallback(() => {
+    if (editorRef.current) {
+      const model = editorRef.current.getModel();
+      return model ? model.getLineCount() : 1;
+    }
+    return 1;
+  }, []);
+
+  // Expose the goToLine method to parent component
+  React.useEffect(() => {
+    if (goToLineRef) {
+      goToLineRef.current = handleGoToLine;
+    }
+    if (getCurrentLineRef) {
+      getCurrentLineRef.current = getCurrentLine;
+    }
+    if (getTotalLinesRef) {
+      getTotalLinesRef.current = getTotalLines;
+    }
+  }, [handleGoToLine, getCurrentLine, getTotalLines, goToLineRef, getCurrentLineRef, getTotalLinesRef]);
 
   if (!selectedFile) {
     return null;
