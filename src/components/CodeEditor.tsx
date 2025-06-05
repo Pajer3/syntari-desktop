@@ -1,7 +1,7 @@
 // Syntari AI IDE - Enhanced Code Editor with Multi-Tab Support
 // Professional editor with VS Code-style tab management
 
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import type { ProjectContext, FileInfo } from '../types';
 import type { FileNode } from '../types/fileSystem';
 import { useFileCache, type EditorFile } from './editor/useFileCache';
@@ -20,6 +20,10 @@ import { UnsavedChangesDialog } from './editor/UnsavedChangesDialog';
 import { GoToLineDialog } from './editor/GoToLineDialog';
 import { QuickOpen } from './QuickOpen';
 import { getFileIcon } from '../utils/editorUtils';
+import { SaveAsDialog } from './editor/dialogs/SaveAsDialog';
+import { OpenFileDialog } from './editor/dialogs/OpenFileDialog';
+import { NewFileDialog } from './editor/dialogs/NewFileDialog';
+import { FileManagementService } from '../services/fileManagementService';
 
 // ================================
 // TYPES
@@ -47,6 +51,17 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   onFileChange,
   onRequestAI,
 }) => {
+  // Ensure project has required properties with defaults
+  const safeProject: ProjectContext = {
+    rootPath: project?.rootPath || '',
+    projectType: project?.projectType || 'unknown',
+    openFiles: project?.openFiles || [],
+    dependencies: project?.dependencies || [],
+    gitBranch: project?.gitBranch,
+    activeFramework: project?.activeFramework,
+    lastAnalyzed: project?.lastAnalyzed || Date.now(),
+  };
+
   // Core state
   const [fileTabs, setFileTabs] = useState<FileTab[]>([]);
   const [activeTabIndex, setActiveTabIndex] = useState<number>(-1);
@@ -56,6 +71,9 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const [draggedTabIndex, setDraggedTabIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [showGoToLine, setShowGoToLine] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [currentDirectory, setCurrentDirectory] = useState<string>(safeProject.rootPath || '');
+  const [fileExplorerKey, setFileExplorerKey] = useState<number>(0); // For forcing refresh
   
   // Custom hooks for focused functionality
   const fileCache = useFileCache();
@@ -68,6 +86,9 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const goToLineRef = useRef<((lineNumber: number, column?: number) => void) | null>(null);
   const getCurrentLineRef = useRef<(() => number) | null>(null);
   const getTotalLinesRef = useRef<(() => number) | null>(null);
+  const openFindRef = useRef<(() => void) | null>(null);
+  const openFindReplaceRef = useRef<(() => void) | null>(null);
+  const goToSymbolRef = useRef<(() => void) | null>(null);
   
   // Unsaved changes dialog
   const [unsavedDialog, setUnsavedDialog] = useState<{
@@ -76,25 +97,43 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     fileName: string;
   }>({ isOpen: false, tabIndex: -1, fileName: '' });
 
+  // File Management Dialog States
+  const [isNewFileDialogOpen, setIsNewFileDialogOpen] = useState(false);
+  const [isSaveAsDialogOpen, setIsSaveAsDialogOpen] = useState(false);
+  const [isOpenFileDialogOpen, setIsOpenFileDialogOpen] = useState(false);
+  const [recentFilePaths, setRecentFilePaths] = useState<string[]>([]);
+  
+  // File Management Service
+  const fileService = useMemo(() => FileManagementService.getInstance(), []);
+
   // Get active tab
   const activeTab = activeTabIndex >= 0 ? fileTabs[activeTabIndex] : null;
 
   // Get recently opened files for QuickOpen prioritization
-  const recentFiles = fileTabs.map(tab => tab.file.path);
+  const recentlyOpenedFiles = fileTabs.map(tab => tab.file.path);
 
   // Convert FileNode to FileInfo for compatibility
   const convertFileNode = useCallback((node: FileNode): FileInfo => ({
     path: node.path,
     name: node.name,
-    extension: node.extension,
+    extension: node.extension || '',
     size: node.size || 0,
-    lastModified: node.lastModified,
+    lastModified: node.lastModified ? new Date(node.lastModified).getTime() : Date.now(),
     content: undefined,
     language: node.isDirectory ? 'directory' : undefined,
   }), []);
 
-  // File selection handler
+  // File selection handler - now tracks current directory
   const handleFileSelect = useCallback(async (node: FileNode) => {
+    // Update current directory to the parent folder of the selected file
+    if (!node.isDirectory) {
+      const parentDir = node.path.substring(0, node.path.lastIndexOf('/')) || safeProject.rootPath;
+      setCurrentDirectory(parentDir);
+    } else {
+      // If selecting a directory, update current directory to that directory
+      setCurrentDirectory(node.path);
+    }
+
     if (node.isDirectory) return;
     
     const fileInfo = convertFileNode(node);
@@ -188,15 +227,16 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       };
       
       const success = await fileSaver.saveFile(
-        editorFile,
+        editorFile.path,
         tab.content,
-        fileCache.setCachedContent
+        { silent: false }
       );
       
-      if (success) {
+      if (success.success) {
         setFileTabs(prev => prev.map((t, index) => 
           index === targetIndex ? { ...t, isModified: false } : t
         ));
+        fileCache.setCachedContent(editorFile.path, tab.content);
       }
     } catch (error) {
       console.error('Failed to save file:', error);
@@ -230,6 +270,32 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       setShowGoToLine(true);
     }
   }, [activeTab]);
+
+  // Handle Find in File
+  const handleOpenFind = useCallback(() => {
+    if (openFindRef.current) {
+      openFindRef.current();
+    }
+  }, []);
+
+  // Handle Find and Replace in File
+  const handleOpenFindReplace = useCallback(() => {
+    if (openFindReplaceRef.current) {
+      openFindReplaceRef.current();
+    }
+  }, []);
+
+  // Handle Go to Symbol in File
+  const handleGoToSymbol = useCallback(() => {
+    if (goToSymbolRef.current) {
+      goToSymbolRef.current();
+    }
+  }, []);
+
+  // Handle Toggle Sidebar
+  const handleToggleSidebar = useCallback(() => {
+    setShowSidebar(prev => !prev);
+  }, []);
 
   // Handle tab closing with unsaved changes check
   const handleTabClose = useCallback(async (index: number) => {
@@ -319,6 +385,222 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     setDragOverIndex(null);
   }, [draggedTabIndex, activeTabIndex]);
 
+  // File Management Handlers
+  const handleNewFile = useCallback(() => {
+    setIsNewFileDialogOpen(true);
+  }, []);
+
+  const handleCreateFile = useCallback(async (fileName: string, content?: string) => {
+    try {
+      const result = await fileService.createFile({
+        fileName,
+        content: content || '',
+        path: currentDirectory // Use current directory instead of generic project path
+      });
+
+      // Convert FileOpenResult to FileInfo
+      const fileInfo: FileInfo = {
+        path: result.path,
+        name: result.name,
+        extension: result.name.split('.').pop() || '',
+        size: result.size,
+        lastModified: result.lastModified.getTime(),
+        content: result.content,
+        language: getLanguageFromFileName(result.name),
+      };
+
+      // Add the new file as a tab
+      const newTab: FileTab = {
+        file: fileInfo,
+        content: result.content,
+        isModified: false,
+        isPinned: false,
+      };
+
+      setFileTabs(prev => [...prev, newTab]);
+      setActiveTabIndex(fileTabs.length);
+
+      // Add to recent files
+      await fileService.addToRecentFiles(result.path);
+      setRecentFilePaths(prev => [result.path, ...prev.slice(0, 9)]);
+
+      // Force file explorer refresh to show the new file
+      setFileExplorerKey(prev => prev + 1);
+
+      // Notify parent
+      onFileChange?.(fileInfo, result.content);
+      
+    } catch (error) {
+      console.error('Failed to create file:', error);
+      throw error;
+    }
+  }, [fileService, fileTabs, onFileChange, currentDirectory]);
+
+  const handleSaveAs = useCallback(() => {
+    if (!activeTab) {
+      console.warn('No active tab to save');
+      return;
+    }
+    setIsSaveAsDialogOpen(true);
+  }, [activeTab]);
+
+  const handleSaveAsFile = useCallback(async (filePath: string, fileName: string) => {
+    try {
+      if (!activeTab) {
+        throw new Error('No active tab to save');
+      }
+
+      const result = await fileService.saveFileAs({
+        currentFilePath: activeTab.file.path,
+        newFilePath: filePath,
+        newFileName: fileName,
+        content: activeTab.content
+      });
+
+      // Convert FileOpenResult to FileInfo
+      const fileInfo: FileInfo = {
+        path: result.path,
+        name: result.name,
+        extension: result.name.split('.').pop() || '',
+        size: result.size,
+        lastModified: result.lastModified.getTime(),
+        content: result.content,
+        language: getLanguageFromFileName(result.name),
+      };
+
+      // Update the tab with new file info
+      setFileTabs(prev => prev.map((tab, index) => 
+        index === activeTabIndex 
+          ? { ...tab, file: fileInfo, isModified: false }
+          : tab
+      ));
+
+      // Add to recent files
+      await fileService.addToRecentFiles(result.path);
+      setRecentFilePaths(prev => [result.path, ...prev.slice(0, 9)]);
+
+      // Force file explorer refresh to show the saved file
+      setFileExplorerKey(prev => prev + 1);
+
+      // Notify parent
+      onFileChange?.(fileInfo, result.content);
+      
+    } catch (error) {
+      console.error('Failed to save file as:', error);
+      throw error;
+    }
+  }, [activeTab, activeTabIndex, fileService, onFileChange]);
+
+  const handleOpenFile = useCallback(() => {
+    setIsOpenFileDialogOpen(true);
+  }, []);
+
+  const handleOpenFileFromDialog = useCallback(async (filePath: string) => {
+    try {
+      const result = await fileService.openFile(filePath);
+
+      // Check if file is already open
+      const existingTabIndex = fileTabs.findIndex(tab => tab.file.path === result.path);
+      if (existingTabIndex !== -1) {
+        setActiveTabIndex(existingTabIndex);
+        return;
+      }
+
+      // Convert FileOpenResult to FileInfo
+      const fileInfo: FileInfo = {
+        path: result.path,
+        name: result.name,
+        extension: result.name.split('.').pop() || '',
+        size: result.size,
+        lastModified: result.lastModified.getTime(),
+        content: result.content,
+        language: getLanguageFromFileName(result.name),
+      };
+
+      // Create new tab for the opened file
+      const newTab: FileTab = {
+        file: fileInfo,
+        content: result.content,
+        isModified: false,
+        isPinned: false,
+      };
+
+      setFileTabs(prev => [...prev, newTab]);
+      setActiveTabIndex(fileTabs.length);
+
+      // Add to recent files
+      await fileService.addToRecentFiles(result.path);
+      setRecentFilePaths(prev => [result.path, ...prev.slice(0, 9)]);
+
+      // Force file explorer refresh (in case it's a new file)
+      setFileExplorerKey(prev => prev + 1);
+
+      // Notify parent
+      onFileChange?.(fileInfo, result.content);
+      
+    } catch (error) {
+      console.error('Failed to open file:', error);
+      throw error;
+    }
+  }, [fileService, fileTabs, onFileChange]);
+
+  const handleSaveAll = useCallback(async () => {
+    try {
+      const modifiedTabs = fileTabs.filter(tab => tab.isModified && tab.file.path);
+      if (modifiedTabs.length === 0) {
+        console.log('No modified files to save');
+        return;
+      }
+
+      const filesToSave = modifiedTabs.map(tab => ({
+        path: tab.file.path,
+        content: tab.content
+      }));
+
+      await fileService.saveAllFiles(filesToSave);
+      
+      // Mark all tabs as saved
+      setFileTabs(prev => prev.map(tab => 
+        tab.isModified ? { ...tab, isModified: false } : tab
+      ));
+
+      console.log(`✅ Saved ${modifiedTabs.length} files`);
+      
+    } catch (error) {
+      console.error('Failed to save all files:', error);
+    }
+  }, [fileTabs, fileService]);
+
+  // Helper Functions
+  const getCurrentFileDirectory = useCallback((): string => {
+    if (activeTab?.file.path) {
+      const lastSlashIndex = activeTab.file.path.lastIndexOf('/');
+      if (lastSlashIndex > 0) {
+        return activeTab.file.path.substring(0, lastSlashIndex);
+      }
+    }
+    return currentDirectory || safeProject.rootPath || '';
+  }, [activeTab, currentDirectory, safeProject]);
+
+  const getLanguageFromFileName = useCallback((fileName: string): string => {
+    const fileInfo = fileService.getFileTypeInfo(fileName);
+    return fileInfo.language;
+  }, [fileService]);
+
+  // Load recent files on mount
+  useEffect(() => {
+    const loadRecentFiles = async () => {
+      try {
+        const recent = await fileService.getRecentFiles();
+        setRecentFilePaths(recent);
+      } catch (error) {
+        console.error('Failed to load recent files:', error);
+      }
+    };
+
+    loadRecentFiles();
+  }, [fileService]);
+
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -361,9 +643,11 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
             }
             break;
           case 's':
-            e.preventDefault();
-            e.stopPropagation();
-            handleSave();
+            if (!e.shiftKey) {
+              e.preventDefault();
+              e.stopPropagation();
+              handleSave();
+            }
             break;
           case 'k':
             e.preventDefault();
@@ -375,11 +659,28 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
             e.stopPropagation();
             handleShowGoToLine();
             break;
-          case 'p':
-            // QuickOpen (Ctrl+P) - Let useShortcut handle this
-            // Remove this case to avoid conflicts
+          case 'n':
+            if (!e.shiftKey) {
+              e.preventDefault();
+              e.stopPropagation();
+              handleNewFile();
+            }
+            break;
+          case 'o':
+            if (!e.shiftKey) {
+              e.preventDefault();
+              e.stopPropagation();
+              handleOpenFile();
+            }
             break;
         }
+      }
+      
+      // Save As (Ctrl+Shift+S)
+      if (e.ctrlKey && e.shiftKey && e.key === 'S') {
+        e.preventDefault();
+        e.stopPropagation();
+        handleSaveAs();
       }
       
       // Search panel toggle (Ctrl+Shift+F)
@@ -393,7 +694,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     // Add event listener with capture=true to handle events before app-level handlers
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [fileTabs, activeTabIndex, handleTabClose, handleSave, handleAskAI, showQuickOpen]);
+  }, [fileTabs, activeTabIndex, handleTabClose, handleSave, handleAskAI, showQuickOpen, handleNewFile, handleOpenFile, handleSaveAs]);
 
   // Configuration-based keyboard shortcuts
   useShortcut('tabManagement', 'nextTab', (e) => {
@@ -454,6 +755,64 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     return true;
   }, [fileTabs, handleShowGoToLine]);
 
+  // Find in File (Ctrl+F) shortcut
+  useShortcut('search', 'findInFile', (e) => {
+    if (fileTabs.length === 0) return false;
+    e.preventDefault?.();
+    handleOpenFind();
+    return true;
+  }, [fileTabs, handleOpenFind]);
+
+  // Find and Replace in File (Ctrl+H) shortcut
+  useShortcut('search', 'replaceInFile', (e) => {
+    if (fileTabs.length === 0) return false;
+    e.preventDefault?.();
+    handleOpenFindReplace();
+    return true;
+  }, [fileTabs, handleOpenFindReplace]);
+
+  // Go to Symbol in File (Ctrl+Shift+O) shortcut
+  useShortcut('navigation', 'goToSymbol', (e) => {
+    if (fileTabs.length === 0) return false;
+    e.preventDefault?.();
+    handleGoToSymbol();
+    return true;
+  }, [fileTabs, handleGoToSymbol]);
+
+  // Toggle Sidebar (Ctrl+B) shortcut
+  useShortcut('views', 'toggleSidebar', (e) => {
+    e.preventDefault?.();
+    handleToggleSidebar();
+    return true;
+  }, [handleToggleSidebar]);
+
+  // File Management Shortcuts
+  useShortcut('fileManagement', 'newFile', (e) => {
+    e.preventDefault?.();
+    handleNewFile();
+    return true;
+  }, [handleNewFile]);
+
+  useShortcut('fileManagement', 'saveAs', (e) => {
+    if (fileTabs.length === 0 || activeTabIndex < 0) return false;
+    e.preventDefault?.();
+    handleSaveAs();
+    return true;
+  }, [fileTabs, activeTabIndex, handleSaveAs]);
+
+  useShortcut('fileManagement', 'openFile', (e) => {
+    e.preventDefault?.();
+    handleOpenFile();
+    return true;
+  }, [handleOpenFile]);
+
+  // Save All (Ctrl+Alt+S) - register with the keyboard system
+  useShortcut('fileManagement', 'saveAll', (e) => {
+    e.preventDefault?.();
+    handleSaveAll();
+    return true;
+  }, [handleSaveAll]);
+
   // QuickOpen handlers
   const handleQuickOpenFileSelect = useCallback(async (node: FileNode) => {
     setShowQuickOpen(false);
@@ -494,125 +853,109 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      fileSaver.cancelAutoSave();
+      // Cancel all auto-saves for all files
       if (contentChangeTimeoutRef.current) {
         clearTimeout(contentChangeTimeoutRef.current);
       }
     };
-  }, [fileSaver]);
+  }, []);
 
   // Combined error handling
-  const displayError = currentError || fileLoader.error || fileSaver.saveError;
+  const displayError = currentError || fileLoader.error;
   const errorMessage = displayError instanceof Error ? displayError.message : displayError;
   const handleDismissError = useCallback(() => {
     setCurrentError(null);
     fileLoader.clearError();
-    fileSaver.clearSaveError();
-  }, [fileLoader, fileSaver]);
-  
+  }, [fileLoader]);
+
   return (
-    <div className={`flex h-full bg-vscode-bg text-vscode-fg font-mono ${performanceConfig.performanceMode ? 'performance-mode' : ''}`}>
-      {/* High-Performance File Explorer Sidebar */}
-      <div className="w-64 flex-shrink-0 bg-vscode-sidebar border-r border-vscode-border">
-        <VirtualizedFileExplorer
-          rootPath={project.rootPath}
-          selectedPath={activeTab?.file.path}
-          onFileSelect={handleFileSelect}
-          height={window.innerHeight - 100}
-          className="h-full"
-        />
-      </div>
-      
-      {/* Search Panel (Collapsible) */}
-      {showSearchPanel && (
-        <div className="w-80 flex-shrink-0">
-          <SearchPanel
-            projectPath={project.rootPath}
-            onNavigateToFile={(filePath) => {
-              // TODO: Navigate to file in tabs
-              console.log('Navigate to:', filePath);
-            }}
-            isVisible={showSearchPanel}
-            onToggleVisibility={() => setShowSearchPanel(false)}
-          />
-        </div>
-      )}
-      
-      {/* Main Editor Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Performance Mode Indicator */}
-        <PerformanceModeIndicator
-          isActive={performanceConfig.performanceMode}
-          onDisable={() => performanceConfig.setPerformanceMode(false)}
-        />
-
-        {/* Error Notification */}
-        <ErrorNotification
-          error={errorMessage}
-          onDismiss={handleDismissError}
-        />
-
-        {/* File Tabs */}
-        {fileTabs.length > 0 && (
-          <div className="flex items-center bg-vscode-tab-bg border-b border-vscode-border min-h-[35px] overflow-x-auto">
-            {fileTabs.map((tab, index) => (
-              <div
-                key={tab.file.path}
-                draggable
-                onDragStart={(e) => handleDragStart(e, index)}
-                onDragEnd={handleDragEnd}
-                onDragEnter={(e) => handleDragEnter(e, index)}
-                onDragOver={(e) => handleDragOver(e, index)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, index)}
-                onClick={() => handleTabClick(index)}
-                className={`
-                  flex items-center px-3 py-1.5 border-r border-vscode-border cursor-pointer
-                  min-w-[100px] max-w-[180px] relative group
-                  ${index === activeTabIndex 
-                    ? 'bg-vscode-bg text-vscode-fg border-t-2 border-t-vscode-accent' 
-                    : 'bg-vscode-tab-bg text-vscode-fg-muted hover:bg-vscode-tab-hover hover:text-vscode-fg'
-                  }
-                  ${draggedTabIndex === index ? 'opacity-50' : ''}
-                  ${dragOverIndex === index ? 'border-l-2 border-l-vscode-accent' : ''}
-                  ${tab.isPinned ? 'border-b-2 border-b-blue-400' : ''}
-                  transition-colors duration-100
-                `}
-              >
-                {/* Tab Icon */}
-                <span className="mr-2 text-sm flex-shrink-0">
-                  {getFileIcon(tab.file.extension)}
-                </span>
-                
-                {/* Tab Title */}
-                <span className="flex-1 truncate text-sm">
-                  {tab.file.name}
-                </span>
-                
-                {/* Modified Indicator */}
-                {tab.isModified && (
-                  <span className="w-2 h-2 bg-vscode-accent rounded-full ml-2 flex-shrink-0" title="Unsaved changes"></span>
-                )}
-                
-                {/* Close Button */}
-            <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleTabClose(index);
-                  }}
-                  className="ml-2 w-4 h-4 flex items-center justify-center rounded hover:bg-vscode-button-hover opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                  title="Close tab"
-                >
-                  <span className="text-xs text-vscode-fg-muted hover:text-vscode-fg">×</span>
-            </button>
-              </div>
-            ))}
+    <div className="flex h-full bg-vscode-bg">
+      {/* File Explorer Sidebar */}
+      <div className={`flex-shrink-0 border-r border-vscode-border transition-all duration-200 ${
+        showSidebar ? 'w-64' : 'w-0 overflow-hidden'
+      }`}>
+        {/* Directory Breadcrumb */}
+        {showSidebar && currentDirectory && (
+          <div className="px-3 py-2 border-b border-vscode-border bg-vscode-sidebar">
+            <div className="text-xs text-vscode-fg-muted">Current directory:</div>
+            <div className="text-xs font-mono text-vscode-fg truncate" title={currentDirectory}>
+              📁 {currentDirectory.replace(safeProject.rootPath, '.') || './'}
+            </div>
           </div>
         )}
-        
+        <VirtualizedFileExplorer
+          key={fileExplorerKey}
+          rootPath={safeProject.rootPath}
+          onFileSelect={handleFileSelect}
+          height={600}
+          className="h-full"
+          selectedPath={activeTab?.file.path}
+          onDirectoryToggle={(path: string, expanded: boolean) => {
+            // Track the current directory when users navigate
+            if (expanded) {
+              setCurrentDirectory(path);
+            }
+          }}
+        />
+      </div>
+
+      {/* Main Editor Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Tab Bar */}
+        {fileTabs.length > 0 && (
+          <div className="flex items-center bg-vscode-tab-inactive border-b border-vscode-border">
+            <div className="flex overflow-x-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-vscode-scrollbar">
+              {fileTabs.map((tab, index) => (
+                <div
+                  key={tab.file.path}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragEnd={handleDragEnd}
+                  onDragEnter={(e) => handleDragEnter(e, index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, index)}
+                  className={`
+                    group flex items-center px-3 py-2 text-sm border-r border-vscode-border
+                    cursor-pointer min-w-0 flex-shrink-0 relative
+                    ${index === activeTabIndex 
+                      ? 'bg-vscode-tab-active text-vscode-fg' 
+                      : 'bg-vscode-tab-inactive text-vscode-fg-muted hover:bg-vscode-tab-hover'
+                    }
+                    ${dragOverIndex === index ? 'border-l-2 border-l-vscode-accent' : ''}
+                    ${draggedTabIndex === index ? 'opacity-50' : ''}
+                  `}
+                  onClick={() => handleTabClick(index)}
+                  title={tab.file.path}
+                >
+                  <span className="mr-2 flex-shrink-0">{getFileIcon(tab.file.extension)}</span>
+                  <span className="truncate">
+                    {tab.file.name}
+                    {tab.isModified && <span className="ml-1 text-vscode-accent">●</span>}
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTabClose(index);
+                    }}
+                    className="ml-2 opacity-0 group-hover:opacity-100 hover:bg-vscode-button-hover rounded p-1 transition-opacity"
+                    title="Close"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Editor Content */}
         <div className="flex-1 relative">
-          {activeTab ? (
+          {fileTabs.length === 0 ? (
+            <EmptyEditorState
+              project={safeProject}
+            />
+          ) : activeTab ? (
             <MonacoEditorWrapper
               selectedFile={{
                 ...activeTab.file,
@@ -626,31 +969,69 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
               onContentChange={handleContentChange}
               onSave={() => handleSave()}
               onAskAI={handleAskAI}
-              isLoading={fileLoader.isLoading}
               goToLineRef={goToLineRef}
               getCurrentLineRef={getCurrentLineRef}
               getTotalLinesRef={getTotalLinesRef}
+              openFindRef={openFindRef}
+              openFindReplaceRef={openFindReplaceRef}
+              goToSymbolRef={goToSymbolRef}
             />
-          ) : (
-            <EmptyEditorState project={project} />
-          )}
+          ) : null}
         </div>
       </div>
-      
-      {/* Performance Metrics (Debug) */}
-      <PerformanceMetrics
-        isVisible={performanceConfig.performanceMode}
-        cacheSize={fileCache.getCacheSize()}
-        perfConfig={performanceConfig.perfConfig}
-      />
 
-      {/* Quick Open Dialog (Ctrl+P) */}
-      <QuickOpen
-        isOpen={showQuickOpen}
-        projectPath={project.rootPath}
-        onClose={handleQuickOpenClose}
-        onFileSelect={handleQuickOpenFileSelect}
-        recentFiles={recentFiles}
+      {/* Performance Metrics */}
+      {performanceConfig.performanceMode && (
+        <div className="absolute top-4 right-4 z-10">
+          <PerformanceMetrics
+            isVisible={true}
+            cacheSize={fileCache.getCacheSize ? fileCache.getCacheSize() : 0}
+            perfConfig={performanceConfig.perfConfig}
+          />
+        </div>
+      )}
+
+      {/* Performance Mode Indicator */}
+      {performanceConfig.performanceMode && (
+        <div className="absolute top-4 left-4 z-10">
+          <PerformanceModeIndicator
+            isActive={performanceConfig.performanceMode}
+            onDisable={() => performanceConfig.setPerformanceMode(false)}
+          />
+        </div>
+      )}
+
+      {/* Search Panel */}
+      {showSearchPanel && (
+        <div className="absolute inset-y-0 right-0 w-80 bg-vscode-sidebar border-l border-vscode-border z-20">
+          <SearchPanel
+            projectPath={safeProject.rootPath}
+            onNavigateToFile={(file: string, line?: number, column?: number) => {
+              // TODO: Implement navigation to file and line
+              console.log('Navigate to:', file, line, column);
+            }}
+          />
+        </div>
+      )}
+
+      {/* Quick Open */}
+      {showQuickOpen && (
+        <QuickOpen
+          isOpen={showQuickOpen}
+          projectPath={safeProject.rootPath}
+          onFileSelect={handleQuickOpenFileSelect}
+          onClose={handleQuickOpenClose}
+          recentFiles={recentlyOpenedFiles}
+        />
+      )}
+
+      {/* Go to Line Dialog */}
+      <GoToLineDialog
+        isOpen={showGoToLine}
+        onClose={() => setShowGoToLine(false)}
+        onGoToLine={handleGoToLine}
+        currentLineNumber={getCurrentLineRef.current?.() || 1}
+        totalLines={getTotalLinesRef.current?.() || 1}
       />
 
       {/* Unsaved Changes Dialog */}
@@ -662,14 +1043,38 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         onCancel={handleDialogCancel}
       />
 
-      {/* Go to Line Dialog */}
-      <GoToLineDialog
-        isOpen={showGoToLine}
-        onClose={() => setShowGoToLine(false)}
-        onGoToLine={handleGoToLine}
-        currentLineNumber={getCurrentLineRef.current ? getCurrentLineRef.current() : 1}
-        totalLines={getTotalLinesRef.current ? getTotalLinesRef.current() : 100}
+      {/* File Management Dialogs */}
+      <NewFileDialog
+        isOpen={isNewFileDialogOpen}
+        onClose={() => setIsNewFileDialogOpen(false)}
+        onCreateFile={handleCreateFile}
+        currentPath={currentDirectory}
       />
+
+      <SaveAsDialog
+        isOpen={isSaveAsDialogOpen}
+        onClose={() => setIsSaveAsDialogOpen(false)}
+        onSaveAs={handleSaveAsFile}
+        currentFileName={activeTab?.file.name}
+        currentPath={getCurrentFileDirectory()}
+        projectRootPath={safeProject.rootPath}
+      />
+
+      <OpenFileDialog
+        isOpen={isOpenFileDialogOpen}
+        onClose={() => setIsOpenFileDialogOpen(false)}
+        onOpenFile={handleOpenFileFromDialog}
+        projectRootPath={safeProject.rootPath}
+        recentFiles={recentFilePaths}
+      />
+
+      {/* Error Notification */}
+      {displayError && (
+        <ErrorNotification
+          error={errorMessage || 'An unknown error occurred'}
+          onDismiss={handleDismissError}
+        />
+      )}
     </div>
   );
 }; 

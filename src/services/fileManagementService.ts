@@ -1,0 +1,292 @@
+// Syntari AI IDE - File Management Service
+// Professional file operations with error handling and validation
+
+export interface FileCreateOptions {
+  fileName: string;
+  content?: string;
+  path?: string;
+  overwrite?: boolean;
+}
+
+export interface FileSaveAsOptions {
+  currentFilePath?: string;
+  newFilePath: string;
+  newFileName: string;
+  content: string;
+}
+
+export interface FileOpenResult {
+  path: string;
+  content: string;
+  name: string;
+  size: number;
+  lastModified: Date;
+}
+
+export class FileManagementService {
+  private static instance: FileManagementService;
+
+  public static getInstance(): FileManagementService {
+    if (!FileManagementService.instance) {
+      FileManagementService.instance = new FileManagementService();
+    }
+    return FileManagementService.instance;
+  }
+
+  /**
+   * Creates a new file with the specified name and content
+   */
+  async createFile(options: FileCreateOptions): Promise<FileOpenResult> {
+    try {
+      const { fileName, content = '', path = '', overwrite = false } = options;
+      
+      // Validate file name
+      if (!fileName.trim()) {
+        throw new Error('File name cannot be empty');
+      }
+
+      // Construct full file path
+      const fullPath = path ? `${path}/${fileName}` : fileName;
+
+      // Check if file already exists (simplified implementation)
+      // In real implementation, this would check the actual file system
+      const exists = false; // TODO: Implement actual file existence check
+      
+      if (exists && !overwrite) {
+        throw new Error(`File '${fileName}' already exists`);
+      }
+
+      // Create the file
+      // TODO: Replace with actual file system API
+      const mockResult: FileOpenResult = {
+        path: fullPath,
+        content: content,
+        name: fileName,
+        size: new Blob([content]).size,
+        lastModified: new Date()
+      };
+
+      console.log('✅ File created successfully:', fullPath);
+      return mockResult;
+    } catch (error) {
+      console.error('❌ Failed to create file:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Saves a file with a new name/location (Save As functionality)
+   */
+  async saveFileAs(options: FileSaveAsOptions): Promise<FileOpenResult> {
+    try {
+      const { newFilePath, newFileName, content } = options;
+      
+      // Validate inputs
+      if (!newFileName.trim()) {
+        throw new Error('File name cannot be empty');
+      }
+
+      if (!content && content !== '') {
+        throw new Error('Content cannot be undefined');
+      }
+
+      // Construct full file path
+      const fullPath = `${newFilePath}/${newFileName}`;
+
+      // TODO: Replace with actual file system API
+      const mockResult: FileOpenResult = {
+        path: fullPath,
+        content: content,
+        name: newFileName,
+        size: new Blob([content]).size,
+        lastModified: new Date()
+      };
+
+      console.log('✅ File saved as:', fullPath);
+      return mockResult;
+    } catch (error) {
+      console.error('❌ Failed to save file as:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Opens a file and returns its content
+   */
+  async openFile(filePath: string): Promise<FileOpenResult> {
+    try {
+      if (!filePath.trim()) {
+        throw new Error('File path cannot be empty');
+      }
+
+      // TODO: Replace with actual file system API
+      // This is a mock implementation
+      const mockContent = `// Mock content for ${filePath}\n// This would be loaded from the actual file system\n\nconsole.log('Hello from ${filePath.split('/').pop()}!');`;
+      
+      const mockResult: FileOpenResult = {
+        path: filePath,
+        content: mockContent,
+        name: filePath.split('/').pop() || 'unknown',
+        size: new Blob([mockContent]).size,
+        lastModified: new Date()
+      };
+
+      console.log('✅ File opened successfully:', filePath);
+      return mockResult;
+    } catch (error) {
+      console.error('❌ Failed to open file:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Saves all modified files
+   */
+  async saveAllFiles(modifiedFiles: Array<{ path: string; content: string }>): Promise<void> {
+    try {
+      const savePromises = modifiedFiles.map(async (file) => {
+        // TODO: Replace with actual file system API
+        console.log('💾 Saving file:', file.path);
+        return new Promise<void>((resolve) => {
+          setTimeout(() => {
+            console.log('✅ File saved:', file.path);
+            resolve();
+          }, 100); // Simulate save delay
+        });
+      });
+
+      await Promise.all(savePromises);
+      console.log('✅ All files saved successfully');
+    } catch (error) {
+      console.error('❌ Failed to save all files:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Gets recent files from storage/history
+   */
+  async getRecentFiles(): Promise<string[]> {
+    try {
+      // TODO: Replace with actual storage implementation
+      const mockRecentFiles = [
+        '/project/src/components/App.tsx',
+        '/project/src/utils/helpers.ts',
+        '/project/README.md',
+        '/project/package.json',
+        '/project/src/styles/globals.css'
+      ];
+
+      return mockRecentFiles;
+    } catch (error) {
+      console.error('❌ Failed to get recent files:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Adds a file to the recent files list
+   */
+  async addToRecentFiles(filePath: string): Promise<void> {
+    try {
+      // TODO: Replace with actual storage implementation
+      console.log('📋 Added to recent files:', filePath);
+    } catch (error) {
+      console.error('❌ Failed to add to recent files:', error);
+    }
+  }
+
+  /**
+   * Validates file operation before execution
+   */
+  validateFileOperation(operation: 'create' | 'save' | 'open', filePath: string): { valid: boolean; error?: string } {
+    try {
+      if (!filePath.trim()) {
+        return { valid: false, error: `${operation} operation failed: File path cannot be empty` };
+      }
+
+      // Check for invalid characters in path
+      const invalidChars = ['<', '>', ':', '"', '|', '?', '*'];
+      const hasInvalidChars = invalidChars.some(char => filePath.includes(char));
+      
+      if (hasInvalidChars) {
+        return { valid: false, error: `${operation} operation failed: File path contains invalid characters` };
+      }
+
+      // Check path length
+      if (filePath.length > 260) { // Windows MAX_PATH limitation
+        return { valid: false, error: `${operation} operation failed: File path is too long` };
+      }
+
+      // Operation-specific validations
+      if (operation === 'create') {
+        // Additional validations for file creation
+        const fileName = filePath.split('/').pop() || '';
+        if (!fileName.includes('.')) {
+          console.warn('Creating file without extension:', fileName);
+        }
+      }
+
+      return { valid: true };
+    } catch (error) {
+      return { valid: false, error: `${operation} operation validation failed` };
+    }
+  }
+
+  /**
+   * Gets file type information from extension
+   */
+  getFileTypeInfo(fileName: string): { extension: string; language: string; isText: boolean } {
+    const extension = fileName.split('.').pop()?.toLowerCase() || '';
+    
+    const languageMap: { [key: string]: string } = {
+      'ts': 'typescript',
+      'tsx': 'typescript',
+      'js': 'javascript',
+      'jsx': 'javascript',
+      'py': 'python',
+      'java': 'java',
+      'cpp': 'cpp',
+      'c': 'c',
+      'cs': 'csharp',
+      'php': 'php',
+      'rb': 'ruby',
+      'go': 'go',
+      'rs': 'rust',
+      'swift': 'swift',
+      'kt': 'kotlin',
+      'scala': 'scala',
+      'html': 'html',
+      'css': 'css',
+      'scss': 'scss',
+      'sass': 'sass',
+      'less': 'less',
+      'json': 'json',
+      'xml': 'xml',
+      'yaml': 'yaml',
+      'yml': 'yaml',
+      'md': 'markdown',
+      'txt': 'text',
+      'sql': 'sql',
+      'sh': 'shell',
+      'bash': 'shell',
+      'zsh': 'shell',
+      'ps1': 'powershell',
+      'dockerfile': 'dockerfile',
+      'toml': 'toml',
+      'ini': 'ini'
+    };
+
+    const textExtensions = new Set([
+      'ts', 'tsx', 'js', 'jsx', 'py', 'java', 'cpp', 'c', 'cs', 'php', 'rb', 'go', 'rs', 'swift', 'kt', 'scala',
+      'html', 'css', 'scss', 'sass', 'less', 'json', 'xml', 'yaml', 'yml', 'md', 'txt', 'sql', 'sh', 'bash',
+      'zsh', 'ps1', 'dockerfile', 'toml', 'ini', 'gitignore', 'env'
+    ]);
+
+    return {
+      extension,
+      language: languageMap[extension] || 'text',
+      isText: textExtensions.has(extension) || !extension
+    };
+  }
+} 

@@ -1,0 +1,57 @@
+{
+  "version": "1.0.0",
+  "description": "File operation keyboard shortcuts for Syntari AI IDE",
+  "shortcuts": [
+    {
+      "id": "file.delete",
+      "key": "Delete",
+      "ctrlKey": false,
+      "altKey": false,
+      "shiftKey": false,
+      "metaKey": false,
+      "action": "deleteSelectedFile",
+      "context": "fileExplorer",
+      "priority": "P0",
+      "description": "Delete selected file or folder",
+      "group": "file",
+      "performance": {
+        "target": "immediate",
+        "maxExecutionTime": 100
+      }
+    },
+    {
+      "id": "file.forceDelete",
+      "key": "Delete",
+      "ctrlKey": true,
+      "altKey": false,
+      "shiftKey": false,
+      "metaKey": false,
+      "action": "deleteSelectedFileForce",
+      "context": "fileExplorer", 
+      "priority": "P0",
+      "description": "Force delete selected file or folder",
+      "group": "file",
+      "performance": {
+        "target": "immediate",
+        "maxExecutionTime": 100
+      }
+    },
+    {
+      "id": "file.refresh",
+      "key": "F5",
+      "ctrlKey": false,
+      "altKey": false,
+      "shiftKey": false,
+      "metaKey": false,
+      "action": "refreshFileExplorer",
+      "context": "fileExplorer",
+      "priority": "P1",
+      "description": "Refresh file explorer",
+      "group": "file",
+      "performance": {
+        "target": "immediate",
+        "maxExecutionTime": 200
+      }
+    }
+  ]
+} 

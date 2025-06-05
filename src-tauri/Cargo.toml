@@ -37,12 +37,16 @@ string-interner = "0.19.0"
 
 # PERFORMANCE: File watching optimizations
 notify = "8.0.0"
+notify-debouncer-mini = "0.6.0"
 
 # PERFORMANCE: Rope data structure for large text files (like VS Code)
 ropey = "1.6"
 
 # PERFORMANCE: Fast text processing
 regex = "1.11"
+
+# Static initialization for singletons
+lazy_static = "1.5.0"
 
 # Async runtime and utilities
 tokio = { version = "1.45.1", features = ["full"] }

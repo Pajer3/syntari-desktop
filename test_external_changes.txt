@@ -1,0 +1,5 @@
+This is a test file for external changes.
+
+We will modify this file outside the app to test if the file watcher works.
+
+Current time: Initial creation Modified at Thu Jun  5 06:53:10 PM CEST 2025

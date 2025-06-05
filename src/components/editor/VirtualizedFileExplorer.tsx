@@ -6,6 +6,9 @@ import { FixedSizeList as List } from 'react-window';
 import type { FileNode } from '../../types/fileSystem';
 import { fileSystemService } from '../../services/fileSystemService';
 import { AlertCircle } from 'lucide-react';
+import { useFileExplorerWatcher } from '../../hooks/useFileSystemWatcher';
+import { useShortcut } from '../../hooks/useKeyboardShortcuts';
+import { invoke } from '@tauri-apps/api/core';
 
 // ================================
 // TYPES
@@ -236,23 +239,20 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
   const [rootNodes, setRootNodes] = useState<readonly FileNode[]>([]);
   const [loadedChildren, setLoadedChildren] = useState<Map<string, FileNode[]>>(new Map());
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
-  const [isInitialLoading, setIsInitialLoading] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [folderLoadingPaths, setFolderLoadingPaths] = useState<Set<string>>(new Set());
   const [fileError, setFileError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [currentlySelectedPath, setCurrentlySelectedPath] = useState<string | null>(selectedPath || null);
   
   // Refs for performance optimization
   const listRef = useRef<List>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   
-  // Memoized flat list for virtualization
-  const flatNodes = useMemo(() => 
-    buildFlatList(rootNodes, expandedPaths, loadedChildren), 
-    [rootNodes, expandedPaths, loadedChildren]
-  );
-  
-  // VS Code-style instant root loading
-  const loadRootItems = useCallback(async (path: string) => {
+  // VS Code-style instant root loading (moved before file watcher to fix temporal dead zone)
+  const loadRootItems = useCallback(async (path?: string) => {
+    const targetPath = path || rootPath;
+    
     // Cancel any ongoing operation
     abortControllerRef.current?.abort();
     abortControllerRef.current = new AbortController();
@@ -261,10 +261,10 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
     setLoadError(null);
     
     try {
-      console.log('🚀 Starting VS Code instant root load for path:', path);
+      console.log('🚀 Starting VS Code instant root load for path:', targetPath);
       
       // Use the centralized service layer
-      const rootItems = await fileSystemService.loadRootItems(path, true);
+      const rootItems = await fileSystemService.loadRootItems(targetPath, true);
       
       console.log(`✅ Successfully loaded ${rootItems.length} items via service layer`);
       console.log('📊 Items breakdown:', {
@@ -282,13 +282,28 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
     } catch (err) {
       if (err instanceof Error && err.name !== 'AbortError') {
         console.error('❌ Failed to load root items:', err);
-        setLoadError(`Failed to load files from: ${path} - ${err.message}`);
+        setLoadError(`Failed to load files from: ${targetPath} - ${err.message}`);
       }
     } finally {
       setIsInitialLoading(false);
       console.log('🏁 Loading process completed');
     }
-  }, []);
+  }, [rootPath]);
+  
+  // Live file system watcher for automatic updates
+  const fileWatcher = useFileExplorerWatcher(rootPath, useCallback(() => {
+    console.log('🔄 File system change detected, refreshing explorer...');
+    console.log('📁 Root path:', rootPath);
+    console.log('📊 Current nodes count:', rootNodes.length);
+    // Force refresh the explorer when files change
+    loadRootItems();
+  }, [loadRootItems, rootPath, rootNodes.length]));
+  
+  // Memoized flat list for virtualization
+  const flatNodes = useMemo(() => 
+    buildFlatList(rootNodes, expandedPaths, loadedChildren), 
+    [rootNodes, expandedPaths, loadedChildren, fileWatcher.refreshTrigger]
+  );
   
   // VS Code-style lazy folder expansion
   const handleDirectoryToggle = useCallback(async (path: string, shouldExpand: boolean) => {
@@ -341,7 +356,7 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
   
   // Initial load when rootPath changes
   useEffect(() => {
-    loadRootItems(rootPath);
+    loadRootItems();
     
     return () => {
       abortControllerRef.current?.abort();
@@ -360,6 +375,9 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
   
   // Handle file click with VS Code-style error handling
   const handleFileClick = useCallback(async (node: FileNode) => {
+    // Update selected file for keyboard operations
+    setCurrentlySelectedPath(node.path);
+    
     if (node.isDirectory) {
       await handleDirectoryToggle(node.path, !expandedPaths.has(node.path));
       return;
@@ -412,6 +430,105 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
     onDirectoryToggle: handleDirectoryToggle
   }), [flatNodes, selectedPath, expandedPaths, handleFileClick, handleDirectoryToggle]);
   
+  // ================================
+  // FILE OPERATIONS
+  // ================================
+
+  const deleteSelectedFile = useCallback(async () => {
+    if (!currentlySelectedPath) {
+      setFileError('No file selected for deletion');
+      return;
+    }
+
+    try {
+      console.log('🗑️ Deleting file:', currentlySelectedPath);
+      
+      // Show confirmation dialog (basic implementation)
+      const confirmed = confirm(`Are you sure you want to delete "${currentlySelectedPath}"?`);
+      if (!confirmed) return;
+
+      // Call Tauri backend to delete file
+      await invoke('delete_file', { path: currentlySelectedPath });
+      
+      console.log('✅ File deleted successfully');
+      
+      // Clear selection
+      setCurrentlySelectedPath(null);
+      
+      // Refresh explorer
+      loadRootItems();
+      
+    } catch (error) {
+      console.error('❌ Failed to delete file:', error);
+      setFileError(`Failed to delete file: ${error}`);
+    }
+  }, [currentlySelectedPath, rootPath, loadRootItems]);
+
+  const forceDeleteSelectedFile = useCallback(async () => {
+    if (!currentlySelectedPath) {
+      setFileError('No file selected for deletion');
+      return;
+    }
+
+    try {
+      console.log('🗑️ Force deleting file:', currentlySelectedPath);
+      
+      // Show confirmation dialog for force delete
+      const confirmed = confirm(`Force delete "${currentlySelectedPath}"? This cannot be undone.`);
+      if (!confirmed) return;
+
+      // Call Tauri backend to force delete file
+      await invoke('delete_file', { path: currentlySelectedPath, force: true });
+      
+      console.log('✅ File force deleted successfully');
+      
+      // Clear selection
+      setCurrentlySelectedPath(null);
+      
+      // Refresh explorer
+      loadRootItems();
+      
+    } catch (error) {
+      console.error('❌ Failed to force delete file:', error);
+      setFileError(`Failed to force delete file: ${error}`);
+    }
+  }, [currentlySelectedPath, rootPath, loadRootItems]);
+
+  const refreshFileExplorer = useCallback(async () => {
+    console.log('🔄 Manual refresh triggered');
+    
+    try {
+      // Clear all caches and reload
+      setLoadedChildren(new Map());
+      setExpandedPaths(new Set());
+      fileSystemService.invalidateCache();
+      
+      // Reload root items
+      await loadRootItems();
+      
+      console.log('✅ File explorer refreshed successfully');
+    } catch (error) {
+      console.error('❌ Failed to refresh file explorer:', error);
+      setFileError(`Failed to refresh: ${error}`);
+    }
+  }, [rootPath, loadRootItems]);
+
+  // ================================
+  // KEYBOARD SHORTCUTS
+  // ================================
+
+  useShortcut('fileManagement', 'deleteFile', () => {
+    deleteSelectedFile().catch(console.error);
+  }, [deleteSelectedFile]);
+  
+  useShortcut('fileManagement', 'forceDeleteFile', () => {
+    forceDeleteSelectedFile().catch(console.error);
+  }, [forceDeleteSelectedFile]);
+  
+  useShortcut('fileManagement', 'refreshExplorer', () => {
+    refreshFileExplorer().catch(console.error);
+  }, [refreshFileExplorer]);
+
   return (
     <div className={`file-explorer-virtualized h-full relative ${className}`}>
       {/* SINGLE Professional Loading Overlay - only for initial load */}
@@ -448,11 +565,11 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
       <div className="file-explorer-header px-3 py-2 bg-vscode-sidebar border-b border-vscode-border text-xs font-medium text-vscode-fg flex items-center justify-between">
         <span>EXPLORER</span>
         <div className="flex items-center gap-2">
-          {/* Show folder loading indicator in header for ongoing operations */}
-          {folderLoadingPaths.size > 0 && (
+          {/* Live file watcher status indicator */}
+          {fileWatcher.isWatching && (
             <div className="flex items-center text-vscode-accent">
-              <div className="w-3 h-3 border border-vscode-accent border-t-transparent rounded-full animate-spin mr-2"></div>
-              <span className="text-xs">Loading {folderLoadingPaths.size} folder{folderLoadingPaths.size > 1 ? 's' : ''}...</span>
+              <div className="w-2 h-2 bg-green-400 rounded-full mr-1 animate-pulse"></div>
+              <span className="text-xs">Live</span>
             </div>
           )}
         </div>
@@ -508,6 +625,7 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
           {flatNodes.length} items visible
           {isInitialLoading && ' (loading...)'}
           {folderLoadingPaths.size > 0 && ` • ${folderLoadingPaths.size} folder${folderLoadingPaths.size > 1 ? 's' : ''} expanding`}
+          {fileWatcher.isWatching && ` • Live updates: ${fileWatcher.eventCount} events`}
         </div>
       </div>
     </div>

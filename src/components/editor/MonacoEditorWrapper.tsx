@@ -20,6 +20,9 @@ interface MonacoEditorWrapperProps {
   goToLineRef?: React.MutableRefObject<((lineNumber: number, column?: number) => void) | null>;
   getCurrentLineRef?: React.MutableRefObject<(() => number) | null>;
   getTotalLinesRef?: React.MutableRefObject<(() => number) | null>;
+  openFindRef?: React.MutableRefObject<(() => void) | null>;
+  openFindReplaceRef?: React.MutableRefObject<(() => void) | null>;
+  goToSymbolRef?: React.MutableRefObject<(() => void) | null>;
 }
 
 export const MonacoEditorWrapper: React.FC<MonacoEditorWrapperProps> = ({
@@ -34,6 +37,9 @@ export const MonacoEditorWrapper: React.FC<MonacoEditorWrapperProps> = ({
   goToLineRef,
   getCurrentLineRef,
   getTotalLinesRef,
+  openFindRef,
+  openFindReplaceRef,
+  goToSymbolRef,
 }) => {
   const editorRef = useRef<any>(null);
 
@@ -99,6 +105,64 @@ export const MonacoEditorWrapper: React.FC<MonacoEditorWrapperProps> = ({
       console.log('Go to Line shortcut triggered from Monaco editor');
     });
     
+    // Add Find in File shortcut (Ctrl+F) - Monaco's built-in
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, () => {
+      editor.getAction('actions.find').run();
+    });
+    
+    // Add Find and Replace shortcut (Ctrl+H) - Monaco's built-in
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyH, () => {
+      editor.getAction('editor.action.startFindReplaceAction').run();
+    });
+    
+    // Add Go to Symbol shortcut (Ctrl+Shift+O) - Monaco's built-in
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyO, () => {
+      editor.getAction('editor.action.quickOutline').run();
+    });
+    
+    // Multi-cursor and selection shortcuts
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyL, () => {
+      editor.getAction('editor.action.selectHighlights').run();
+    });
+    
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.UpArrow, () => {
+      editor.getAction('editor.action.insertCursorAbove').run();
+    });
+    
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.DownArrow, () => {
+      editor.getAction('editor.action.insertCursorBelow').run();
+    });
+    
+    // Line manipulation shortcuts
+    editor.addCommand(monaco.KeyMod.Alt | monaco.KeyCode.UpArrow, () => {
+      editor.getAction('editor.action.moveLinesUpAction').run();
+    });
+    
+    editor.addCommand(monaco.KeyMod.Alt | monaco.KeyCode.DownArrow, () => {
+      editor.getAction('editor.action.moveLinesDownAction').run();
+    });
+    
+    editor.addCommand(monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.UpArrow, () => {
+      editor.getAction('editor.action.copyLinesUpAction').run();
+    });
+    
+    editor.addCommand(monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.DownArrow, () => {
+      editor.getAction('editor.action.copyLinesDownAction').run();
+    });
+    
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyK, () => {
+      editor.getAction('editor.action.deleteLines').run();
+    });
+    
+    // Commenting shortcuts
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Slash, () => {
+      editor.getAction('editor.action.commentLine').run();
+    });
+    
+    editor.addCommand(monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyA, () => {
+      editor.getAction('editor.action.blockComment').run();
+    });
+    
     editor.focus();
   }, [perfConfig.enableMinimap, performanceMode, onSave, onAskAI]);
 
@@ -113,6 +177,30 @@ export const MonacoEditorWrapper: React.FC<MonacoEditorWrapperProps> = ({
       editor.revealLineInCenter(lineNumber);
       // Focus the editor
       editor.focus();
+    }
+  }, []);
+
+  // Open find widget handler
+  const handleOpenFind = useCallback(() => {
+    if (editorRef.current) {
+      // Trigger Monaco's built-in find action
+      editorRef.current.getAction('actions.find').run();
+    }
+  }, []);
+
+  // Open find and replace widget handler
+  const handleOpenFindReplace = useCallback(() => {
+    if (editorRef.current) {
+      // Trigger Monaco's built-in find and replace action
+      editorRef.current.getAction('editor.action.startFindReplaceAction').run();
+    }
+  }, []);
+
+  // Open Go to Symbol in File handler
+  const handleGoToSymbol = useCallback(() => {
+    if (editorRef.current) {
+      // Trigger Monaco's built-in Go to Symbol action
+      editorRef.current.getAction('editor.action.quickOutline').run();
     }
   }, []);
 
@@ -145,7 +233,16 @@ export const MonacoEditorWrapper: React.FC<MonacoEditorWrapperProps> = ({
     if (getTotalLinesRef) {
       getTotalLinesRef.current = getTotalLines;
     }
-  }, [handleGoToLine, getCurrentLine, getTotalLines, goToLineRef, getCurrentLineRef, getTotalLinesRef]);
+    if (openFindRef) {
+      openFindRef.current = handleOpenFind;
+    }
+    if (openFindReplaceRef) {
+      openFindReplaceRef.current = handleOpenFindReplace;
+    }
+    if (goToSymbolRef) {
+      goToSymbolRef.current = handleGoToSymbol;
+    }
+  }, [handleGoToLine, getCurrentLine, getTotalLines, handleOpenFind, handleOpenFindReplace, goToLineRef, getCurrentLineRef, getTotalLinesRef, openFindRef, openFindReplaceRef, handleGoToSymbol, goToSymbolRef]);
 
   if (!selectedFile) {
     return null;

@@ -17,6 +17,12 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .manage(core::state::AppState::default())
+        .setup(|app| {
+            // Initialize the robust file system watcher
+            filesystem::watcher::initialize_watcher(app.handle().clone());
+            println!("🎮 [RUST] Syntari Desktop App initialized with robust file watcher");
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             // Core application commands
             core::commands::initialize_app,
@@ -51,6 +57,18 @@ fn main() {
             filesystem::commands::debug_test_command,
             filesystem::commands::search_in_project,
             filesystem::commands::search_in_project_streaming,
+            
+            // Backup directory management (VS Code style)
+            filesystem::commands::create_dir_all,
+            filesystem::commands::list_backup_files,
+            filesystem::commands::delete_file,
+            filesystem::commands::create_file,
+            filesystem::commands::create_directory,
+            
+            // Live file system watcher (VS Code style)
+            filesystem::watcher::start_file_watcher,
+            filesystem::watcher::stop_file_watcher,
+            filesystem::watcher::get_file_watcher_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

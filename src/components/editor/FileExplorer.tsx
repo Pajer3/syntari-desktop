@@ -13,6 +13,7 @@ import type { ProjectContext, FileInfo } from '../../types';
 import { getFileIcon } from '../../utils/editorUtils';
 import { useShortcut } from '../../hooks/useKeyboardShortcuts';
 import { announceShortcut } from '../../utils/keyboardUtils';
+import { useFileExplorerWatcher } from '../../hooks/useFileSystemWatcher';
 
 // ================================
 // ENHANCED TYPES & INTERFACES
@@ -389,6 +390,13 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const performanceManagerRef = useRef(new FileExplorerPerformanceManager());
   
+  // Live file system watcher for automatic updates
+  const fileWatcher = useFileExplorerWatcher(project.rootPath, useCallback(() => {
+    console.log('🔄 File system change detected in FileExplorer, triggering refresh...');
+    // Force re-computation of file tree by updating a dependency
+    setExpandedFolders(prev => new Set(prev)); // Trigger refresh without changing state
+  }, []));
+  
   // ================================
   // KEYBOARD NAVIGATION
   // ================================
@@ -481,7 +489,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     performanceManagerRef.current.endRender();
     
     return { flatTree: result.flatTree, treeMetrics: result.metrics };
-  }, [project.openFiles, project.rootPath, expandedFolders, selectedFile, maxVisibleItems]);
+  }, [project.openFiles, project.rootPath, expandedFolders, selectedFile, maxVisibleItems, fileWatcher.refreshTrigger]);
   
   // ================================
   // VIRTUAL SCROLLING SETUP
@@ -534,11 +542,21 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     <div className={`file-explorer h-full flex flex-col ${className || ''}`}>
       {/* Explorer Header */}
       <div className="px-3 py-2 bg-vscode-sidebar border-b border-vscode-border">
-        <h2 className="text-sm font-semibold text-vscode-fg">
-          Explorer
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-vscode-fg">
+            Explorer
+          </h2>
+          {/* Live file watcher status indicator */}
+          {fileWatcher.isWatching && (
+            <div className="flex items-center text-vscode-accent">
+              <div className="w-2 h-2 bg-green-400 rounded-full mr-1 animate-pulse"></div>
+              <span className="text-xs">Live</span>
+            </div>
+          )}
+        </div>
         <div className="text-xs text-vscode-fg-muted mt-1">
           {treeMetrics.files} files, {treeMetrics.folders} folders
+          {fileWatcher.isWatching && ` • ${fileWatcher.eventCount} updates`}
         </div>
       </div>
       

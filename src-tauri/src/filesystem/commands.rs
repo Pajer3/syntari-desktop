@@ -1108,20 +1108,20 @@ pub async fn search_in_project_streaming(
     use regex::Regex;
     use std::collections::HashSet;
     
-    tracing::debug!("Starting streaming project search: {} in {} (max: {:?})", query, project_path, max_results);
+    tracing::info!("🔍 Starting streaming search in project: {} for query: {}", project_path, query);
     
     if query.trim().is_empty() || query.trim().len() < 2 {
         return Ok(TauriResult::error("Search query must be at least 2 characters".to_string()));
     }
     
+    let max_results = max_results.unwrap_or(1000); // Default limit
     let project_path = Path::new(&project_path);
+    
     if !project_path.exists() || !project_path.is_dir() {
         return Ok(TauriResult::error("Invalid project path".to_string()));
     }
     
-    let max_results = max_results.unwrap_or(50); // Reduced default for better performance
-    
-    // Build search regex (same as original but with early validation)
+    // Build search regex
     let search_regex = if options.use_regex {
         match Regex::new(&query) {
             Ok(r) => r,
@@ -1147,161 +1147,366 @@ pub async fn search_in_project_streaming(
     let exclude_types: HashSet<_> = options.exclude_file_types.iter().map(|s| s.as_str()).collect();
     let exclude_dirs: HashSet<_> = options.exclude_directories.iter().map(|s| s.as_str()).collect();
     
-    // More aggressive filtering for performance and non-blocking operation
-    let mut builder = WalkBuilder::new(project_path);
-    builder
-        .hidden(false)
-        .git_ignore(true)
-        .git_exclude(true)
-        .git_global(true)
-        .max_depth(Some(10)) // Reduced depth for streaming - prevents deep recursion
-        .follow_links(false);
-    
-    let walker = builder.build();
-    
+    let start_time = std::time::Instant::now();
     let mut results = Vec::new();
     let mut total_matches = 0;
     let mut files_searched = 0;
-    let mut files_with_matches = 0;
-    let mut total_files = 0;
+    let mut total_files_found = 0;
     
-    // Process files in very small chunks for true non-blocking behavior
-    const TINY_CHUNK_SIZE: usize = 5; // Even smaller chunks - process only 5 files at a time
-    const MAX_FILES_TO_PROCESS: usize = 200; // Limit total files processed for streaming
-    let mut current_chunk = 0;
-    let mut processed_files = 0;
+    // Use ignore walker for better gitignore support
+    let walker = WalkBuilder::new(project_path)
+        .hidden(false)
+        .parents(true)
+        .ignore(true)
+        .git_ignore(true)
+        .git_global(true)
+        .git_exclude(true)
+        .require_git(false)
+        .follow_links(false)
+        .max_depth(Some(20))
+        .build();
     
     for entry in walker {
-        let entry = match entry {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-        
-        let path = entry.path();
-        
-        // Skip directories
-        if !path.is_file() {
-            continue;
-        }
-        
-        total_files += 1;
-        
-        // Early exit if we have enough results (performance optimization)
-        if files_with_matches >= max_results || processed_files >= MAX_FILES_TO_PROCESS {
-            tracing::debug!("Reached limits: results={}, processed={}", files_with_matches, processed_files);
+        if total_matches >= max_results {
+            tracing::info!("🔍 Reached max results limit: {}", max_results);
             break;
         }
         
-        // Yield control back to UI very frequently - every 5 files
-        if current_chunk % TINY_CHUNK_SIZE == 0 && current_chunk > 0 {
-            tokio::task::yield_now().await;
-        }
-        current_chunk += 1;
-        processed_files += 1;
-        
-        // Skip very large files for performance (even smaller limit for streaming)
-        if let Ok(metadata) = path.metadata() {
-            const MAX_FILE_SIZE_STREAMING: u64 = 512 * 1024; // 512KB limit for true streaming
-            if metadata.len() > MAX_FILE_SIZE_STREAMING {
-                continue;
-            }
-        }
-        
-        // Check excluded directories
-        if let Some(parent) = path.parent() {
-            if exclude_dirs.iter().any(|&dir| parent.to_string_lossy().contains(dir)) {
-                continue;
-            }
-        }
-        
-        // Check file extension filters
-        if let Some(extension) = path.extension().and_then(|ext| ext.to_str()) {
-            let ext_with_dot = format!(".{}", extension);
-            
-            // If include filters are specified, file must match one of them
-            if !include_types.is_empty() && !include_types.contains(ext_with_dot.as_str()) {
-                continue;
-            }
-            
-            // Skip if file matches exclude filter
-            if exclude_types.contains(ext_with_dot.as_str()) {
-                continue;
-            }
-        }
-        
-        files_searched += 1;
-        
-        // Read and search file content with size limit check
-        let content = match std::fs::read_to_string(path) {
-            Ok(c) => {
-                // Additional content size check after reading
-                if c.len() > 100_000 { // 100KB content limit
-                    continue;
+        match entry {
+            Ok(entry) => {
+                let path = entry.path();
+                if path.is_file() {
+                    total_files_found += 1;
+                    
+                    // Apply file type filters
+                    if !is_file_type_allowed_new(path, &include_types, &exclude_types, &exclude_dirs) {
+                        continue;
+                    }
+                    
+                    files_searched += 1;
+                    
+                    // Search in file
+                    match search_in_file_impl(path, &search_regex, &options) {
+                        Ok(file_matches) => {
+                            if !file_matches.is_empty() {
+                                let matches_count = file_matches.len() as u32;
+                                total_matches += matches_count;
+                                results.push(SearchResult {
+                                    file: path.to_string_lossy().to_string(),
+                                    matches: file_matches,
+                                    total_matches: matches_count,
+                                });
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("Error searching file {:?}: {}", path, e);
+                        }
+                    }
                 }
-                c
-            },
-            Err(_) => continue, // Skip binary files or files we can't read
-        };
-        
-        let mut file_matches = Vec::new();
-        let mut matches_in_file = 0;
-        
-        // Limit matches per file to prevent massive results (reduced for streaming)
-        const MAX_MATCHES_PER_FILE: usize = 10; // Reduced from 20 to 10
-        
-        // Search line by line with early exit and yield points
-        for (line_num, line) in content.lines().enumerate() {
-            if matches_in_file >= MAX_MATCHES_PER_FILE {
-                break; // Stop searching this file if too many matches
             }
-            
-            // Yield control every 100 lines to prevent blocking
-            if line_num % 100 == 0 && line_num > 0 {
-                tokio::task::yield_now().await;
-            }
-            
-            for mat in search_regex.find_iter(line) {
-                if matches_in_file >= MAX_MATCHES_PER_FILE {
-                    break;
-                }
-                
-                let match_obj = SearchMatch {
-                    file: path.to_string_lossy().to_string(),
-                    line: (line_num + 1) as u32,
-                    column: (mat.start() + 1) as u32,
-                    text: line.to_string(),
-                    match_start: mat.start() as u32,
-                    match_end: mat.end() as u32,
-                };
-                file_matches.push(match_obj);
-                total_matches += 1;
-                matches_in_file += 1;
+            Err(e) => {
+                tracing::warn!("Error walking directory: {}", e);
             }
         }
         
-        // Add file result if matches found
-        if !file_matches.is_empty() {
-            let file_result = SearchResult {
-                file: path.to_string_lossy().to_string(),
-                total_matches: file_matches.len() as u32,
-                matches: file_matches,
-            };
-            results.push(file_result);
-            files_with_matches += 1;
+        // Early termination check for performance
+        if total_matches >= max_results {
+            break;
         }
     }
     
-    let search_data = SearchData {
+    let search_duration = start_time.elapsed();
+    tracing::info!(
+        "🔍 Search completed in {:.2}ms: {} matches in {} files (searched {} of {} total files)",
+        search_duration.as_millis(),
+        total_matches,
+        results.len(),
+        files_searched,
+        total_files_found
+    );
+    
+    Ok(TauriResult::success(SearchData {
         results,
         total_matches,
         files_searched,
-        total_files,
-    };
+        total_files: total_files_found,
+    }))
+}
+
+// Helper function for file type filtering
+fn is_file_type_allowed_new(
+    path: &Path,
+    include_types: &std::collections::HashSet<&str>,
+    exclude_types: &std::collections::HashSet<&str>,
+    exclude_dirs: &std::collections::HashSet<&str>,
+) -> bool {
+    // Check excluded directories
+    if let Some(parent) = path.parent() {
+        if exclude_dirs.iter().any(|&dir| parent.to_string_lossy().contains(dir)) {
+            return false;
+        }
+    }
     
-    tracing::debug!(
-        "Streaming search completed: {} matches in {} files (searched {} of {} files, processed {} files)",
-        total_matches, search_data.results.len(), files_searched, total_files, processed_files
-    );
+    // Check file extension filters
+    if let Some(extension) = path.extension().and_then(|ext| ext.to_str()) {
+        let ext_with_dot = format!(".{}", extension);
+        
+        // If include filters are specified, file must match one of them
+        if !include_types.is_empty() && !include_types.contains(ext_with_dot.as_str()) {
+            return false;
+        }
+        
+        // Skip if file matches exclude filter
+        if exclude_types.contains(ext_with_dot.as_str()) {
+            return false;
+        }
+    }
     
-    Ok(TauriResult::success(search_data))
+    true
+}
+
+// Helper function for searching in a single file
+fn search_in_file_impl(
+    path: &Path,
+    search_regex: &regex::Regex,
+    _options: &SearchOptions,
+) -> Result<Vec<SearchMatch>, Box<dyn std::error::Error>> {
+    // Skip very large files for performance
+    if let Ok(metadata) = path.metadata() {
+        const MAX_FILE_SIZE: u64 = 1024 * 1024; // 1MB limit
+        if metadata.len() > MAX_FILE_SIZE {
+            return Ok(Vec::new());
+        }
+    }
+    
+    let content = std::fs::read_to_string(path)?;
+    let mut file_matches = Vec::new();
+    
+    const MAX_MATCHES_PER_FILE: usize = 20;
+    
+    for (line_num, line) in content.lines().enumerate() {
+        if file_matches.len() >= MAX_MATCHES_PER_FILE {
+            break;
+        }
+        
+        for mat in search_regex.find_iter(line) {
+            if file_matches.len() >= MAX_MATCHES_PER_FILE {
+                break;
+            }
+            
+            file_matches.push(SearchMatch {
+                file: path.to_string_lossy().to_string(),
+                line: (line_num + 1) as u32,
+                column: (mat.start() + 1) as u32,
+                text: line.to_string(),
+                match_start: mat.start() as u32,
+                match_end: mat.end() as u32,
+            });
+        }
+    }
+    
+    Ok(file_matches)
+}
+
+// ================================
+// BACKUP DIRECTORY MANAGEMENT (VS Code Style)
+// ================================
+
+/// Create directory recursively (equivalent to `mkdir -p`)
+#[tauri::command]
+pub async fn create_dir_all(path: String) -> std::result::Result<TauriResult<String>, String> {
+    tracing::debug!("Creating directory recursively: {}", path);
+    
+    match std::fs::create_dir_all(&path) {
+        Ok(_) => {
+            tracing::info!("✅ Successfully created directory: {}", path);
+            Ok(TauriResult::success("Directory created successfully".to_string()))
+        }
+        Err(e) => {
+            tracing::error!("❌ Failed to create directory {}: {}", path, e);
+            Ok(TauriResult::error(format!("Failed to create directory: {}", e)))
+        }
+    }
+}
+
+/// List all backup files in a directory recursively
+#[tauri::command]
+pub async fn list_backup_files(backup_dir: String) -> std::result::Result<TauriResult<Vec<String>>, String> {
+    tracing::debug!("Listing backup files in: {}", backup_dir);
+    
+    let backup_path = Path::new(&backup_dir);
+    
+    if !backup_path.exists() {
+        tracing::warn!("Backup directory does not exist: {}", backup_dir);
+        return Ok(TauriResult::success(Vec::new()));
+    }
+    
+    let mut backup_files = Vec::new();
+    
+    // Walk directory recursively to find backup files
+    let walker = WalkBuilder::new(backup_path)
+        .hidden(false)
+        .parents(false)
+        .ignore(false)
+        .git_ignore(false)
+        .follow_links(false)
+        .max_depth(Some(10))
+        .build();
+    
+    for entry in walker {
+        match entry {
+            Ok(entry) => {
+                let path = entry.path();
+                if path.is_file() {
+                    let file_name = path.file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or("");
+                    
+                    // Check if it's a backup file (contains .backup. pattern)
+                    if file_name.contains(".backup.") {
+                        backup_files.push(path.to_string_lossy().to_string());
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Error walking backup directory: {}", e);
+            }
+        }
+    }
+    
+    tracing::info!("Found {} backup files in {}", backup_files.len(), backup_dir);
+    Ok(TauriResult::success(backup_files))
+}
+
+/// Delete a file or directory
+#[tauri::command]
+pub async fn delete_file(path: String, force: Option<bool>) -> Result<String, String> {
+    use std::fs;
+    use std::path::Path;
+    
+    println!("🗑️ [RUST] Deleting file: {} (force: {:?})", path, force);
+    
+    let file_path = Path::new(&path);
+    
+    if !file_path.exists() {
+        return Err(format!("File or directory does not exist: {}", path));
+    }
+    
+    let is_force = force.unwrap_or(false);
+    
+    match fs::metadata(&file_path) {
+        Ok(metadata) => {
+            if metadata.is_dir() {
+                // Delete directory
+                if is_force {
+                    // Force delete (remove all contents)
+                    match fs::remove_dir_all(&file_path) {
+                        Ok(_) => {
+                            println!("✅ [RUST] Directory deleted successfully: {}", path);
+                            Ok(format!("Directory deleted: {}", path))
+                        }
+                        Err(e) => {
+                            println!("❌ [RUST] Failed to delete directory: {}", e);
+                            Err(format!("Failed to delete directory: {}", e))
+                        }
+                    }
+                } else {
+                    // Regular delete (directory must be empty)
+                    match fs::remove_dir(&file_path) {
+                        Ok(_) => {
+                            println!("✅ [RUST] Empty directory deleted successfully: {}", path);
+                            Ok(format!("Directory deleted: {}", path))
+                        }
+                        Err(e) => {
+                            println!("❌ [RUST] Failed to delete directory (not empty?): {}", e);
+                            Err(format!("Failed to delete directory (may not be empty): {}", e))
+                        }
+                    }
+                }
+            } else {
+                // Delete file
+                match fs::remove_file(&file_path) {
+                    Ok(_) => {
+                        println!("✅ [RUST] File deleted successfully: {}", path);
+                        Ok(format!("File deleted: {}", path))
+                    }
+                    Err(e) => {
+                        println!("❌ [RUST] Failed to delete file: {}", e);
+                        Err(format!("Failed to delete file: {}", e))
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            println!("❌ [RUST] Failed to get file metadata: {}", e);
+            Err(format!("Failed to access file: {}", e))
+        }
+    }
+}
+
+/// Create a new file
+#[tauri::command]
+pub async fn create_file(path: String, content: Option<String>) -> Result<String, String> {
+    use std::fs;
+    use std::path::Path;
+    
+    println!("📄 [RUST] Creating file: {}", path);
+    
+    let file_path = Path::new(&path);
+    
+    if file_path.exists() {
+        return Err(format!("File already exists: {}", path));
+    }
+    
+    // Create parent directories if they don't exist
+    if let Some(parent) = file_path.parent() {
+        if !parent.exists() {
+            match fs::create_dir_all(parent) {
+                Ok(_) => println!("📁 [RUST] Created parent directories for: {}", path),
+                Err(e) => {
+                    println!("❌ [RUST] Failed to create parent directories: {}", e);
+                    return Err(format!("Failed to create parent directories: {}", e));
+                }
+            }
+        }
+    }
+    
+    let file_content = content.unwrap_or_default();
+    
+    match fs::write(&file_path, file_content) {
+        Ok(_) => {
+            println!("✅ [RUST] File created successfully: {}", path);
+            Ok(format!("File created: {}", path))
+        }
+        Err(e) => {
+            println!("❌ [RUST] Failed to create file: {}", e);
+            Err(format!("Failed to create file: {}", e))
+        }
+    }
+}
+
+/// Create a new directory
+#[tauri::command]
+pub async fn create_directory(path: String) -> Result<String, String> {
+    use std::fs;
+    use std::path::Path;
+    
+    println!("📁 [RUST] Creating directory: {}", path);
+    
+    let dir_path = Path::new(&path);
+    
+    if dir_path.exists() {
+        return Err(format!("Directory already exists: {}", path));
+    }
+    
+    match fs::create_dir_all(&dir_path) {
+        Ok(_) => {
+            println!("✅ [RUST] Directory created successfully: {}", path);
+            Ok(format!("Directory created: {}", path))
+        }
+        Err(e) => {
+            println!("❌ [RUST] Failed to create directory: {}", e);
+            Err(format!("Failed to create directory: {}", e))
+        }
+    }
 } 

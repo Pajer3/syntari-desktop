@@ -157,6 +157,7 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
   private cache = new LocalFileSystemCache();
   private iconCache = new Map<string, string>();
   private folderContentsCache = new Map<string, FileNode[]>(); // Cache loaded folder contents
+  private lastRefreshTime = Date.now(); // Track last refresh for cache invalidation
   private metrics = {
     scanTime: 0,
     nodeCount: 0,
@@ -259,9 +260,12 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
     
     // Check cache first
     const cacheKey = `root:${rootPath}:${includeHidden}`;
+    
     if (this.folderContentsCache.has(cacheKey)) {
       console.log('🎯 Cache hit for root:', rootPath);
       return this.folderContentsCache.get(cacheKey)!;
+    } else {
+      console.log('❌ Cache miss for root:', rootPath, '- loading fresh data');
     }
 
     return this.loadDirectoryContents('load_root_items', {
@@ -623,6 +627,97 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
     ];
     
     return skipPatterns.includes(dirName) || dirName.startsWith('.');
+  }
+
+  // ================================
+  // LIVE FILE SYSTEM UPDATES
+  // ================================
+
+  /**
+   * Invalidate caches and force refresh - called when file system changes detected
+   */
+  invalidateCache(affectedPath?: string): void {
+    console.log('🔄 Invalidating file system cache', affectedPath ? `for: ${affectedPath}` : '(all)');
+    
+    this.lastRefreshTime = Date.now();
+    
+    if (affectedPath) {
+      // Enhanced cache invalidation logic for different cache key formats
+      const pathsToInvalidate = Array.from(this.folderContentsCache.keys())
+        .filter(cachedKey => {
+          // Handle root cache keys (format: "root:/path:includeHidden")
+          if (cachedKey.startsWith('root:')) {
+            const rootPath = cachedKey.split(':')[1]; // Extract path from "root:/path:true"
+            return rootPath && (affectedPath.startsWith(rootPath) || rootPath.startsWith(affectedPath));
+          }
+          
+          // Handle regular folder cache keys (format: "/path")
+          return affectedPath.startsWith(cachedKey) || cachedKey.startsWith(affectedPath);
+        });
+      
+      pathsToInvalidate.forEach(key => {
+        this.folderContentsCache.delete(key);
+        console.log(`🗑️ Invalidated cache for key: ${key}`);
+      });
+      
+      console.log(`🔄 Cache invalidation complete: ${pathsToInvalidate.length} entries invalidated`);
+    } else {
+      // Full cache invalidation
+      this.folderContentsCache.clear();
+      this.iconCache.clear();
+      console.log('🗑️ Full cache invalidation complete');
+    }
+  }
+
+  /**
+   * Handle file system events from live watcher
+   */
+  handleFileSystemEvent(eventType: 'created' | 'modified' | 'deleted', path: string, isDirectory: boolean): void {
+    // Only log important events, not every single one
+    if (eventType !== 'modified' || Math.random() < 0.05) { // Log only 5% of modify events
+      console.log(`🔄 Handling file system event: ${eventType} - ${path} (${isDirectory ? 'directory' : 'file'})`);
+    }
+    
+    // Invalidate caches for both parent directory and root directory
+    const parentPath = path.substring(0, path.lastIndexOf('/'));
+    
+    // Invalidate parent directory cache
+    this.invalidateCache(parentPath);
+    
+    // Also invalidate the root directory cache if this is a root-level change
+    // This ensures root-level file/folder changes are properly reflected
+    if (parentPath && parentPath !== path) {
+      // Check if this is close to root level (only 1-2 levels deep)
+      const pathSegments = parentPath.split('/').filter(Boolean);
+      if (pathSegments.length <= 3) { // Adjust threshold as needed
+        // Find and invalidate any root cache entries for this general area
+        this.invalidateCache(parentPath);
+      }
+    }
+  }
+
+  /**
+   * Force refresh of a specific folder's contents
+   */
+  async refreshFolderContents(folderPath: string, includeHidden: boolean = false): Promise<FileNode[]> {
+    console.log('🔄 Force refreshing folder contents:', folderPath);
+    
+    // Remove from cache to force fresh load
+    this.folderContentsCache.delete(folderPath);
+    
+    // Load fresh contents
+    return this.loadFolderContents(folderPath, includeHidden);
+  }
+
+  /**
+   * Get cache statistics for debugging
+   */
+  getCacheStats(): { foldersCached: number; iconsCached: number; lastRefresh: number } {
+    return {
+      foldersCached: this.folderContentsCache.size,
+      iconsCached: this.iconCache.size,
+      lastRefresh: this.lastRefreshTime
+    };
   }
 }
 

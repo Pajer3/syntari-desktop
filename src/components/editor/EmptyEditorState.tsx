@@ -46,8 +46,8 @@ export const EmptyEditorState: React.FC<EmptyEditorStateProps> = ({ project }) =
         </div>
 
         <div className="text-xs text-vscode-fg-muted border-t border-vscode-border pt-4">
-          <div>Project: <span className="text-vscode-accent">{project.projectType}</span></div>
-          <div>Files: <span className="text-vscode-accent">{project.openFiles.length}</span></div>
+          <div>Project: <span className="text-vscode-accent">{project?.projectType || 'Unknown'}</span></div>
+          <div>Files: <span className="text-vscode-accent">{project?.openFiles?.length || 0}</span></div>
         </div>
       </div>
     </div>
