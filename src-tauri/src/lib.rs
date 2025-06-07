@@ -30,6 +30,10 @@ pub fn run() {
             // Setup logic and developer tools for debug builds
             tracing::info!("Syntari AI IDE starting up...");
             
+            // Initialize the robust file system watcher
+            filesystem::watcher::initialize_watcher(app.handle().clone());
+            tracing::info!("🎮 [RUST] Syntari Desktop App initialized with robust file watcher");
+            
             // Always enable devtools for debugging
             if let Some(window) = app.get_webview_window("main") {
                 // Enable developer tools
@@ -44,20 +48,28 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             core::commands::initialize_app,
+            
+            // Project management commands  
+            project::commands::open_project,
+            
+            // AI provider commands
             ai::commands::get_ai_providers,
             ai::commands::generate_ai_response,
-            project::commands::open_project,
+            ai::context7::commands::resolve_library_id,
+            ai::context7::commands::get_library_docs,
+            
+            // Chat commands
             chat::commands::create_chat_session,
             chat::commands::send_chat_message,
             chat::commands::get_chat_session,
+            
+            // VS Code-style filesystem operations
             filesystem::commands::read_file,
             filesystem::commands::read_file_smart,
             filesystem::commands::save_file,
+            filesystem::commands::get_directory_mtime,
             filesystem::commands::open_folder_dialog,
             filesystem::commands::check_folder_permissions,
-            ai::context7::commands::resolve_library_id,
-            ai::context7::commands::get_library_docs,
-            filesystem::commands::get_directory_mtime,
             filesystem::commands::scan_directories_only,
             filesystem::commands::scan_files_chunked,
             filesystem::commands::scan_files_streaming,
@@ -65,6 +77,20 @@ pub fn run() {
             filesystem::commands::load_folder_contents,
             filesystem::commands::load_root_items,
             filesystem::commands::debug_test_command,
+            filesystem::commands::search_in_project,
+            filesystem::commands::search_in_project_streaming,
+            
+            // File management commands (VS Code style)
+            filesystem::commands::create_dir_all,
+            filesystem::commands::list_backup_files,
+            filesystem::commands::delete_file,
+            filesystem::commands::create_file,
+            filesystem::commands::create_directory,
+            
+            // Live file system watcher (VS Code style)
+            filesystem::watcher::start_file_watcher,
+            filesystem::watcher::stop_file_watcher,
+            filesystem::watcher::get_file_watcher_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

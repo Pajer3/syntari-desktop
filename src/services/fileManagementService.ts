@@ -46,13 +46,13 @@ export class FileManagementService {
    */
   async fileExists(filePath: string): Promise<boolean> {
     try {
-      const result = await invoke<TauriResult<string>>('debug_test_command', { 
-        testPath: filePath 
+      const result = await invoke<{ success: boolean; data?: string }>('file_exists', {
+        path: filePath
       });
       
-      return result.success && result.data?.includes('Exists: true');
+      return result.success && (result.data?.includes('Exists: true') || false);
     } catch (error) {
-      // If the command fails, assume file doesn't exist
+      console.error('Error checking file existence:', error);
       return false;
     }
   }
@@ -84,6 +84,8 @@ export class FileManagementService {
         path: fullPath,
         content: content
       });
+      
+      console.log('✅ File creation result:', result);
 
       // Read the file back to get actual metadata
       const readResult = await invoke<TauriResult<any>>('read_file_smart', { 

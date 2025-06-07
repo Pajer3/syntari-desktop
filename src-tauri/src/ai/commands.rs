@@ -61,7 +61,7 @@ async fn create_smart_mock_response(
     contextual_prompt: &str,
     project_context: &crate::project::types::ProjectContext,
 ) -> Result<ConsensusResult, String> {
-    use crate::core::generate_id;
+
     
     // Analyze the prompt to provide contextually appropriate responses
     let prompt_lower = request.prompt.to_lowercase();
@@ -111,7 +111,7 @@ fn generate_explanation_response(prompt: &str, context: &crate::project::types::
     )
 }
 
-fn generate_code_response(prompt: &str, context: &crate::project::types::ProjectContext) -> String {
+fn generate_code_response(_prompt: &str, context: &crate::project::types::ProjectContext) -> String {
     let code_sample = match context.project_type.as_str() {
         "rust" => {
             "```rust\n// Example implementation\nfn example_function() -> Result<String, Box<dyn std::error::Error>> {\n    Ok(\"Hello from Rust!\".to_string())\n}\n```"
@@ -138,7 +138,7 @@ fn generate_debug_response(prompt: &str, _context: &crate::project::types::Proje
     )
 }
 
-fn generate_optimization_response(prompt: &str, context: &crate::project::types::ProjectContext) -> String {
+fn generate_optimization_response(_prompt: &str, context: &crate::project::types::ProjectContext) -> String {
     let optimization_tips = match context.project_type.as_str() {
         "rust" => "• Use `cargo clippy` for performance suggestions\n• Consider `Arc<T>` for shared ownership\n• Profile with `cargo bench` for bottlenecks",
         "typescript" => "• Use proper TypeScript strict mode\n• Implement lazy loading for large modules\n• Consider using Web Workers for CPU-intensive tasks",

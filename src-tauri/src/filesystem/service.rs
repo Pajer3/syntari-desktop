@@ -5,6 +5,7 @@ use string_interner::{StringInterner, DefaultSymbol, backend::StringBackend};
 use std::collections::HashMap;
 use std::sync::RwLock;
 use std::path::Path;
+use crate::core::{AppResult, AppError};
 
 /// VS Code-style string interning for massive memory savings
 /// File paths dominate memory usage - interning cuts them to 4-byte handles
@@ -93,8 +94,72 @@ impl FilesystemService {
         }
     }
     
+    /// Validate file operation before execution
+    pub fn validate_file_operation(&self, operation: &str, file_path: &str) -> AppResult<()> {
+        if file_path.trim().is_empty() {
+            return Err(AppError::validation_with_field(
+                "EMPTY_PATH",
+                &format!("{} operation failed: File path cannot be empty", operation),
+                "file_path"
+            ));
+        }
+
+        // Check for invalid characters in path
+        let invalid_chars = ['<', '>', ':', '"', '|', '?', '*'];
+        let has_invalid_chars = invalid_chars.iter().any(|&char| file_path.contains(char));
+        
+        if has_invalid_chars {
+            return Err(AppError::validation_with_field(
+                "INVALID_CHARS",
+                &format!("{} operation failed: File path contains invalid characters", operation),
+                "file_path"
+            ));
+        }
+
+        // Check path length
+        if file_path.len() > 260 { // Windows MAX_PATH limitation
+            return Err(AppError::validation_with_field(
+                "PATH_TOO_LONG",
+                &format!("{} operation failed: File path is too long", operation),
+                "file_path"
+            ));
+        }
+
+        Ok(())
+    }
+    
+    /// Check if a file exists and is accessible
+    pub async fn file_exists(&self, file_path: &str) -> AppResult<bool> {
+        self.validate_file_operation("existence_check", file_path)?;
+        
+        let path = Path::new(file_path);
+        Ok(path.exists() && path.is_file())
+    }
+    
+    /// Check if a directory exists and is accessible
+    pub async fn dir_exists(&self, dir_path: &str) -> AppResult<bool> {
+        self.validate_file_operation("existence_check", dir_path)?;
+        
+        let path = Path::new(dir_path);
+        Ok(path.exists() && path.is_dir())
+    }
+    
+    /// Get file metadata safely
+    pub async fn get_file_metadata(&self, file_path: &str) -> AppResult<std::fs::Metadata> {
+        self.validate_file_operation("metadata_read", file_path)?;
+        
+        std::fs::metadata(file_path)
+            .map_err(|e| AppError::filesystem_with_path(
+                "METADATA_READ_FAILED",
+                &format!("Failed to read file metadata: {}", e),
+                file_path
+            ))
+    }
+    
     /// VS Code-style optimized directory scanning
-    pub async fn scan_directory_optimized(&mut self, root_path: &str) -> Result<Vec<OptimizedFileNode>, String> {
+    pub async fn scan_directory_optimized(&mut self, root_path: &str) -> AppResult<Vec<OptimizedFileNode>> {
+        self.validate_file_operation("directory_scan", root_path)?;
+        
         let start_time = std::time::Instant::now();
         self.scan_count += 1;
         
@@ -109,7 +174,12 @@ impl FilesystemService {
             .build();
         
         for entry in walker {
-            let entry = entry.map_err(|e| format!("Walk error: {}", e))?;
+            let entry = entry.map_err(|e| AppError::filesystem_with_path(
+                "WALK_ERROR",
+                &format!("Walk error: {}", e),
+                root_path
+            ))?;
+            
             let path = entry.path();
             
             // Calculate memory impact
@@ -167,13 +237,13 @@ impl FilesystemService {
         
         let elapsed = start_time.elapsed();
         
-        println!("🚀 VS Code-style scan complete:");
-        println!("   📁 {} files/directories in {:?}", nodes.len(), elapsed);
-        println!("   💾 Memory saved: {} KB ({} → {} bytes)", 
+        tracing::info!("VS Code-style scan complete:");
+        tracing::info!("   📁 {} files/directories in {:?}", nodes.len(), elapsed);
+        tracing::info!("   💾 Memory saved: {} KB ({} → {} bytes)", 
                  (total_string_bytes.saturating_sub(symbols_bytes)) / 1024,
                  total_string_bytes, 
                  symbols_bytes);
-        println!("   🔗 Interned strings: {:?}", self.path_interner.memory_stats());
+        tracing::info!("   🔗 Interned strings: {:?}", self.path_interner.memory_stats());
         
         Ok(nodes)
     }
@@ -218,5 +288,39 @@ impl FilesystemService {
             self.memory_saved_bytes,
             self.path_interner.memory_stats()
         )
+    }
+    
+    /// Get file size in human-readable format
+    pub fn format_file_size(size: u64) -> String {
+        const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
+        let mut size = size as f64;
+        let mut unit_index = 0;
+        
+        while size >= 1024.0 && unit_index < UNITS.len() - 1 {
+            size /= 1024.0;
+            unit_index += 1;
+        }
+        
+        if unit_index == 0 {
+            format!("{} {}", size as u64, UNITS[unit_index])
+        } else {
+            format!("{:.1} {}", size, UNITS[unit_index])
+        }
+    }
+    
+    /// Check if a file is safe to open in text editor
+    pub fn is_safe_to_open(&self, _file_path: &str, size: u64) -> (bool, Option<String>) {
+        const MAX_SAFE_SIZE: u64 = 64 * 1024 * 1024; // 64MB
+        const LARGE_FILE_WARNING: u64 = 1024 * 1024; // 1MB
+        
+        if size > MAX_SAFE_SIZE {
+            return (false, Some(format!("File too large ({}) to open safely", Self::format_file_size(size))));
+        }
+        
+        if size > LARGE_FILE_WARNING {
+            return (true, Some(format!("Large file ({}). Some features may be slower", Self::format_file_size(size))));
+        }
+        
+        (true, None)
     }
 } 

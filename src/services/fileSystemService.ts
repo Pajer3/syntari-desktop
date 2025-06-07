@@ -174,9 +174,7 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
     const startTime = performance.now();
     
     try {
-      console.log('🚀 VS Code INSTANT scan - root only:', path);
-      
-      // Load ONLY root level items (VS Code style) - call backend directly
+      // Load root level items (VS Code style)
       const result = await invoke<{
         success: boolean;
         data?: Array<{
@@ -192,13 +190,10 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
       }>('load_root_items', { 
         rootPath: path,
         includeHidden: options.includeHidden,
-        showHiddenFolders: true  // Show all folders including __pycache__, node_modules, etc.
+        showHiddenFolders: true
       });
       
-      console.log('📋 Backend response:', result);
-      
       if (result.success && result.data && result.data.length > 0) {
-        // Convert to FileNode format
         const rootItems: FileNode[] = result.data.map(item => ({
           id: this.generateId(item.path),
           path: item.path,
@@ -210,40 +205,32 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
           extension: item.extension,
           iconId: this.getIconId(item.extension, item.is_directory),
           hasChildren: item.is_directory,
-          isExpanded: false, // All folders start collapsed
-          children: undefined // Lazy loaded when expanded
+          isExpanded: false,
+          children: undefined
         }));
-        
-        console.log(`⚡ INSTANT root load: ${rootItems.length} items (${rootItems.filter(n => n.isDirectory).length} dirs, ${rootItems.filter(n => !n.isDirectory).length} files)`);
         
         this.metrics.nodeCount = rootItems.length;
         yield rootItems;
         return;
       } else {
         console.warn('❌ No data returned from backend:', result.error);
-        // Yield empty array if no data
         yield [];
         return;
       }
       
     } catch (error) {
       console.error('❌ VS Code root scan failed:', error);
-      // Yield empty array to prevent UI blocking
       yield [];
     } finally {
       this.metrics.scanTime = performance.now() - startTime;
-      console.log(`⏱️ Instant scan time: ${this.metrics.scanTime.toFixed(2)}ms`);
     }
   }
   
   // VS Code-style lazy folder expansion
   async loadFolderContents(folderPath: string, includeHidden: boolean = false): Promise<FileNode[]> {
-    console.log('📁 VS Code lazy load folder:', folderPath);
-    
     // Check cache first
     const cacheKey = `${folderPath}:${includeHidden}`;
     if (this.folderContentsCache.has(cacheKey)) {
-      console.log('🎯 Cache hit for folder:', folderPath);
       return this.folderContentsCache.get(cacheKey)!;
     }
 
@@ -256,16 +243,11 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
 
   // VS Code-style root project loading
   async loadRootItems(rootPath: string, includeHidden: boolean = true): Promise<FileNode[]> {
-    console.log('🚀 VS Code instant root load for path:', rootPath);
-    
     // Check cache first
     const cacheKey = `root:${rootPath}:${includeHidden}`;
     
     if (this.folderContentsCache.has(cacheKey)) {
-      console.log('🎯 Cache hit for root:', rootPath);
       return this.folderContentsCache.get(cacheKey)!;
-    } else {
-      console.log('❌ Cache miss for root:', rootPath, '- loading fresh data');
     }
 
     return this.loadDirectoryContents('load_root_items', {
@@ -283,9 +265,6 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
     pathForLogging: string
   ): Promise<FileNode[]> {
     try {
-      console.log(`📁 Loading ${command} for:`, pathForLogging);
-      console.log('📁 Parameters:', params);
-      
       const result = await invoke<{
         success: boolean;
         data?: Array<{
@@ -299,8 +278,6 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
         }>;
         error?: string;
       }>(command, params);
-      
-      console.log(`📋 ${command} response:`, result);
       
       if (result.success && result.data) {
         const items: FileNode[] = result.data.map(item => ({
@@ -320,7 +297,6 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
         
         // Cache the results
         this.folderContentsCache.set(cacheKey, items);
-        console.log(`✅ Loaded ${items.length} items from ${pathForLogging}`);
         
         return items;
       } else {

@@ -130,7 +130,7 @@ impl AppState {
             tracing::info!("Updated provider {} availability to {}", id, available);
             Ok(())
         } else {
-            Err(SyntariError::AiProviderUnavailable(format!("Provider {} not found", id)))
+            Err(SyntariError::ai("PROVIDER_NOT_FOUND", &format!("Provider {} not found", id)))
         }
     }
     
@@ -161,7 +161,7 @@ impl AppState {
             tracing::info!("Removed chat session: {}", id);
             Ok(())
         } else {
-            Err(SyntariError::SessionNotFound(format!("Session {} not found", id)))
+            Err(SyntariError::chat("SESSION_NOT_FOUND", &format!("Session {} not found", id)))
         }
     }
     

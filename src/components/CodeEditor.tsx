@@ -9,6 +9,7 @@ import { useFileLoader } from './editor/useFileLoader';
 import { useFileSave } from './editor/useFileSave';
 import { usePerformanceConfig } from './editor/usePerformanceConfig';
 import { useShortcut } from '../hooks/useKeyboardShortcuts';
+import { useFileTabManager } from '../hooks/useFileTabManager';
 import { VirtualizedFileExplorer } from './editor/VirtualizedFileExplorer';
 import { EmptyEditorState } from './editor/EmptyEditorState';
 import { PerformanceModeIndicator } from './editor/PerformanceModeIndicator';
@@ -108,6 +109,43 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
 
   // Unsaved files counter for unique naming
   const [unsavedFileCounter, setUnsavedFileCounter] = useState(1);
+
+  // File Tab Manager for automatic cleanup
+  useFileTabManager({
+    tabs: fileTabs.map(tab => ({
+      path: tab.file.path,
+      name: tab.file.name,
+      isDirty: tab.isModified,
+      isActive: fileTabs.indexOf(tab) === activeTabIndex
+    })),
+    onCloseTab: (path: string) => {
+      console.log('🗑️ Auto-closing tab for deleted file:', path);
+      const tabIndex = fileTabs.findIndex(tab => tab.file.path === path);
+      if (tabIndex !== -1) {
+        handleTabClose(tabIndex);
+      }
+    },
+    onCloseMultipleTabs: (paths: string[]) => {
+      console.log('🗑️ Auto-closing multiple tabs for deleted files:', paths);
+      setFileTabs(prev => {
+        const newTabs = prev.filter(tab => !paths.includes(tab.file.path));
+        
+        // Adjust active tab if needed
+        if (paths.includes(fileTabs[activeTabIndex]?.file.path || '')) {
+          setActiveTabIndex(newTabs.length > 0 ? 0 : -1);
+        } else {
+          // Recalculate active tab index after filtering
+          const activeTab = fileTabs[activeTabIndex];
+          if (activeTab) {
+            const newIndex = newTabs.findIndex(tab => tab.file.path === activeTab.file.path);
+            setActiveTabIndex(newIndex !== -1 ? newIndex : 0);
+          }
+        }
+        
+        return newTabs;
+      });
+    }
+  });
 
   // Get active tab
   const activeTab = activeTabIndex >= 0 ? fileTabs[activeTabIndex] : null;
@@ -462,11 +500,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     onFileChange?.(fileInfo, '');
   }, [fileTabs, unsavedFileCounter, onFileChange]);
 
-  const handleCreateFile = useCallback(async (fileName: string, content?: string) => {
-    // This is only called from the NewFileDialog, which we'll remove
-    // Instead, we'll handle file creation through the save process
-    console.warn('handleCreateFile should not be called directly anymore');
-  }, []);
+  // Removed handleCreateFile - file creation now handled via save process
 
   const handleSaveAsFile = useCallback(async (filePath: string, fileName: string) => {
     try {

@@ -40,22 +40,23 @@ interface FileSystemWatcherState {
 // DEBOUNCE UTILITY
 // ================================
 
-function useDebounce<T extends (...args: any[]) => void>(
-  callback: T,
-  delay: number
-): T {
-  const timeoutRef = useRef<number>();
-
-  return useCallback(
-    ((...args: Parameters<T>) => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      timeoutRef.current = window.setTimeout(() => callback(...args), delay);
-    }) as T,
-    [callback, delay]
-  );
-}
+// Currently unused but kept for future debouncing needs
+// function useDebounce<T extends (...args: any[]) => void>(
+//   callback: T,
+//   delay: number
+// ): T {
+//   const timeoutRef = useRef<number>();
+// 
+//   return useCallback(
+//     ((...args: Parameters<T>) => {
+//       if (timeoutRef.current) {
+//         clearTimeout(timeoutRef.current);
+//       }
+//       timeoutRef.current = window.setTimeout(() => callback(...args), delay);
+//     }) as T,
+//     [callback, delay]
+//   );
+// }
 
 // ================================
 // MAIN HOOK
@@ -71,7 +72,7 @@ export const useFileSystemWatcher = (
     onFileModified,
     onFileDeleted,
     onFileRenamed,
-    debounceMs = 100
+    // debounceMs = 100  // Currently unused but kept for future use
   } = options;
 
   // State
@@ -159,9 +160,9 @@ export const useFileSystemWatcher = (
 
     // Process unique events only
     eventGroups.forEach(event => {
-      // Reduced logging - only log important events
-      if (event.eventType !== 'modified' || Math.random() < 0.1) { // Log only 10% of modify events
-        console.log(`🔄 File system event: ${event.eventType} - ${event.path}${event.isDirectory ? ' (directory)' : ''}`);
+      // Only log important events to reduce noise
+      if (event.eventType === 'created' || event.eventType === 'deleted') {
+        console.log(`🔄 File system: ${event.eventType} - ${event.path}${event.isDirectory ? ' (directory)' : ''}`);
       }
 
       setState(prevState => ({
@@ -228,23 +229,16 @@ export const useFileSystemWatcher = (
   // Start watching a directory
   const startWatching = useCallback(async (path: string) => {
     try {
-      console.log('🚀 Starting file system watcher for:', path);
-      console.log('📍 Current state before starting:', state);
-
       // Stop any existing watcher
       if (unlistenRef.current) {
-        console.log('🛑 Stopping existing watcher...');
         await unlistenRef.current();
         unlistenRef.current = null;
       }
 
       // Start backend watcher
-      console.log('🔧 Invoking start_file_watcher command...');
       await invoke('start_file_watcher', { path });
-      console.log('✅ Backend watcher started successfully');
 
       // Listen for file system events
-      console.log('👂 Setting up event listener for file-system-change...');
       const unlisten = await listen<FileSystemEvent>('file-system-change', eventListener);
 
       unlistenRef.current = unlisten;
@@ -256,7 +250,6 @@ export const useFileSystemWatcher = (
         error: null
       }));
 
-      console.log('✅ File system watcher started successfully, listening for events');
     } catch (error) {
       console.error('❌ Failed to start file system watcher:', error);
       setState(prev => ({
@@ -272,7 +265,6 @@ export const useFileSystemWatcher = (
   const stopWatching = useCallback(async () => {
     try {
       if (state.watchedPath) {
-        console.log('🛑 Stopping file system watcher for:', state.watchedPath);
         await invoke('stop_file_watcher', { path: state.watchedPath });
       }
 
@@ -288,7 +280,6 @@ export const useFileSystemWatcher = (
         error: null
       }));
 
-      console.log('✅ File system watcher stopped successfully');
     } catch (error) {
       console.error('❌ Failed to stop file system watcher:', error);
       setState(prev => ({
@@ -302,10 +293,8 @@ export const useFileSystemWatcher = (
   useEffect(() => {
     if (autoStart && watchPath) {
       if (!state.isWatching) {
-        console.log('🚀 Auto-starting watcher for:', watchPath);
         startWatching(watchPath);
       } else if (state.isWatching && state.watchedPath !== watchPath) {
-        console.log('🔄 Switching watcher from', state.watchedPath, 'to', watchPath);
         // Path changed, restart watcher
         stopWatching().then(() => startWatching(watchPath));
       }
@@ -348,26 +337,22 @@ export const useFileExplorerWatcher = (
     autoStart: true,
     debounceMs: 200, // Slightly higher debounce for explorer refreshes
     
-    onFileCreated: useCallback((path: string, isDirectory: boolean) => {
-      console.log('📁 File created:', path, isDirectory ? '(directory)' : '(file)');
+    onFileCreated: useCallback((_path: string, _isDirectory: boolean) => {
       setRefreshTrigger(prev => prev + 1);
       onRefreshNeeded?.();
     }, [onRefreshNeeded]),
     
-    onFileModified: useCallback((path: string, isDirectory: boolean) => {
-      console.log('✏️ File modified:', path, isDirectory ? '(directory)' : '(file)');
+    onFileModified: useCallback((_path: string, _isDirectory: boolean) => {
       setRefreshTrigger(prev => prev + 1);
       onRefreshNeeded?.();
     }, [onRefreshNeeded]),
     
-    onFileDeleted: useCallback((path: string, isDirectory: boolean) => {
-      console.log('🗑️ File deleted:', path, isDirectory ? '(directory)' : '(file)');
+    onFileDeleted: useCallback((_path: string, _isDirectory: boolean) => {
       setRefreshTrigger(prev => prev + 1);
       onRefreshNeeded?.();
     }, [onRefreshNeeded]),
     
-    onFileRenamed: useCallback((oldPath: string, newPath: string, isDirectory: boolean) => {
-      console.log('🔄 File renamed:', oldPath, '->', newPath, isDirectory ? '(directory)' : '(file)');
+    onFileRenamed: useCallback((_oldPath: string, _newPath: string, _isDirectory: boolean) => {
       setRefreshTrigger(prev => prev + 1);
       onRefreshNeeded?.();
     }, [onRefreshNeeded])

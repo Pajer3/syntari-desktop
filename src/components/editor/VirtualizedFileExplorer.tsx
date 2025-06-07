@@ -9,6 +9,7 @@ import { AlertCircle } from 'lucide-react';
 import { useFileExplorerWatcher } from '../../hooks/useFileSystemWatcher';
 import { useShortcut } from '../../hooks/useKeyboardShortcuts';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 
 // ================================
 // TYPES
@@ -292,12 +293,9 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
   
   // Live file system watcher for automatic updates
   const fileWatcher = useFileExplorerWatcher(rootPath, useCallback(() => {
-    console.log('🔄 File system change detected, refreshing explorer...');
-    console.log('📁 Root path:', rootPath);
-    console.log('📊 Current nodes count:', rootNodes.length);
     // Force refresh the explorer when files change
     loadRootItems();
-  }, [loadRootItems, rootPath, rootNodes.length]));
+  }, [loadRootItems]));
   
   // Memoized flat list for virtualization
   const flatNodes = useMemo(() => 
@@ -307,8 +305,6 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
   
   // VS Code-style lazy folder expansion
   const handleDirectoryToggle = useCallback(async (path: string, shouldExpand: boolean) => {
-    console.log(`📁 Folder ${shouldExpand ? 'expand' : 'collapse'}:`, path);
-    
     setExpandedPaths(prev => {
       const newSet = new Set(prev);
       if (shouldExpand) {
@@ -362,6 +358,88 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
       abortControllerRef.current?.abort();
     };
   }, [rootPath, loadRootItems]);
+
+  // Listen for file system events from backend
+  useEffect(() => {
+    let unsubscribeFileSystemChange: (() => void) | undefined;
+    let unsubscribeFileDeleted: (() => void) | undefined;
+
+    const setupEventListeners = async () => {
+      try {
+        // Listen for general file system changes
+        unsubscribeFileSystemChange = await listen('file-system-change', (event) => {
+          console.log('🔔 File system change event received:', event.payload);
+          
+          // Refresh the file explorer to reflect changes
+          loadRootItems();
+        });
+
+        // Listen for specific file deletion events
+        unsubscribeFileDeleted = await listen('file-deleted', (event: any) => {
+          const deletionInfo = event.payload;
+          console.log('🗑️ File deletion event received:', deletionInfo);
+          
+          // Clear selection if the deleted file was selected
+          if (currentlySelectedPath === deletionInfo.path) {
+            setCurrentlySelectedPath(null);
+          }
+          
+          // Remove from expanded paths if it was a directory
+          if (deletionInfo.is_directory) {
+            setExpandedPaths(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(deletionInfo.path);
+              // Also remove any nested paths
+              Array.from(newSet).forEach(expandedPath => {
+                if (expandedPath.startsWith(deletionInfo.path + '/')) {
+                  newSet.delete(expandedPath);
+                }
+              });
+              return newSet;
+            });
+            
+            // Remove from loaded children
+            setLoadedChildren(prev => {
+              const newMap = new Map(prev);
+              newMap.delete(deletionInfo.path);
+              // Remove any child entries that were under this path
+              Array.from(newMap.keys()).forEach(childPath => {
+                if (childPath.startsWith(deletionInfo.path + '/')) {
+                  newMap.delete(childPath);
+                }
+              });
+              return newMap;
+            });
+          }
+          
+          // Notify parent component about file deletion for tab management
+          // This allows the parent to close any open tabs for the deleted file
+          if ((window as any).electronAPI?.notifyFileDeleted) {
+            (window as any).electronAPI.notifyFileDeleted(deletionInfo.path, deletionInfo.is_directory);
+          }
+          
+          // Refresh the file explorer
+          loadRootItems();
+        });
+
+        console.log('✅ File system event listeners setup successfully');
+      } catch (error) {
+        console.error('❌ Failed to setup file system event listeners:', error);
+      }
+    };
+
+    setupEventListeners();
+
+    // Cleanup function
+    return () => {
+      if (unsubscribeFileSystemChange) {
+        unsubscribeFileSystemChange();
+      }
+      if (unsubscribeFileDeleted) {
+        unsubscribeFileDeleted();
+      }
+    };
+  }, [loadRootItems, currentlySelectedPath]);
   
   // Scroll to selected item
   useEffect(() => {
@@ -450,7 +528,7 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
       // Call Tauri backend to delete file
       await invoke('delete_file', { path: currentlySelectedPath });
       
-      console.log('✅ File deleted successfully');
+      
       
       // Clear selection
       setCurrentlySelectedPath(null);
@@ -480,7 +558,7 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
       // Call Tauri backend to force delete file
       await invoke('delete_file', { path: currentlySelectedPath, force: true });
       
-      console.log('✅ File force deleted successfully');
+      
       
       // Clear selection
       setCurrentlySelectedPath(null);

@@ -151,6 +151,42 @@ impl AppError {
         }
     }
     
+    /// Create a chat error
+    pub fn chat<S: Into<String>>(code: S, message: S) -> Self {
+        Self::Chat {
+            code: code.into(),
+            message: message.into(),
+            session_id: None,
+        }
+    }
+    
+    /// Create a chat error with session ID
+    pub fn chat_with_session<S: Into<String>>(code: S, message: S, session_id: S) -> Self {
+        Self::Chat {
+            code: code.into(),
+            message: message.into(),
+            session_id: Some(session_id.into()),
+        }
+    }
+    
+    /// Create a project error
+    pub fn project<S: Into<String>>(code: S, message: S) -> Self {
+        Self::Project {
+            code: code.into(),
+            message: message.into(),
+            project_path: None,
+        }
+    }
+    
+    /// Create a project error with path
+    pub fn project_with_path<S: Into<String>>(code: S, message: S, project_path: S) -> Self {
+        Self::Project {
+            code: code.into(),
+            message: message.into(),
+            project_path: Some(project_path.into()),
+        }
+    }
+    
     /// Get the error code
     pub fn code(&self) -> &str {
         match self {
