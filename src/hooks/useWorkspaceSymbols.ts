@@ -1,7 +1,7 @@
 // Syntari AI IDE - Workspace Symbol Search Hook
 // Simple workspace-wide symbol search for navigation
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 
 export interface WorkspaceSymbol {
   name: string;
@@ -143,12 +143,12 @@ export const useWorkspaceSymbols = (): WorkspaceSymbolManager => {
     }
   ], []);
 
-  // Initialize with mock symbols if empty
-  useState(() => {
+  // Initialize with mock symbols if none are present
+  useEffect(() => {
     if (symbols.length === 0) {
       setSymbols(mockSymbols);
     }
-  });
+  }, []);
 
   return {
     symbols,
