@@ -1,7 +1,8 @@
 // Syntari AI IDE - Unsaved Changes Warning Dialog
 // VS Code-style warning dialog for unsaved file changes
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
+import { useShortcut, type KeyboardEvent } from '../../hooks/useKeyboardShortcuts';
 
 interface UnsavedChangesDialogProps {
   isOpen: boolean;
@@ -21,7 +22,7 @@ export const UnsavedChangesDialog: React.FC<UnsavedChangesDialogProps> = ({
   const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
       if (!isOpen) return;
       
       switch (e.key) {
@@ -52,6 +53,36 @@ export const UnsavedChangesDialog: React.FC<UnsavedChangesDialogProps> = ({
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [isOpen, onSave, onCancel]);
+
+  // Keyboard shortcut handlers - only register when dialog is open
+  useShortcut('dialog', 'save', useCallback((e: KeyboardEvent) => {
+    if (isOpen) {
+      e.preventDefault && e.preventDefault();
+      onSave?.().catch(console.error);
+    }
+  }, [isOpen, onSave]));
+
+  useShortcut('dialog', 'saveAlt', useCallback((e: KeyboardEvent) => {
+    if (isOpen) {
+      e.preventDefault && e.preventDefault();
+      onSave?.().catch(console.error);
+    }
+  }, [isOpen, onSave]));
+
+  useShortcut('dialog', 'cancel', useCallback((e: KeyboardEvent) => {
+    if (isOpen) {
+      e.preventDefault && e.preventDefault();
+      onCancel?.();
+    }
+  }, [isOpen, onCancel]));
+
+  // Add the missing "Don't Save" shortcut (Ctrl+D)
+  useShortcut('dialog', 'dontSave', useCallback((e: KeyboardEvent) => {
+    if (isOpen) {
+      e.preventDefault && e.preventDefault();
+      onDontSave?.();
+    }
+  }, [isOpen, onDontSave]));
 
   if (!isOpen) return null;
 

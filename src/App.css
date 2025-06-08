@@ -40,7 +40,7 @@
   --vscode-fg-muted: #858585;
   --vscode-sidebar: #252526;
   --vscode-tab-bg: #2D2D30;
-  --vscode-border: #3E3E42;
+  --vscode-border: rgba(75, 85, 99, 0.3);
   --vscode-accent: #007ACC;
   --vscode-error-bg: #F14C4C;
   --vscode-error-fg: #FFFFFF;
@@ -362,6 +362,7 @@ a:hover {
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
+  font-weight: 600;
 }
 
 .gradient-text-purple {
@@ -369,6 +370,98 @@ a:hover {
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
+  font-weight: 600;
+}
+
+/* Modern UI Enhancements */
+.modern-button {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--vscode-accent), #2563eb);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.modern-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.modern-button:hover::before {
+  left: 100%;
+}
+
+.modern-card {
+  background: rgba(37, 37, 38, 0.7);
+  border: 1px solid rgba(75, 85, 99, 0.3);
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+}
+
+.modern-card:hover {
+  border-color: rgba(0, 122, 204, 0.4);
+  box-shadow: 0 8px 32px rgba(0, 122, 204, 0.1);
+}
+
+/* Enhanced Tab Styling */
+.vscode-tab-bg {
+  background: linear-gradient(180deg, #2d2d30 0%, #252526 100%);
+}
+
+.modern-tab {
+  position: relative;
+  background: rgba(45, 45, 48, 0.8);
+  backdrop-filter: blur(8px);
+  transition: all 0.2s ease;
+}
+
+.modern-tab.active {
+  background: linear-gradient(180deg, #1e1e1e 0%, #252526 100%);
+  box-shadow: 0 -2px 0 var(--vscode-accent);
+}
+
+.modern-tab:hover:not(.active) {
+  background: rgba(62, 62, 66, 0.6);
+  transform: translateY(-1px);
+}
+
+/* Better Loading Animation */
+.modern-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(0, 122, 204, 0.1);
+  border-top: 3px solid var(--vscode-accent);
+  border-radius: 50%;
+  animation: modernSpin 1s linear infinite;
+}
+
+@keyframes modernSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Glass morphism effects */
+.glass-bg {
+  background: rgba(30, 30, 30, 0.85);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(75, 85, 99, 0.2);
+}
+
+/* Enhanced Focus Styles */
+.modern-focus {
+  outline: none;
+  box-shadow: 0 0 0 1px rgba(0, 122, 204, 0.3);
+  border-color: rgba(0, 122, 204, 0.4);
+}
+
+/* Smooth Transitions */
+.smooth-transition {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ================================
@@ -965,7 +1058,7 @@ kbd {
 
 /* Professional Focus Styles */
 *:focus {
-  outline: 1px solid var(--vscode-accent);
+  outline: 1px solid rgba(0, 122, 204, 0.4);
   outline-offset: 1px;
 }
 
@@ -1000,13 +1093,13 @@ input, textarea {
   font-family: inherit;
   font-size: inherit;
   background: var(--vscode-bg);
-  border: 1px solid var(--vscode-border);
+  border: 1px solid rgba(62, 62, 66, 0.6);
   color: var(--vscode-fg);
   transition: border-color 0.15s ease;
 }
 
 input:focus, textarea:focus {
-  border-color: var(--vscode-accent);
+  border-color: rgba(0, 122, 204, 0.5);
 }
 
 /* Professional Link Styles */

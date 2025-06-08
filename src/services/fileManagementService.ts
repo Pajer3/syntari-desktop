@@ -2,6 +2,7 @@
 // Professional file operations with error handling and validation
 
 import { invoke } from '@tauri-apps/api/core';
+import type { TauriResult } from '../types/core';
 
 export interface FileCreateOptions {
   fileName: string;
@@ -23,12 +24,6 @@ export interface FileOpenResult {
   name: string;
   size: number;
   lastModified: Date;
-}
-
-interface TauriResult<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
 }
 
 export class FileManagementService {

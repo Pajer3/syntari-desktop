@@ -9,7 +9,6 @@ import { AlertCircle } from 'lucide-react';
 import { useFileExplorerWatcher } from '../../hooks/useFileSystemWatcher';
 import { useShortcut } from '../../hooks/useKeyboardShortcuts';
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
 
 // ================================
 // TYPES
@@ -80,6 +79,8 @@ const FileExplorerItem: React.FC<{
 }> = ({ index, style, data }) => {
   const { nodes, selectedPath, expandedPaths, onFileClick, onDirectoryToggle } = data;
   const node = nodes[index];
+  const [isHovered, setIsHovered] = useState(false);
+  const [isClicking, setIsClicking] = useState(false);
   
   if (!node) return null;
   
@@ -88,6 +89,9 @@ const FileExplorerItem: React.FC<{
   const hasChildren = node.isDirectory && node.hasChildren;
   
   const handleClick = useCallback(() => {
+    setIsClicking(true);
+    setTimeout(() => setIsClicking(false), 150);
+    
     if (node.isDirectory) {
       onDirectoryToggle(node.path, !isExpanded);
     } else {
@@ -109,43 +113,89 @@ const FileExplorerItem: React.FC<{
     <div
       style={style}
       className={`
-        file-explorer-item-virtualized
-        ${isSelected ? 'selected' : ''}
-        ${node.isDirectory ? 'directory' : 'file'}
+        group relative flex items-center px-2 py-1 cursor-pointer select-none
+        transition-all duration-200 ease-out
+        hover:bg-vscode-list-hover
+        ${isSelected 
+          ? 'bg-vscode-list-active text-white border-l-2 border-vscode-accent' 
+          : 'text-vscode-fg hover:text-white'
+        }
+        ${isClicking ? 'scale-98 bg-vscode-list-active' : ''}
+        ${node.isDirectory ? 'font-medium' : 'font-normal'}
       `}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       tabIndex={0}
       role="treeitem"
       aria-selected={isSelected}
       aria-expanded={node.isDirectory ? isExpanded : undefined}
     >
       <div 
-        className="file-item-content"
-        style={{ paddingLeft: `${8 + node.depth * 16}px` }}
+        className="flex items-center w-full transition-all duration-200"
+        style={{ 
+          paddingLeft: `${8 + node.depth * 16}px`,
+          transform: isSelected ? 'translateX(2px)' : 'translateX(0)',
+        }}
       >
         {/* Chevron for directories with children */}
         {hasChildren && (
-          <span className="chevron">
-            {isExpanded ? '▼' : '▶'}
+          <span className={`
+            inline-flex items-center justify-center w-4 h-4 mr-1
+            transition-all duration-200 ease-out
+            ${isExpanded ? 'rotate-90' : 'rotate-0'}
+            ${isHovered ? 'scale-110' : 'scale-100'}
+            text-vscode-fg-muted hover:text-vscode-accent
+          `}>
+            ▶
           </span>
         )}
         
-        {/* File/Directory Icon */}
-        <span className="file-icon" role="img" aria-label={node.isDirectory ? 'Directory' : 'File'}>
+        {/* File/Directory Icon with animation */}
+        <span 
+          className={`
+            inline-flex items-center justify-center w-5 h-5 mr-2 text-base
+            transition-all duration-200 ease-out
+            ${isSelected || isHovered ? 'scale-110' : 'scale-100'}
+            ${node.isDirectory && isExpanded ? 'animate-pulse' : ''}
+          `}
+          role="img" 
+          aria-label={node.isDirectory ? 'Directory' : 'File'}
+        >
           {displayIcon}
         </span>
         
-        {/* File Name */}
-        <span className="file-name" title={node.path}>
+        {/* File Name with smooth highlighting */}
+        <span 
+          className={`
+            flex-1 truncate text-sm transition-all duration-200
+            ${isSelected ? 'font-semibold' : 'font-normal'}
+            ${isHovered && !isSelected ? 'font-medium' : ''}
+          `}
+          title={node.path}
+        >
           {node.name}
         </span>
         
-        {/* File Size (for files only) */}
+        {/* File Size with fade-in animation */}
         {!node.isDirectory && node.size !== undefined && (
-          <span className="file-size">
+          <span className={`
+            text-xs text-vscode-fg-muted ml-2 transition-all duration-200
+            ${isHovered ? 'opacity-100' : 'opacity-60'}
+          `}>
             {formatFileSize(node.size)}
           </span>
+        )}
+
+        {/* Selection indicator */}
+        {isSelected && (
+          <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-vscode-accent animate-pulse" />
+        )}
+
+        {/* Hover effect */}
+        {isHovered && !isSelected && (
+          <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-vscode-fg-muted opacity-30 transition-opacity duration-200" />
         )}
       </div>
     </div>
@@ -251,7 +301,7 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
   const abortControllerRef = useRef<AbortController | null>(null);
   
   // VS Code-style instant root loading (moved before file watcher to fix temporal dead zone)
-  const loadRootItems = useCallback(async (path?: string) => {
+  const loadRootItems = useCallback(async (path?: string, preserveExpandedState = true) => {
     const targetPath = path || rootPath;
     
     // Cancel any ongoing operation
@@ -275,8 +325,14 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
       });
       
       setRootNodes(rootItems);
-      setLoadedChildren(new Map());
-      setExpandedPaths(new Set());
+      
+      // For auto-refresh, preserve both expanded paths and loaded children
+      if (!preserveExpandedState) {
+        // Only clear state on initial load or manual refresh
+        setLoadedChildren(new Map());
+        setExpandedPaths(new Set());
+      }
+      // For auto-refresh, keep existing loaded children and expanded paths
       
       console.log('✅ State updated successfully!');
         
@@ -293,7 +349,8 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
   
   // Live file system watcher for automatic updates
   const fileWatcher = useFileExplorerWatcher(rootPath, useCallback(() => {
-    // Force refresh the explorer when files change
+    // Force refresh the explorer when files change, but preserve expanded state
+    console.log('🔄 File system change detected, refreshing without clearing expanded folders...');
     loadRootItems();
   }, [loadRootItems]));
   
@@ -352,94 +409,15 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
   
   // Initial load when rootPath changes
   useEffect(() => {
-    loadRootItems();
+    loadRootItems(undefined, false); // Clear expanded state on initial load
     
     return () => {
       abortControllerRef.current?.abort();
     };
   }, [rootPath, loadRootItems]);
 
-  // Listen for file system events from backend
-  useEffect(() => {
-    let unsubscribeFileSystemChange: (() => void) | undefined;
-    let unsubscribeFileDeleted: (() => void) | undefined;
-
-    const setupEventListeners = async () => {
-      try {
-        // Listen for general file system changes
-        unsubscribeFileSystemChange = await listen('file-system-change', (event) => {
-          console.log('🔔 File system change event received:', event.payload);
-          
-          // Refresh the file explorer to reflect changes
-          loadRootItems();
-        });
-
-        // Listen for specific file deletion events
-        unsubscribeFileDeleted = await listen('file-deleted', (event: any) => {
-          const deletionInfo = event.payload;
-          console.log('🗑️ File deletion event received:', deletionInfo);
-          
-          // Clear selection if the deleted file was selected
-          if (currentlySelectedPath === deletionInfo.path) {
-            setCurrentlySelectedPath(null);
-          }
-          
-          // Remove from expanded paths if it was a directory
-          if (deletionInfo.is_directory) {
-            setExpandedPaths(prev => {
-              const newSet = new Set(prev);
-              newSet.delete(deletionInfo.path);
-              // Also remove any nested paths
-              Array.from(newSet).forEach(expandedPath => {
-                if (expandedPath.startsWith(deletionInfo.path + '/')) {
-                  newSet.delete(expandedPath);
-                }
-              });
-              return newSet;
-            });
-            
-            // Remove from loaded children
-            setLoadedChildren(prev => {
-              const newMap = new Map(prev);
-              newMap.delete(deletionInfo.path);
-              // Remove any child entries that were under this path
-              Array.from(newMap.keys()).forEach(childPath => {
-                if (childPath.startsWith(deletionInfo.path + '/')) {
-                  newMap.delete(childPath);
-                }
-              });
-              return newMap;
-            });
-          }
-          
-          // Notify parent component about file deletion for tab management
-          // This allows the parent to close any open tabs for the deleted file
-          if ((window as any).electronAPI?.notifyFileDeleted) {
-            (window as any).electronAPI.notifyFileDeleted(deletionInfo.path, deletionInfo.is_directory);
-          }
-          
-          // Refresh the file explorer
-          loadRootItems();
-        });
-
-        console.log('✅ File system event listeners setup successfully');
-      } catch (error) {
-        console.error('❌ Failed to setup file system event listeners:', error);
-      }
-    };
-
-    setupEventListeners();
-
-    // Cleanup function
-    return () => {
-      if (unsubscribeFileSystemChange) {
-        unsubscribeFileSystemChange();
-      }
-      if (unsubscribeFileDeleted) {
-        unsubscribeFileDeleted();
-      }
-    };
-  }, [loadRootItems, currentlySelectedPath]);
+  // Note: File system event handling is now managed by useFileExplorerWatcher hook above
+  // This provides better debouncing and filtering of events to prevent excessive refreshes
   
   // Scroll to selected item
   useEffect(() => {
@@ -533,14 +511,14 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
       // Clear selection
       setCurrentlySelectedPath(null);
       
-      // Refresh explorer
+      // Refresh explorer but preserve expanded state
       loadRootItems();
       
     } catch (error) {
       console.error('❌ Failed to delete file:', error);
       setFileError(`Failed to delete file: ${error}`);
     }
-  }, [currentlySelectedPath, rootPath, loadRootItems]);
+  }, [currentlySelectedPath, loadRootItems]);
 
   const forceDeleteSelectedFile = useCallback(async () => {
     if (!currentlySelectedPath) {
@@ -563,22 +541,22 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
       // Clear selection
       setCurrentlySelectedPath(null);
       
-      // Refresh explorer
+      // Refresh explorer but preserve expanded state
       loadRootItems();
       
     } catch (error) {
       console.error('❌ Failed to force delete file:', error);
       setFileError(`Failed to force delete file: ${error}`);
     }
-  }, [currentlySelectedPath, rootPath, loadRootItems]);
+  }, [currentlySelectedPath, loadRootItems]);
 
   const refreshFileExplorer = useCallback(async () => {
     console.log('🔄 Manual refresh triggered');
     
     try {
-      // Clear all caches and reload
+      // Clear all caches and reload - ONLY for manual refresh
       setLoadedChildren(new Map());
-      setExpandedPaths(new Set());
+      setExpandedPaths(new Set()); // Only clear expanded paths on manual refresh
       fileSystemService.invalidateCache();
       
       // Reload root items
@@ -589,7 +567,7 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
       console.error('❌ Failed to refresh file explorer:', error);
       setFileError(`Failed to refresh: ${error}`);
     }
-  }, [rootPath, loadRootItems]);
+  }, [loadRootItems]);
 
   // ================================
   // KEYBOARD SHORTCUTS

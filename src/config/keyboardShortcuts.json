@@ -65,8 +65,8 @@
         "newTab": {
           "key": "Ctrl+T",
           "description": "Open new tab",
-          "implemented": false,
-          "planned": true,
+          "implemented": true,
+          "planned": false,
           "component": "TabLayout",
           "priority": "P1",
           "businessImpact": "Productivity enhancement"
@@ -74,8 +74,8 @@
         "reopenTab": {
           "key": "Ctrl+Shift+T",
           "description": "Reopen recently closed tab",
-          "implemented": false,
-          "planned": true,
+          "implemented": true,
+          "planned": false,
           "component": "TabLayout",
           "priority": "P2",
           "businessImpact": "Error recovery"
@@ -159,8 +159,8 @@
         "replaceInProject": {
           "key": "Ctrl+Shift+H",
           "description": "Project-wide find and replace",
-          "implemented": false,
-          "planned": true,
+          "implemented": true,
+          "planned": false,
           "priority": "P2",
           "businessImpact": "Large-scale refactoring support"
         },
@@ -251,40 +251,40 @@
         "goToWorkspaceSymbol": {
           "key": "Ctrl+T",
           "description": "Go to symbol in workspace",
-          "implemented": false,
-          "planned": true,
+          "implemented": true,
+          "planned": false,
           "priority": "P1",
           "businessImpact": "Project-wide symbol discovery"
         },
         "jumpToMatchingBracket": {
           "key": "Ctrl+]",
           "description": "Jump to matching bracket",
-          "implemented": false,
-          "planned": true,
+          "implemented": true,
+          "planned": false,
           "priority": "P1",
           "businessImpact": "Code structure navigation"
         },
         "toggleBookmark": {
           "key": "Ctrl+Shift+K",
           "description": "Toggle bookmark on current line",
-          "implemented": false,
-          "planned": true,
+          "implemented": true,
+          "planned": false,
           "priority": "P2",
           "businessImpact": "Code marking and reference"
         },
         "nextBookmark": {
           "key": "F2",
           "description": "Navigate to next bookmark",
-          "implemented": false,
-          "planned": true,
+          "implemented": true,
+          "planned": false,
           "priority": "P2",
           "businessImpact": "Bookmark navigation"
         },
         "previousBookmark": {
           "key": "Shift+F2",
           "description": "Navigate to previous bookmark",
-          "implemented": false,
-          "planned": true,
+          "implemented": true,
+          "planned": false,
           "priority": "P2",
           "businessImpact": "Bookmark navigation"
         }
@@ -334,7 +334,8 @@
           "description": "Create a new folder with validation",
           "context": "explorer",
           "priority": 2,
-          "implemented": false,
+          "implemented": true,
+          "planned": false,
           "businessImpact": "Project organization feature - structured folder creation improves codebase maintainability"
         },
         "openFile": {
@@ -350,7 +351,8 @@
           "description": "Duplicate current file with smart naming",
           "context": "editor",
           "priority": 2,
-          "implemented": false,
+          "implemented": true,
+          "planned": false,
           "businessImpact": "Template and backup feature - enables rapid file templating and version creation"
         },
         "deleteFile": {
@@ -533,8 +535,8 @@
         "joinLines": {
           "key": "Ctrl+J",
           "description": "Join current line with next",
-          "implemented": false,
-          "planned": true,
+          "implemented": true,
+          "planned": false,
           "priority": "P2",
           "businessImpact": "Text formatting efficiency"
         },
@@ -588,45 +590,46 @@
         "switchToAI": {
           "key": "Alt+A",
           "description": "Switch to AI Assistant tab",
-          "implemented": false,
-          "planned": true,
+          "implemented": true,
+          "planned": false,
           "priority": "P1",
           "businessImpact": "AI workflow integration"
         },
         "aiCodeCompletion": {
           "key": "Ctrl+Space",
           "description": "Trigger AI code completion",
-          "implemented": false,
-          "planned": true,
+          "implemented": true,
+          "planned": false,
           "priority": "P1",
           "businessImpact": "Coding speed enhancement"
         },
         "aiExplainCode": {
           "key": "Ctrl+Shift+E",
           "description": "AI explain selected code",
-          "implemented": false,
-          "planned": true,
+          "implemented": true,
+          "planned": false,
           "priority": "P1",
           "businessImpact": "Code understanding and learning"
         },
         "aiRefactorCode": {
           "key": "Ctrl+Shift+R",
           "description": "AI-assisted code refactoring",
-          "implemented": false,
-          "planned": true,
+          "implemented": true,
+          "planned": false,
           "priority": "P2",
           "businessImpact": "Code quality improvement"
         },
         "aiGenerateTests": {
           "key": "Ctrl+Shift+T",
           "description": "AI generate unit tests",
-          "implemented": false,
-          "planned": true,
+          "implemented": true,
+          "planned": false,
           "priority": "P2",
           "businessImpact": "Test coverage automation"
         }
       }
     },
+
     "views": {
       "name": "View Management",
       "description": "Panel and view management for optimal workspace layout",
@@ -725,8 +728,8 @@
             "dontSave": {
               "key": "Ctrl+D",
               "description": "Close without saving",
-              "implemented": false,
-              "planned": true,
+              "implemented": true,
+              "planned": false,
               "priority": "P1"
             }
           }
@@ -739,15 +742,15 @@
             "confirm": {
               "key": "Enter",
               "description": "Confirm action",
-              "implemented": false,
-              "planned": true,
+              "implemented": true,
+              "planned": false,
               "priority": "P1"
             },
             "cancel": {
               "key": "Escape",
               "description": "Cancel action",
-              "implemented": false,
-              "planned": true,
+              "implemented": true,
+              "planned": false,
               "priority": "P1"
             }
           }

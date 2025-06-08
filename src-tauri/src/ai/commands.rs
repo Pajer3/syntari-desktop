@@ -3,17 +3,11 @@
 
 use tauri::State;
 use crate::core::{AppState, TauriResult};
-use crate::ai::types::{AiProvider, AiRequest, ConsensusResult, AiResponse};
+use crate::ai::types::{AiRequest, ConsensusResult, AiResponse};
 
 // ================================
-// AI PROVIDER COMMANDS
+// AI GENERATION COMMANDS
 // ================================
-
-#[tauri::command]
-pub async fn get_ai_providers(state: State<'_, AppState>) -> std::result::Result<TauriResult<Vec<AiProvider>>, String> {
-    let providers = state.get_ai_providers().await;
-    Ok(TauriResult::success(providers))
-}
 
 #[tauri::command]
 pub async fn generate_ai_response(

@@ -3,6 +3,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { validateFileName } from '../../../utils/fileValidation';
+import { fileSystemService } from '../../../services/fileSystemService';
+import { BaseDialog } from '../../ui/BaseDialog';
+import { DirectoryBrowser } from '../../ui/DirectoryBrowser';
 
 interface SaveAsDialogProps {
   isOpen: boolean;
@@ -26,6 +29,7 @@ export const SaveAsDialog: React.FC<SaveAsDialogProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [fileExists, setFileExists] = useState(false);
+  const [showBrowser, setShowBrowser] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Reset state when dialog opens
@@ -36,6 +40,7 @@ export const SaveAsDialog: React.FC<SaveAsDialogProps> = ({
       setValidationError(null);
       setFileExists(false);
       setIsLoading(false);
+      setShowBrowser(false);
       // Focus input with a small delay
       setTimeout(() => {
         inputRef.current?.focus();
@@ -51,23 +56,35 @@ export const SaveAsDialog: React.FC<SaveAsDialogProps> = ({
     }
   }, [isOpen, currentFileName, currentPath, projectRootPath]);
 
-  // Real-time validation
+  // Real-time validation with async file existence checking
   useEffect(() => {
-    if (fileName.trim()) {
-      const validation = validateFileName(fileName.trim());
-      setValidationError(validation?.message || null);
-      
-      // Check if file exists (simplified - in real implementation would check filesystem)
-      setFileExists(false); // TODO: Implement actual file existence check
-    } else {
-      setValidationError('File name cannot be empty');
-      setFileExists(false);
-    }
+    const checkFileAndValidate = async () => {
+      if (fileName.trim()) {
+        const validation = validateFileName(fileName.trim());
+        setValidationError(validation?.message || null);
+        
+        // Check if file exists using actual filesystem service
+        try {
+          const files = await fileSystemService.loadFolderContents(selectedPath, false);
+          const fileExists = files.some(file => 
+            !file.isDirectory && 
+            file.name.toLowerCase() === fileName.trim().toLowerCase()
+          );
+          setFileExists(fileExists);
+        } catch (error) {
+          console.warn('Could not check file existence:', error);
+          setFileExists(false);
+        }
+      } else {
+        setValidationError('File name cannot be empty');
+        setFileExists(false);
+      }
+    };
+
+    checkFileAndValidate();
   }, [fileName, selectedPath]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  const handleSubmit = async () => {
     const trimmedFileName = fileName.trim();
     if (!trimmedFileName) {
       setValidationError('File name cannot be empty');
@@ -91,18 +108,12 @@ export const SaveAsDialog: React.FC<SaveAsDialogProps> = ({
     }
   };
 
-  const handleCancel = () => {
-    if (!isLoading) {
-      onClose();
-    }
+  const handleBrowseLocation = () => {
+    setShowBrowser(!showBrowser);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape' && !isLoading) {
-      e.preventDefault();
-      e.stopPropagation();
-      onClose();
-    }
+  const handlePathChange = (newPath: string) => {
+    setSelectedPath(newPath);
   };
 
   const getDisplayPath = () => {
@@ -111,166 +122,187 @@ export const SaveAsDialog: React.FC<SaveAsDialogProps> = ({
     return selectedPath.replace(projectRootPath, './');
   };
 
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={handleCancel}>
-      <div 
-        className="bg-vscode-bg border border-vscode-border rounded-md shadow-lg w-[500px] max-w-90vw"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={handleKeyDown}
-      >
-        {/* Header */}
-        <div className="px-4 py-3 border-b border-vscode-border">
-          <h2 className="text-lg font-semibold text-vscode-fg">Save As</h2>
-          <p className="text-sm text-vscode-fg-muted mt-1">
-            Choose location and name for the file
-          </p>
-          {/* Current Directory Indicator */}
-          {selectedPath && (
-            <div className="mt-2 px-3 py-2 bg-vscode-sidebar border border-vscode-border rounded">
-              <span className="text-xs text-vscode-fg-muted">Default location: </span>
-              <span className="text-xs font-mono text-vscode-accent">{getDisplayPath()}</span>
-            </div>
-          )}
+  const dialogContent = (
+    <div className="flex flex-col h-full">
+      {/* Current Directory Indicator */}
+      {selectedPath && (
+        <div className="px-4 py-3 bg-vscode-sidebar border-b border-vscode-border">
+          <span className="text-xs text-vscode-fg-muted">Saving to: </span>
+          <span className="text-xs font-mono text-vscode-accent">{getDisplayPath()}</span>
         </div>
+      )}
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
-          {/* Path Selection */}
-          <div>
-            <label htmlFor="savePath" className="block text-sm font-medium text-vscode-fg mb-2">
-              Save Location
-            </label>
-            <div className="flex items-center space-x-2">
-              <div className="flex-1 px-3 py-2 bg-vscode-input-bg border border-vscode-border rounded text-vscode-fg text-sm">
-                <span className="flex items-center">
-                  <span className="mr-2">📁</span>
-                  {getDisplayPath()}
-                </span>
-              </div>
-              <button
-                type="button"
-                disabled={isLoading}
-                className="
-                  px-3 py-2 text-sm font-medium text-vscode-fg
-                  border border-vscode-border rounded hover:bg-vscode-button-hover
-                  focus:outline-none focus:ring-2 focus:ring-vscode-accent
-                  disabled:opacity-50 disabled:cursor-not-allowed
-                  transition-colors
-                "
-                title="Browse for location"
-              >
-                Browse...
-              </button>
+      {/* Form */}
+      <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} className="p-4 space-y-4">
+        {/* Path Selection */}
+        <div>
+          <label htmlFor="savePath" className="block text-sm font-medium text-vscode-fg mb-2">
+            Save Location
+          </label>
+          <div className="flex items-center space-x-2">
+            <div className="flex-1 px-3 py-2 bg-vscode-input-bg border border-vscode-border rounded text-vscode-fg text-sm">
+              <span className="flex items-center">
+                <span className="mr-2">📁</span>
+                {getDisplayPath()}
+              </span>
             </div>
-          </div>
-
-          {/* File Name Input */}
-          <div>
-            <label htmlFor="fileName" className="block text-sm font-medium text-vscode-fg mb-2">
-              File Name
-            </label>
-            <input
-              ref={inputRef}
-              id="fileName"
-              type="text"
-              value={fileName}
-              onChange={(e) => setFileName(e.target.value)}
-              disabled={isLoading}
-              className={`
-                w-full px-3 py-2 bg-vscode-input-bg border rounded
-                text-vscode-fg placeholder-vscode-fg-muted
-                focus:outline-none focus:ring-2 focus:ring-vscode-accent
-                disabled:opacity-50 disabled:cursor-not-allowed
-                ${validationError 
-                  ? 'border-red-500 focus:ring-red-500' 
-                  : 'border-vscode-border focus:border-vscode-accent'
-                }
-              `}
-              placeholder="Enter file name..."
-              autoComplete="off"
-              spellCheck={false}
-            />
-            
-            {/* Validation Messages */}
-            {validationError && (
-              <p className="text-sm text-red-400 mt-1 flex items-center">
-                <span className="mr-1">⚠️</span>
-                {validationError}
-              </p>
-            )}
-            
-            {fileExists && !validationError && (
-              <p className="text-sm text-yellow-400 mt-1 flex items-center">
-                <span className="mr-1">⚠️</span>
-                A file with this name already exists. It will be overwritten.
-              </p>
-            )}
-          </div>
-
-          {/* File Preview Info */}
-          {fileName.trim() && !validationError && (
-            <div className="bg-vscode-sidebar border border-vscode-border rounded p-3">
-              <div className="text-sm text-vscode-fg-muted">
-                <div className="flex items-center justify-between">
-                  <span>Full path:</span>
-                  <span className="font-mono text-xs text-vscode-fg">
-                    {selectedPath}/{fileName.trim()}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="flex justify-end space-x-3 pt-2">
             <button
               type="button"
-              onClick={handleCancel}
+              onClick={handleBrowseLocation}
               disabled={isLoading}
               className="
-                px-4 py-2 text-sm font-medium text-vscode-fg
+                px-3 py-2 text-sm font-medium text-vscode-fg
                 border border-vscode-border rounded hover:bg-vscode-button-hover
                 focus:outline-none focus:ring-2 focus:ring-vscode-accent
                 disabled:opacity-50 disabled:cursor-not-allowed
                 transition-colors
               "
+              title="Browse for location"
             >
-              Cancel
+              {showBrowser ? 'Hide Browser' : 'Browse...'}
             </button>
-            <button
-              type="submit"
-              disabled={isLoading || !!validationError || !fileName.trim()}
-              className="
-                px-4 py-2 text-sm font-medium text-white
-                bg-vscode-accent hover:bg-vscode-accent-hover
-                border border-vscode-accent rounded
-                focus:outline-none focus:ring-2 focus:ring-vscode-accent
-                disabled:opacity-50 disabled:cursor-not-allowed
-                transition-colors flex items-center
-              "
-            >
-              {isLoading ? (
-                <>
-                  <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                  Saving...
-                </>
-              ) : (
-                'Save'
-              )}
-            </button>
-          </div>
-        </form>
-
-        {/* Keyboard Shortcuts Help */}
-        <div className="px-4 pb-3 text-xs text-vscode-fg-muted border-t border-vscode-border">
-          <div className="flex justify-between">
-            <span>Press <kbd className="px-1 bg-vscode-keybinding-bg rounded">Enter</kbd> to save</span>
-            <span>Press <kbd className="px-1 bg-vscode-keybinding-bg rounded">Esc</kbd> to cancel</span>
           </div>
         </div>
+
+        {/* Directory Browser */}
+        {showBrowser && (
+          <div className="border border-vscode-border rounded">
+            <DirectoryBrowser
+              currentPath={selectedPath}
+              onPathChange={handlePathChange}
+              onSelectPath={handlePathChange}
+              showFiles={false}
+              allowNavigation={true}
+              height="200px"
+              projectRootPath={projectRootPath}
+            />
+          </div>
+        )}
+
+        {/* File Name Input */}
+        <div>
+          <label htmlFor="fileName" className="block text-sm font-medium text-vscode-fg mb-2">
+            File Name
+          </label>
+          <input
+            ref={inputRef}
+            id="fileName"
+            type="text"
+            value={fileName}
+            onChange={(e) => setFileName(e.target.value)}
+            disabled={isLoading}
+            className={`
+              w-full px-3 py-2 bg-vscode-input-bg border rounded
+              text-vscode-fg placeholder-vscode-fg-muted
+              focus:outline-none focus:ring-2 focus:ring-vscode-accent
+              disabled:opacity-50 disabled:cursor-not-allowed
+              ${validationError 
+                ? 'border-red-500 focus:ring-red-500' 
+                : 'border-vscode-border focus:border-vscode-accent'
+              }
+            `}
+            placeholder="Enter file name..."
+            autoComplete="off"
+            spellCheck={false}
+          />
+          
+          {/* Validation Messages */}
+          {validationError && (
+            <p className="text-sm text-red-400 mt-1 flex items-center">
+              <span className="mr-1">⚠️</span>
+              {validationError}
+            </p>
+          )}
+          
+          {fileExists && !validationError && (
+            <p className="text-sm text-yellow-400 mt-1 flex items-center">
+              <span className="mr-1">⚠️</span>
+              A file with this name already exists. It will be overwritten.
+            </p>
+          )}
+        </div>
+
+        {/* File Preview Info */}
+        {fileName.trim() && !validationError && (
+          <div className="bg-vscode-sidebar border border-vscode-border rounded p-3">
+            <div className="text-sm text-vscode-fg-muted">
+              <div className="flex items-center justify-between">
+                <span>Full path:</span>
+                <span className="font-mono text-xs text-vscode-fg">
+                  {selectedPath}/{fileName.trim()}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+      </form>
+    </div>
+  );
+
+  const dialogFooter = (
+    <div className="flex justify-between items-center">
+      <div className="text-xs text-vscode-fg-muted">
+        <div className="flex items-center space-x-4">
+          <span>Press <kbd className="px-1 bg-vscode-keybinding-bg rounded">Enter</kbd> to save</span>
+          <span>Press <kbd className="px-1 bg-vscode-keybinding-bg rounded">Esc</kbd> to cancel</span>
+        </div>
+      </div>
+      
+      <div className="flex space-x-3">
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={isLoading}
+          className="
+            px-4 py-2 text-sm font-medium text-vscode-fg
+            border border-vscode-border rounded hover:bg-vscode-button-hover
+            focus:outline-none focus:ring-2 focus:ring-vscode-accent
+            disabled:opacity-50 disabled:cursor-not-allowed
+            transition-colors
+          "
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={isLoading || !!validationError || !fileName.trim()}
+          className="
+            px-4 py-2 text-sm font-medium text-white
+            bg-vscode-accent hover:bg-vscode-accent-hover
+            border border-vscode-accent rounded
+            focus:outline-none focus:ring-2 focus:ring-vscode-accent
+            disabled:opacity-50 disabled:cursor-not-allowed
+            transition-colors flex items-center
+          "
+        >
+          {isLoading ? (
+            <>
+              <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+              Saving...
+            </>
+          ) : (
+            'Save'
+          )}
+        </button>
       </div>
     </div>
+  );
+
+  return (
+    <BaseDialog
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Save As"
+      subtitle="Choose location and name for the file"
+      width="600px"
+      height="auto"
+      maxHeight="80vh"
+      onSubmit={handleSubmit}
+      isLoading={isLoading}
+      footer={dialogFooter}
+    >
+      {dialogContent}
+    </BaseDialog>
   );
 }; 

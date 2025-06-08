@@ -332,31 +332,92 @@ export const useFileExplorerWatcher = (
   onRefreshNeeded?: () => void
 ) => {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const refreshTimeoutRef = useRef<number>();
+  const lastRefreshRef = useRef<number>(0);
+
+  // Debounced refresh function to prevent excessive updates
+  const debouncedRefresh = useCallback(() => {
+    const now = Date.now();
+    
+    // Don't refresh more than once every 1000ms (1 second) to be more conservative
+    if (now - lastRefreshRef.current < 1000) {
+      // Clear existing timeout and set a new one
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
+      
+      refreshTimeoutRef.current = window.setTimeout(() => {
+        lastRefreshRef.current = Date.now();
+        console.log('🔄 Debounced refresh executing after delay');
+        setRefreshTrigger(prev => prev + 1);
+        onRefreshNeeded?.();
+      }, 1000);
+      console.log('🔄 Refresh request debounced, will execute in 1 second');
+      return;
+    }
+    
+    // Immediate refresh if enough time has passed
+    lastRefreshRef.current = now;
+    console.log('🔄 Immediate refresh executing');
+    setRefreshTrigger(prev => prev + 1);
+    onRefreshNeeded?.();
+  }, [onRefreshNeeded]);
 
   const fileSystemWatcher = useFileSystemWatcher(rootPath, {
     autoStart: true,
     debounceMs: 200, // Slightly higher debounce for explorer refreshes
     
-    onFileCreated: useCallback((_path: string, _isDirectory: boolean) => {
-      setRefreshTrigger(prev => prev + 1);
-      onRefreshNeeded?.();
-    }, [onRefreshNeeded]),
+    onFileCreated: useCallback((path: string, isDirectory: boolean) => {
+      // Only refresh for new directories or important files in the root area
+      if (isDirectory || path.split('/').length <= 3) {
+        console.log('🔄 Important file/directory created, triggering refresh:', path, isDirectory ? '(directory)' : '(file)');
+        debouncedRefresh();
+      } else {
+        console.log('📄 File created in subdirectory (no refresh needed):', path);
+      }
+    }, [debouncedRefresh]),
     
-    onFileModified: useCallback((_path: string, _isDirectory: boolean) => {
-      setRefreshTrigger(prev => prev + 1);
-      onRefreshNeeded?.();
-    }, [onRefreshNeeded]),
+    onFileModified: useCallback((path: string, isDirectory: boolean) => {
+      // Skip Syntari internal files to prevent refresh loops
+      if (path.includes('.syntari_permission_test') || path.includes('.syntari')) {
+        console.log('🔇 Skipping Syntari internal file:', path);
+        return;
+      }
+      
+      // Only refresh for specific important changes that actually affect the visible tree structure
+      if (path.endsWith('.gitignore') || path.endsWith('package.json') || path.endsWith('Cargo.toml') || path.endsWith('.env')) {
+        console.log('🔄 Important config file modified, triggering refresh:', path);
+        debouncedRefresh();
+      } else if (isDirectory) {
+        // For directory modifications, be more selective - only refresh if it's a new directory or significant change
+        console.log('📁 Directory modified (ignoring unless significant):', path);
+        // Don't refresh on every directory modification as it's usually just filesystem metadata
+      } else {
+        // Skip refresh for regular file modifications that don't affect the tree structure
+        console.log('📝 File modified (no refresh needed):', path);
+      }
+    }, [debouncedRefresh]),
     
-    onFileDeleted: useCallback((_path: string, _isDirectory: boolean) => {
-      setRefreshTrigger(prev => prev + 1);
-      onRefreshNeeded?.();
-    }, [onRefreshNeeded]),
+    onFileDeleted: useCallback((path: string, isDirectory: boolean) => {
+      // Always refresh for deletions since they affect the visible tree
+      console.log('🔄 File deleted, triggering refresh:', path, isDirectory ? '(directory)' : '(file)');
+      debouncedRefresh();
+    }, [debouncedRefresh]),
     
-    onFileRenamed: useCallback((_oldPath: string, _newPath: string, _isDirectory: boolean) => {
-      setRefreshTrigger(prev => prev + 1);
-      onRefreshNeeded?.();
-    }, [onRefreshNeeded])
+    onFileRenamed: useCallback((oldPath: string, newPath: string, isDirectory: boolean) => {
+      console.log('🔄 File renamed, triggering refresh:', oldPath, '->', newPath, isDirectory ? '(directory)' : '(file)');
+      debouncedRefresh();
+    }, [debouncedRefresh])
   });
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return {
     ...fileSystemWatcher,

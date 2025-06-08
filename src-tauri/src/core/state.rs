@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 use tokio::sync::Mutex;
-use crate::core::{Result, SyntariError};
+use crate::core::{Result, SyntariError, StateCollection, OptionalStateValue, PreferenceManager};
 use crate::ai::types::AiProvider;
 use crate::chat::types::ChatSession;
 use crate::project::types::ProjectContext;
@@ -16,117 +16,144 @@ use crate::project::types::ProjectContext;
 pub struct AppState {
     pub current_project: Mutex<Option<ProjectContext>>,
     pub chat_sessions: Mutex<HashMap<String, ChatSession>>,
-    pub ai_providers: Mutex<Vec<AiProvider>>,
+    pub ai_providers: Mutex<HashMap<String, AiProvider>>, // Changed to HashMap for consistency
     pub user_preferences: Mutex<HashMap<String, serde_json::Value>>,
 }
+
+// ================================
+// TRAIT IMPLEMENTATIONS FOR GENERIC STATE MANAGEMENT
+// ================================
+
+/// Implementation for managing AI providers collection
+pub struct AiProviderCollection;
+
+#[async_trait::async_trait]
+impl StateCollection<AiProvider> for AiProviderCollection {
+    fn collection_name() -> &'static str { "ai_providers" }
+    fn item_name() -> &'static str { "AI provider" }
+    
+    fn get_id(item: &AiProvider) -> String {
+        item.id.clone()
+    }
+}
+
+/// Implementation for managing chat sessions collection
+pub struct ChatSessionCollection;
+
+#[async_trait::async_trait]
+impl StateCollection<ChatSession> for ChatSessionCollection {
+    fn collection_name() -> &'static str { "chat_sessions" }
+    fn item_name() -> &'static str { "chat session" }
+    
+    fn get_id(item: &ChatSession) -> String {
+        item.id.clone()
+    }
+}
+
+/// Implementation for managing project context
+pub struct ProjectContextValue;
+
+#[async_trait::async_trait]
+impl OptionalStateValue<ProjectContext> for ProjectContextValue {
+    fn value_name() -> &'static str { "current project" }
+}
+
+/// Implementation for managing user preferences
+pub struct UserPreferenceManager;
+
+#[async_trait::async_trait]
+impl PreferenceManager for UserPreferenceManager {}
+
+// ================================
+// APPLICATION STATE IMPLEMENTATION
+// ================================
 
 impl AppState {
     pub fn new() -> Self {
         Self::default()
     }
     
+    /// Initialize the application state
     pub async fn initialize(&self) -> Result<()> {
         tracing::info!("Initializing application state...");
         
-        // Initialize AI providers
-        self.initialize_ai_providers().await?;
-        
-        // Initialize user preferences
-        self.initialize_user_preferences().await?;
+        // Initialize AI providers with default set
+        let mut providers = self.ai_providers.lock().await;
+        if providers.is_empty() {
+            // Add default providers
+            providers.insert("claude".to_string(), AiProvider {
+                id: "claude".to_string(),
+                name: "Claude 3.5 Sonnet".to_string(),
+                provider_type: "anthropic".to_string(),
+                is_available: true,
+                cost_per_token: 0.003,
+                latency: 200,
+                specialties: vec!["coding".to_string(), "analysis".to_string()],
+            });
+            
+            providers.insert("gpt4".to_string(), AiProvider {
+                id: "gpt4".to_string(),
+                name: "GPT-4 Turbo".to_string(),
+                provider_type: "openai".to_string(),
+                is_available: true,
+                cost_per_token: 0.01,
+                latency: 300,
+                specialties: vec!["general".to_string(), "coding".to_string()],
+            });
+        }
         
         tracing::info!("Application state initialized successfully");
         Ok(())
     }
     
-    async fn initialize_ai_providers(&self) -> Result<()> {
-        let mut providers = self.ai_providers.lock().await;
-        
-        // Initialize with enterprise-grade AI providers
-        providers.push(AiProvider {
-            id: "claude".to_string(),
-            name: "Claude (Anthropic)".to_string(),
-            provider_type: "claude".to_string(),
-            is_available: true,
-            cost_per_token: 0.00001102, // Actual Claude pricing
-            latency: 1500,
-            specialties: vec!["reasoning".to_string(), "code".to_string(), "analysis".to_string()],
-        });
-        
-        providers.push(AiProvider {
-            id: "openai".to_string(),
-            name: "GPT-4 (OpenAI)".to_string(),
-            provider_type: "openai".to_string(),
-            is_available: true,
-            cost_per_token: 0.00003000,
-            latency: 2000,
-            specialties: vec!["general".to_string(), "creative".to_string()],
-        });
-        
-        providers.push(AiProvider {
-            id: "gemini".to_string(),
-            name: "Gemini Pro (Google)".to_string(),
-            provider_type: "gemini".to_string(),
-            is_available: true,
-            cost_per_token: 0.00000037, // 97% cheaper!
-            latency: 800,
-            specialties: vec!["fast".to_string(), "cost-effective".to_string()],
-        });
-        
-        tracing::info!("Initialized {} AI providers", providers.len());
-        Ok(())
-    }
-    
-    async fn initialize_user_preferences(&self) -> Result<()> {
-        let mut preferences = self.user_preferences.lock().await;
-        
-        // Set default preferences
-        preferences.insert("theme".to_string(), serde_json::Value::String("dark".to_string()));
-        preferences.insert("ai_cost_limit".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(10.0).unwrap()));
-        preferences.insert("auto_save".to_string(), serde_json::Value::Bool(true));
-        preferences.insert("default_ai_provider".to_string(), serde_json::Value::String("claude".to_string()));
-        
-        tracing::info!("Initialized user preferences");
-        Ok(())
-    }
-    
     // ================================
-    // PROJECT STATE MANAGEMENT
+    // PROJECT STATE MANAGEMENT (using OptionalStateValue trait)
     // ================================
     
     pub async fn set_current_project(&self, project: ProjectContext) -> Result<()> {
-        let mut current_project = self.current_project.lock().await;
-        *current_project = Some(project);
-        Ok(())
+        ProjectContextValue::set_value(&self.current_project, project).await
     }
     
     pub async fn get_current_project(&self) -> Option<ProjectContext> {
-        let current_project = self.current_project.lock().await;
-        current_project.clone()
+        ProjectContextValue::get_value(&self.current_project).await
     }
     
     pub async fn clear_current_project(&self) {
-        let mut current_project = self.current_project.lock().await;
-        *current_project = None;
+        ProjectContextValue::clear_value(&self.current_project).await
+    }
+    
+    pub async fn has_current_project(&self) -> bool {
+        ProjectContextValue::has_value(&self.current_project).await
     }
     
     // ================================
-    // AI PROVIDER STATE MANAGEMENT
+    // AI PROVIDER STATE MANAGEMENT (using StateCollection trait)
     // ================================
     
     pub async fn get_ai_providers(&self) -> Vec<AiProvider> {
-        let providers = self.ai_providers.lock().await;
-        providers.clone()
+        AiProviderCollection::list_items(&self.ai_providers).await
     }
     
     pub async fn get_ai_provider(&self, id: &str) -> Option<AiProvider> {
-        let providers = self.ai_providers.lock().await;
-        providers.iter().find(|p| p.id == id).cloned()
+        AiProviderCollection::get_item(&self.ai_providers, id).await
+    }
+    
+    pub async fn add_ai_provider(&self, provider: AiProvider) -> Result<()> {
+        AiProviderCollection::add_item(&self.ai_providers, provider).await
+    }
+    
+    pub async fn update_ai_provider(&self, provider: AiProvider) -> Result<()> {
+        AiProviderCollection::update_item(&self.ai_providers, provider).await
+    }
+    
+    pub async fn remove_ai_provider(&self, id: &str) -> Result<()> {
+        AiProviderCollection::remove_item(&self.ai_providers, id).await
     }
     
     pub async fn update_ai_provider_availability(&self, id: &str, available: bool) -> Result<()> {
-        let mut providers = self.ai_providers.lock().await;
-        if let Some(provider) = providers.iter_mut().find(|p| p.id == id) {
+        if let Some(mut provider) = self.get_ai_provider(id).await {
             provider.is_available = available;
+            self.update_ai_provider(provider).await?;
             tracing::info!("Updated provider {} availability to {}", id, available);
             Ok(())
         } else {
@@ -135,82 +162,83 @@ impl AppState {
     }
     
     // ================================
-    // CHAT SESSION STATE MANAGEMENT
+    // CHAT SESSION STATE MANAGEMENT (using StateCollection trait)
     // ================================
     
     pub async fn add_chat_session(&self, session: ChatSession) -> Result<()> {
-        let mut sessions = self.chat_sessions.lock().await;
-        sessions.insert(session.id.clone(), session);
-        Ok(())
+        ChatSessionCollection::add_item(&self.chat_sessions, session).await
     }
     
     pub async fn get_chat_session(&self, id: &str) -> Option<ChatSession> {
-        let sessions = self.chat_sessions.lock().await;
-        sessions.get(id).cloned()
+        ChatSessionCollection::get_item(&self.chat_sessions, id).await
     }
     
     pub async fn update_chat_session(&self, session: ChatSession) -> Result<()> {
-        let mut sessions = self.chat_sessions.lock().await;
-        sessions.insert(session.id.clone(), session);
-        Ok(())
+        ChatSessionCollection::update_item(&self.chat_sessions, session).await
     }
     
     pub async fn remove_chat_session(&self, id: &str) -> Result<()> {
-        let mut sessions = self.chat_sessions.lock().await;
-        if sessions.remove(id).is_some() {
-            tracing::info!("Removed chat session: {}", id);
-            Ok(())
-        } else {
-            Err(SyntariError::chat("SESSION_NOT_FOUND", &format!("Session {} not found", id)))
-        }
+        ChatSessionCollection::remove_item(&self.chat_sessions, id).await
     }
     
     pub async fn list_chat_sessions(&self) -> Vec<ChatSession> {
-        let sessions = self.chat_sessions.lock().await;
-        sessions.values().cloned().collect()
+        ChatSessionCollection::list_items(&self.chat_sessions).await
+    }
+    
+    pub async fn chat_session_exists(&self, id: &str) -> bool {
+        ChatSessionCollection::exists(&self.chat_sessions, id).await
+    }
+    
+    pub async fn clear_chat_sessions(&self) {
+        ChatSessionCollection::clear(&self.chat_sessions).await
     }
     
     // ================================
-    // USER PREFERENCES MANAGEMENT
+    // USER PREFERENCES MANAGEMENT (using PreferenceManager trait)
     // ================================
     
     pub async fn get_preference(&self, key: &str) -> Option<serde_json::Value> {
-        let preferences = self.user_preferences.lock().await;
-        preferences.get(key).cloned()
+        UserPreferenceManager::get_preference(&self.user_preferences, key).await
     }
     
     pub async fn set_preference(&self, key: &str, value: serde_json::Value) -> Result<()> {
-        let mut preferences = self.user_preferences.lock().await;
-        preferences.insert(key.to_string(), value);
-        tracing::debug!("Updated preference: {}", key);
-        Ok(())
+        UserPreferenceManager::set_preference(&self.user_preferences, key, value).await
     }
     
     pub async fn get_all_preferences(&self) -> HashMap<String, serde_json::Value> {
-        let preferences = self.user_preferences.lock().await;
-        preferences.clone()
+        UserPreferenceManager::get_all_preferences(&self.user_preferences).await
+    }
+    
+    pub async fn remove_preference(&self, key: &str) -> Result<bool> {
+        UserPreferenceManager::remove_preference(&self.user_preferences, key).await
+    }
+    
+    pub async fn clear_preferences(&self) {
+        UserPreferenceManager::clear_preferences(&self.user_preferences).await
     }
     
     // ================================
     // UTILITY METHODS
     // ================================
     
-    pub async fn get_stats(&self) -> HashMap<String, serde_json::Value> {
-        let mut stats = HashMap::new();
+    pub async fn get_stats(&self) -> std::collections::HashMap<String, serde_json::Value> {
+        let mut stats = std::collections::HashMap::new();
         
-        let providers = self.ai_providers.lock().await;
-        let sessions = self.chat_sessions.lock().await;
-        let current_project = self.current_project.lock().await;
+        let chat_count = self.chat_sessions.lock().await.len();
+        let provider_count = self.ai_providers.lock().await.len();
+        let preference_count = self.user_preferences.lock().await.len();
         
-        stats.insert("ai_providers_count".to_string(), serde_json::Value::Number(serde_json::Number::from(providers.len())));
-        stats.insert("chat_sessions_count".to_string(), serde_json::Value::Number(serde_json::Number::from(sessions.len())));
-        stats.insert("has_current_project".to_string(), serde_json::Value::Bool(current_project.is_some()));
-        
-        if let Some(project) = current_project.as_ref() {
-            stats.insert("project_type".to_string(), serde_json::Value::String(project.project_type.clone()));
-            stats.insert("project_files_count".to_string(), serde_json::Value::Number(serde_json::Number::from(project.open_files.len())));
-        }
+        stats.insert("chat_sessions".to_string(), serde_json::Value::Number(chat_count.into()));
+        stats.insert("ai_providers".to_string(), serde_json::Value::Number(provider_count.into()));
+        stats.insert("user_preferences".to_string(), serde_json::Value::Number(preference_count.into()));
+        stats.insert("initialized".to_string(), serde_json::Value::Bool(true));
         
         stats
+    }
+
+    /// Get all AI providers
+    pub async fn get_all_ai_providers(&self) -> Result<Vec<AiProvider>> {
+        let providers = self.ai_providers.lock().await;
+        Ok(providers.values().cloned().collect())
     }
 } 

@@ -222,7 +222,7 @@ impl FileSystemWatcher {
         let path_for_events = canonical_path.to_path_buf();
         
         let mut debouncer = new_debouncer(
-            Duration::from_millis(200),
+            Duration::from_millis(50), // Reduced for better responsiveness, especially for deletions
             move |result: DebounceEventResult| {
                 Self::handle_debounced_events(result, &app_handle, &path_for_events);
             }
@@ -241,7 +241,7 @@ impl FileSystemWatcher {
         let path_for_events = canonical_path.to_path_buf();
         
         let mut debouncer = new_debouncer(
-            Duration::from_millis(200),
+            Duration::from_millis(50), // Reduced for better responsiveness, especially for deletions
             move |result: DebounceEventResult| {
                 Self::handle_debounced_events(result, &app_handle, &path_for_events);
             }
@@ -368,7 +368,7 @@ impl FileSystemWatcher {
                 }
                 
                 for event in events {
-                    if let Some(fs_event) = Self::convert_debounced_event(event, root_path) {
+                    if let Some(fs_event) = Self::convert_debounced_event(event, root_path, app_handle) {
                         Self::emit_event(app_handle, fs_event);
                     }
                 }
@@ -380,7 +380,7 @@ impl FileSystemWatcher {
         }
     }
 
-    fn convert_debounced_event(event: DebouncedEvent, root_path: &Path) -> Option<FileSystemEvent> {
+    fn convert_debounced_event(event: DebouncedEvent, _root_path: &Path, app_handle: &AppHandle) -> Option<FileSystemEvent> {
         let path = event.path.to_string_lossy().to_string();
         
         // Filter out spam events from system directories
@@ -392,21 +392,54 @@ impl FileSystemWatcher {
             return None; // Skip these noisy events
         }
         
+        // Determine if the file still exists to detect deletions
+        let file_exists = event.path.exists();
+        let is_directory = event.path.is_dir(); // Check before potential deletion
+        
+        // Determine event type more accurately
         let event_type = match event.kind {
-            notify_debouncer_mini::DebouncedEventKind::Any => "modified",
+            notify_debouncer_mini::DebouncedEventKind::Any => {
+                if !file_exists {
+                    "deleted" // File no longer exists - it was deleted
+                } else {
+                    "modified" // File exists - it was modified
+                }
+            },
             notify_debouncer_mini::DebouncedEventKind::AnyContinuous => "modified",
-            _ => "modified", // Handle any future enum variants
+            _ => {
+                if !file_exists {
+                    "deleted"
+                } else {
+                    "modified"
+                }
+            }
         };
 
-        Some(FileSystemEvent {
+        let fs_event = FileSystemEvent {
             event_type: event_type.to_string(),
-            path,
-            is_directory: event.path.is_dir(),
+            path: path.clone(),
+            is_directory,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
-        })
+        };
+
+        // For deletion events, emit a special file-deleted event for immediate tab closure
+        if event_type == "deleted" {
+            let deletion_event = serde_json::json!({
+                "path": path,
+                "is_directory": is_directory
+            });
+            
+            if let Err(e) = app_handle.emit("file-deleted", &deletion_event) {
+                println!("🚨 [RUST] Failed to emit file-deleted event: {}", e);
+            } else {
+                println!("🗑️ [RUST] Emitted file-deleted event: {}", path);
+            }
+        }
+
+        Some(fs_event)
     }
 
     fn emit_event(app_handle: &AppHandle, event: FileSystemEvent) {

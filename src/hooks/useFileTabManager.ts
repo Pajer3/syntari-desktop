@@ -50,17 +50,29 @@ export const useFileTabManager = ({
   // Listen for file deletion events
   useEffect(() => {
     let unsubscribeFileDeleted: (() => void) | undefined;
+    let unsubscribeFileSystemChange: (() => void) | undefined;
 
     const setupListener = async () => {
       try {
+        // Listen for immediate file deletion events (higher priority)
         unsubscribeFileDeleted = await listen('file-deleted', (event: any) => {
           const deletionInfo = event.payload;
+          console.log('🗑️ Immediate file deletion detected:', deletionInfo);
           handleFileDeleted(deletionInfo.path, deletionInfo.is_directory);
         });
+
+        // Also listen for general file system changes as backup
+        unsubscribeFileSystemChange = await listen('file-system-change', (event: any) => {
+          const changeInfo = event.payload;
+          if (changeInfo.event_type === 'deleted') {
+            console.log('🗑️ File deletion via file-system-change:', changeInfo);
+            handleFileDeleted(changeInfo.path, changeInfo.is_directory);
+          }
+        });
         
-        console.log('✅ File tab manager event listener setup successfully');
+        console.log('✅ File tab manager event listeners setup successfully');
       } catch (error) {
-        console.error('❌ Failed to setup file tab manager event listener:', error);
+        console.error('❌ Failed to setup file tab manager event listeners:', error);
       }
     };
 
@@ -69,6 +81,9 @@ export const useFileTabManager = ({
     return () => {
       if (unsubscribeFileDeleted) {
         unsubscribeFileDeleted();
+      }
+      if (unsubscribeFileSystemChange) {
+        unsubscribeFileSystemChange();
       }
     };
   }, [handleFileDeleted]);

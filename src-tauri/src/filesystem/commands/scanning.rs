@@ -286,54 +286,7 @@ pub async fn scan_everything_clean(
     }
 }
 
-/// List all backup files in a directory recursively
-#[tauri::command]
-pub async fn list_backup_files(backup_dir: String) -> std::result::Result<TauriResult<Vec<String>>, String> {
-    tracing::debug!("Listing backup files in: {}", backup_dir);
-    
-    let backup_path = Path::new(&backup_dir);
-    
-    if !backup_path.exists() {
-        tracing::warn!("Backup directory does not exist: {}", backup_dir);
-        return Ok(TauriResult::success(Vec::new()));
-    }
-    
-    let mut backup_files = Vec::new();
-    
-    // Walk directory recursively to find backup files
-    let walker = WalkBuilder::new(backup_path)
-        .hidden(false)
-        .parents(false)
-        .ignore(false)
-        .git_ignore(false)
-        .follow_links(false)
-        .max_depth(Some(10))
-        .build();
-    
-    for entry in walker {
-        match entry {
-            Ok(entry) => {
-                let path = entry.path();
-                if path.is_file() {
-                    let file_name = path.file_name()
-                        .and_then(|name| name.to_str())
-                        .unwrap_or("");
-                    
-                    // Check if it's a backup file (contains .backup. pattern)
-                    if file_name.contains(".backup.") {
-                        backup_files.push(path.to_string_lossy().to_string());
-                    }
-                }
-            }
-            Err(e) => {
-                tracing::warn!("Error walking backup directory: {}", e);
-            }
-        }
-    }
-    
-    tracing::info!("Found {} backup files in {}", backup_files.len(), backup_dir);
-    Ok(TauriResult::success(backup_files))
-}
+
 
 /// DEBUG: Simple test command to verify Tauri command system is working
 #[tauri::command]

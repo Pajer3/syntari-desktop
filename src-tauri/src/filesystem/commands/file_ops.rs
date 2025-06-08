@@ -22,8 +22,9 @@ pub struct FileReadResult {
 }
 
 /// VS Code-style smart file reading with size guards
-#[tauri::command]
-pub async fn read_file_smart(path: String) -> std::result::Result<TauriResult<FileReadResult>, String> {
+// MOVED TO CORE: Duplicate command moved to core/commands.rs
+// #[tauri::command]
+pub async fn read_file_smart_impl(path: String) -> std::result::Result<TauriResult<FileReadResult>, String> {
     let path = Path::new(&path);
     
     // Get file metadata first (don't read content yet)
@@ -104,7 +105,7 @@ pub async fn read_file_smart(path: String) -> std::result::Result<TauriResult<Fi
 /// Original simple file read for compatibility
 #[tauri::command]
 pub async fn read_file(path: String) -> std::result::Result<TauriResult<String>, String> {
-    let smart_result = read_file_smart(path).await?;
+    let smart_result = read_file_smart_impl(path).await?;
     
     match smart_result.data {
         Some(file_data) => {
@@ -124,8 +125,9 @@ pub async fn read_file(path: String) -> std::result::Result<TauriResult<String>,
 }
 
 /// Save file with content
-#[tauri::command]
-pub async fn save_file(path: String, content: String) -> std::result::Result<TauriResult<String>, String> {
+// MOVED TO CORE: Duplicate command moved to core/commands.rs
+// #[tauri::command]
+pub async fn save_file_impl(path: String, content: String) -> std::result::Result<TauriResult<String>, String> {
     match std::fs::write(&path, content) {
         Ok(_) => Ok(TauriResult::success("File saved successfully".to_string())),
         Err(e) => Ok(TauriResult::error(format!("Failed to save file: {}", e))),
@@ -133,8 +135,9 @@ pub async fn save_file(path: String, content: String) -> std::result::Result<Tau
 }
 
 /// Create a new file
-#[tauri::command]
-pub async fn create_file(path: String, content: Option<String>) -> Result<String, String> {
+// MOVED TO CORE: Duplicate command moved to core/commands.rs
+// #[tauri::command]
+pub async fn create_file_impl(path: String, content: Option<String>) -> Result<String, String> {
     use std::fs;
     use std::path::Path;
     
@@ -284,6 +287,32 @@ pub async fn delete_file(
         Err(e) => {
             tracing::error!("Failed to get file metadata: {}", e);
             Err(format!("Failed to access file: {}", e))
+        }
+    }
+}
+
+/// Get the application data directory for the current user
+#[tauri::command]
+pub async fn get_app_data_dir(app_handle: tauri::AppHandle) -> Result<String, String> {
+    use tauri::Manager;
+    
+    match app_handle.path().app_data_dir() {
+        Ok(path) => {
+            let app_data_path = path.to_string_lossy().to_string();
+            tracing::info!("App data directory: {}", app_data_path);
+            Ok(app_data_path)
+        },
+        Err(e) => {
+            tracing::error!("Failed to get app data directory: {}", e);
+            
+            // Fallback to home directory + .syntari
+            if let Ok(home_dir) = std::env::var("HOME") {
+                let fallback_path = format!("{}/.syntari", home_dir);
+                tracing::warn!("Using fallback app data directory: {}", fallback_path);
+                Ok(fallback_path)
+            } else {
+                Err(format!("Failed to get app data directory: {}", e))
+            }
         }
     }
 } 

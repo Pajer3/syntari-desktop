@@ -3,7 +3,7 @@
 
 use tauri::State;
 use std::path::Path;
-use crate::core::{AppState, TauriResult, FileInfo};
+use crate::core::{AppState, TauriResult, FileInfo, create_file_info_with_content, validate_directory};
 use crate::project::types::{ProjectContext, ProjectType, Framework};
 
 #[tauri::command]
@@ -12,15 +12,10 @@ pub async fn open_project(path: String, state: State<'_, AppState>) -> std::resu
     
     let project_path = Path::new(&path);
     
-    // Verify path exists and is a directory
-    if !project_path.exists() {
-        tracing::warn!("Project path does not exist: {}", path);
-        return Ok(TauriResult::error("Project path does not exist".to_string()));
-    }
-    
-    if !project_path.is_dir() {
-        tracing::warn!("Project path is not a directory: {}", path);
-        return Ok(TauriResult::error("Project path is not a directory".to_string()));
+    // Validate directory using shared utility
+    if let Err(e) = validate_directory(project_path) {
+        tracing::warn!("Project validation failed: {:?}", e);
+        return Ok(TauriResult::error(e.message().to_string()));
     }
     
     // Analyze project structure
@@ -29,7 +24,7 @@ pub async fn open_project(path: String, state: State<'_, AppState>) -> std::resu
     let git_branch = detect_git_branch(project_path).await;
     let dependencies = detect_dependencies(project_path, &project_type).await;
     
-    // Read some initial files for context
+    // Read some initial files for context using shared utility
     let open_files = read_initial_project_files(project_path, &project_type).await;
     
     // Create project context
@@ -273,54 +268,18 @@ async fn read_initial_project_files(project_path: &Path, project_type: &ProjectT
     for file_name in files_to_read {
         let file_path = project_path.join(file_name);
         if file_path.exists() && file_path.is_file() {
-            if let Ok(content) = tokio::fs::read_to_string(&file_path).await {
-                let metadata = file_path.metadata().ok();
-                
-                let file_info = FileInfo {
-                    path: file_path.to_string_lossy().to_string(),
-                    name: file_name.to_string(),
-                    extension: file_path.extension()
-                        .and_then(|ext| ext.to_str())
-                        .unwrap_or("")
-                        .to_string(),
-                    size: metadata.as_ref().map(|m| m.len()).unwrap_or(0),
-                    last_modified: metadata
-                        .and_then(|m| m.modified().ok())
-                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                        .map(|d| d.as_secs())
-                        .unwrap_or(0),
-                    content: Some(content),
-                    language: Some(detect_language_from_extension(&file_path)),
-                };
-                
-                files.push(file_info);
+            // Use shared file utility instead of duplicated logic
+            match create_file_info_with_content(&file_path, true).await {
+                Ok(file_info) => {
+                    files.push(file_info);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to read project file {}: {:?}", file_name, e);
+                    // Continue processing other files
+                }
             }
         }
     }
     
     files
-}
-
-fn detect_language_from_extension(file_path: &Path) -> String {
-    match file_path.extension().and_then(|ext| ext.to_str()) {
-        Some("rs") => "rust".to_string(),
-        Some("js") => "javascript".to_string(),
-        Some("ts") => "typescript".to_string(),
-        Some("tsx") => "typescript".to_string(),
-        Some("jsx") => "javascript".to_string(),
-        Some("py") => "python".to_string(),
-        Some("java") => "java".to_string(),
-        Some("go") => "go".to_string(),
-        Some("php") => "php".to_string(),
-        Some("rb") => "ruby".to_string(),
-        Some("cs") => "csharp".to_string(),
-        Some("json") => "json".to_string(),
-        Some("toml") => "toml".to_string(),
-        Some("yaml") | Some("yml") => "yaml".to_string(),
-        Some("xml") => "xml".to_string(),
-        Some("html") => "html".to_string(),
-        Some("css") => "css".to_string(),
-        Some("md") => "markdown".to_string(),
-        _ => "plaintext".to_string(),
-    }
 } 

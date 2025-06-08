@@ -50,6 +50,7 @@ lazy_static = "1.5.0"
 
 # Async runtime and utilities
 tokio = { version = "1.45.1", features = ["full"] }
+async-trait = "0.1.83"
 anyhow = "1.0.98"
 
 # Serialization and data handling
@@ -67,6 +68,13 @@ walkdir = "2.5.0"
 
 # Git integration
 git2 = { version = "0.20.2", optional = true }
+
+# Unix process management (for non-Windows platforms)
+nix = { version = "0.28", features = ["signal"] }
+
+# Unix process management (for non-Windows platforms) - only on Unix-like systems
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+nix = { version = "0.28", features = ["signal"] }
 
 # Encryption and security
 ring = "0.17.14"
@@ -94,7 +102,7 @@ syntari-cli = { path = "../../syntari-cli" }
 consensus_engine = { path = "../../kernel/consensus_engine" }
 
 [features]
-default = []
+default = ["git-integration"]
 git-integration = ["git2"]
 # Custom builds for enterprise features
 enterprise = []

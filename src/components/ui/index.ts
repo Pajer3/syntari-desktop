@@ -1,7 +1,23 @@
-// UI Components - Clean exports
-export { LoadingScreen } from './LoadingScreen';
-export { ErrorScreen } from './ErrorScreen';
-export { PermissionRequestDialog } from './PermissionRequestDialog';
-
-// Re-export types
-export type { AppError } from './ErrorScreen'; 
+export { useContextMenu } from "./ContextMenu";
+export { DirectoryBrowser } from "./DirectoryBrowser";
+export { BaseDialog } from "./BaseDialog";
+export { RecentFilesList } from "./RecentFilesList";
+export { PermissionRequestDialog } from "./PermissionRequestDialog";
+export { LoadingScreen } from "./LoadingScreen";
+export { ErrorScreen } from "./ErrorScreen";
+export { ResourceMonitoring } from "./ResourceMonitoring";
+export { GettingStartedSection } from "./GettingStartedSection";
+export { RecentProjectsList } from "./RecentProjectsList";
+export { ActionCard } from "./ActionCard";
+export { Terminal } from "./Terminal";
+export { TerminalPanel } from "./TerminalPanel";
+export { CommandPalette } from "./CommandPalette";
+export { StatusBar, useStatusBar, createStatusBarItems } from "./StatusBar";
+export { ProblemsPanel } from "./ProblemsPanel";
+export type { Problem, ProblemSeverity, ProblemLocation } from "./ProblemsPanel";
+export { OutputPanel } from "./OutputPanel";
+export type { OutputEntry, OutputChannel, OutputLevel } from "./OutputPanel";
+export { SearchReplacePanel } from "./SearchReplacePanel";
+export { EnhancedMinimap, minimapUtils } from "../editor/EnhancedMinimap";
+export type { MinimapRange, MinimapMarker, MinimapAIInsight } from "../editor/EnhancedMinimap";
+export type { AppError } from "./ErrorScreen";

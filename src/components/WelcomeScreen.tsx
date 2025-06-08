@@ -6,6 +6,7 @@ import { GettingStartedSection } from './ui/GettingStartedSection';
 import { ResourceMonitoring } from './ui/ResourceMonitoring';
 import { WELCOME_ACTIONS, GETTING_STARTED_STEPS } from '../constants/welcomeData';
 
+
 interface WelcomeScreenProps {
   onOpenProject: () => void;
 }
@@ -18,6 +19,8 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenProject }) =
       onOpenProject();
     }
   };
+
+
 
   return (
     <div className="h-full text-white relative overflow-y-auto" style={{ backgroundColor: '#262626' }}>
@@ -193,6 +196,8 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenProject }) =
           </div>
         </div>
       </div>
+
+             
     </div>
   );
 }; 

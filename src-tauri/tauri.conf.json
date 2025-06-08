@@ -20,7 +20,7 @@
         "minHeight": 700,
         "resizable": true,
         "maximized": false,
-        "decorations": true,
+        "decorations": false,
         "transparent": false,
         "center": true,
         "devtools": true

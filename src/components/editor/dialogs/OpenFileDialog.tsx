@@ -1,17 +1,10 @@
 // Syntari AI IDE - Open File Dialog Component
 // VS Code-style file browser with search and recent files
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { getFileIcon } from '../../../utils/editorUtils';
-
-interface FileNode {
-  name: string;
-  path: string;
-  isDirectory: boolean;
-  size?: number;
-  lastModified?: Date;
-  children?: FileNode[];
-}
+import { fileSystemService } from '../../../services/fileSystemService';
+import type { FileNode } from '../../../types/fileSystem';
 
 interface OpenFileDialogProps {
   isOpen: boolean;
@@ -33,9 +26,12 @@ export const OpenFileDialog: React.FC<OpenFileDialogProps> = ({
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredFiles, setFilteredFiles] = useState<FileNode[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [showRecentFiles, setShowRecentFiles] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   // Reset state when dialog opens
   useEffect(() => {
@@ -45,6 +41,8 @@ export const OpenFileDialog: React.FC<OpenFileDialogProps> = ({
       setSearchQuery('');
       setShowRecentFiles(true);
       setIsLoading(false);
+      setError(null);
+      setSelectedIndex(0);
       
       // Focus search input with a small delay
       setTimeout(() => {
@@ -52,7 +50,9 @@ export const OpenFileDialog: React.FC<OpenFileDialogProps> = ({
       }, 100);
       
       // Load initial files
-      loadFiles(projectRootPath);
+      if (projectRootPath) {
+        loadFiles(projectRootPath);
+      }
     }
   }, [isOpen, projectRootPath]);
 
@@ -60,6 +60,7 @@ export const OpenFileDialog: React.FC<OpenFileDialogProps> = ({
   useEffect(() => {
     if (!searchQuery.trim()) {
       setFilteredFiles(files);
+      setSelectedIndex(0);
       return;
     }
 
@@ -69,30 +70,38 @@ export const OpenFileDialog: React.FC<OpenFileDialogProps> = ({
       file.path.toLowerCase().includes(query)
     );
     setFilteredFiles(filtered);
+    setSelectedIndex(0);
   }, [searchQuery, files]);
 
-  const loadFiles = async (path: string) => {
+  const loadFiles = useCallback(async (path: string) => {
     setIsLoading(true);
+    setError(null);
+    
     try {
-      // TODO: Replace with actual file system API call
-      // This is a mock implementation
-      const mockFiles: FileNode[] = [
-        { name: 'src', path: `${path}/src`, isDirectory: true },
-        { name: 'package.json', path: `${path}/package.json`, isDirectory: false, size: 1024 },
-        { name: 'README.md', path: `${path}/README.md`, isDirectory: false, size: 2048 },
-        { name: 'tsconfig.json', path: `${path}/tsconfig.json`, isDirectory: false, size: 512 },
-      ];
+      console.log('🔍 Loading files from:', path);
+      const folderContents = await fileSystemService.loadFolderContents(path, false);
       
-      setFiles(mockFiles);
+      // Sort: directories first, then files, both alphabetically
+      const sortedFiles = folderContents.sort((a, b) => {
+        if (a.isDirectory !== b.isDirectory) {
+          return a.isDirectory ? -1 : 1;
+        }
+        return a.name.localeCompare(b.name);
+      });
+      
+      setFiles(sortedFiles);
+      console.log('✅ Loaded', sortedFiles.length, 'files');
     } catch (error) {
-      console.error('Failed to load files:', error);
+      console.error('❌ Failed to load files:', error);
+      setError(error instanceof Error ? error.message : 'Failed to load files');
       setFiles([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const handleFileSelect = (file: FileNode) => {
+  const handleFileSelect = useCallback((file: FileNode, index: number) => {
+    setSelectedIndex(index);
     if (file.isDirectory) {
       setCurrentPath(file.path);
       setSelectedFile(null);
@@ -100,53 +109,82 @@ export const OpenFileDialog: React.FC<OpenFileDialogProps> = ({
     } else {
       setSelectedFile(file.path);
     }
-  };
+  }, [loadFiles]);
 
-  const handleFileDoubleClick = async (file: FileNode) => {
+  const handleFileDoubleClick = useCallback(async (file: FileNode) => {
     if (!file.isDirectory) {
       try {
         await onOpenFile(file.path);
         onClose();
       } catch (error) {
         console.error('Failed to open file:', error);
+        setError(error instanceof Error ? error.message : 'Failed to open file');
       }
     }
-  };
+  }, [onOpenFile, onClose]);
 
-  const handleOpen = async () => {
+  const handleRecentFileSelect = useCallback(async (filePath: string) => {
+    try {
+      await onOpenFile(filePath);
+      onClose();
+    } catch (error) {
+      console.error('Failed to open recent file:', error);
+      setError(error instanceof Error ? error.message : 'Failed to open file');
+    }
+  }, [onOpenFile, onClose]);
+
+  const handleOpen = useCallback(async () => {
     if (selectedFile) {
       try {
         await onOpenFile(selectedFile);
         onClose();
       } catch (error) {
         console.error('Failed to open file:', error);
+        setError(error instanceof Error ? error.message : 'Failed to open file');
+      }
+    } else if (filteredFiles[selectedIndex] && !filteredFiles[selectedIndex].isDirectory) {
+      try {
+        await onOpenFile(filteredFiles[selectedIndex].path);
+        onClose();
+      } catch (error) {
+        console.error('Failed to open file:', error);
+        setError(error instanceof Error ? error.message : 'Failed to open file');
       }
     }
-  };
+  }, [selectedFile, filteredFiles, selectedIndex, onOpenFile, onClose]);
 
-  const handleCancel = () => {
+  const handleCancel = useCallback(() => {
     onClose();
-  };
+  }, [onClose]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
       onClose();
-    } else if (e.key === 'Enter' && selectedFile) {
+    } else if (e.key === 'Enter') {
       e.preventDefault();
+      e.stopPropagation();
       handleOpen();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedIndex(prev => Math.max(0, prev - 1));
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const maxIndex = showRecentFiles ? recentFiles.length - 1 : filteredFiles.length - 1;
+      setSelectedIndex(prev => Math.min(maxIndex, prev + 1));
     }
-  };
+  }, [onClose, handleOpen, showRecentFiles, recentFiles.length, filteredFiles.length]);
 
-  const navigateUp = () => {
+  const navigateUp = useCallback(() => {
     const parentPath = currentPath.split('/').slice(0, -1).join('/');
-    if (parentPath && parentPath !== currentPath) {
+    if (parentPath && parentPath !== currentPath && parentPath.includes(projectRootPath)) {
       setCurrentPath(parentPath);
       setSelectedFile(null);
+      setSelectedIndex(0);
       loadFiles(parentPath);
     }
-  };
+  }, [currentPath, projectRootPath, loadFiles]);
 
   const formatFileSize = (bytes?: number) => {
     if (!bytes) return '';
@@ -160,14 +198,28 @@ export const OpenFileDialog: React.FC<OpenFileDialogProps> = ({
     return currentPath.replace(projectRootPath, './') || './';
   };
 
+  // Scroll selected item into view
+  useEffect(() => {
+    if (listRef.current) {
+      const selectedElement = listRef.current.children[selectedIndex] as HTMLElement;
+      if (selectedElement) {
+        selectedElement.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+  }, [selectedIndex]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={handleCancel}>
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm" 
+      onClick={handleCancel}
+    >
       <div 
-        className="bg-vscode-bg border border-vscode-border rounded-md shadow-lg w-[700px] h-[500px] max-w-90vw max-h-90vh flex flex-col"
+        className="bg-vscode-bg border border-vscode-border rounded-lg shadow-2xl w-[700px] h-[500px] max-w-90vw max-h-90vh flex flex-col"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
+        tabIndex={-1}
       >
         {/* Header */}
         <div className="px-4 py-3 border-b border-vscode-border">
@@ -187,9 +239,10 @@ export const OpenFileDialog: React.FC<OpenFileDialogProps> = ({
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search files..."
             className="
-              w-full px-3 py-2 bg-vscode-input-bg border border-vscode-border rounded
+              w-full px-3 py-2 bg-vscode-input border border-vscode-border rounded
               text-vscode-fg placeholder-vscode-fg-muted
               focus:outline-none focus:ring-2 focus:ring-vscode-accent focus:border-vscode-accent
+              transition-all duration-200
             "
           />
 
@@ -200,10 +253,10 @@ export const OpenFileDialog: React.FC<OpenFileDialogProps> = ({
               disabled={!currentPath || currentPath === projectRootPath}
               className="
                 px-3 py-1 text-sm font-medium text-vscode-fg
-                border border-vscode-border rounded hover:bg-vscode-button-hover
+                border border-vscode-border rounded hover:bg-vscode-list-hover
                 focus:outline-none focus:ring-2 focus:ring-vscode-accent
                 disabled:opacity-50 disabled:cursor-not-allowed
-                transition-colors
+                transition-all duration-200
               "
             >
               ↑ Up
@@ -221,10 +274,10 @@ export const OpenFileDialog: React.FC<OpenFileDialogProps> = ({
               className={`
                 px-3 py-1 text-sm font-medium rounded
                 focus:outline-none focus:ring-2 focus:ring-vscode-accent
-                transition-colors
+                transition-all duration-200
                 ${!showRecentFiles 
                   ? 'bg-vscode-accent text-white' 
-                  : 'text-vscode-fg border border-vscode-border hover:bg-vscode-button-hover'
+                  : 'text-vscode-fg border border-vscode-border hover:bg-vscode-list-hover'
                 }
               `}
             >
@@ -236,14 +289,14 @@ export const OpenFileDialog: React.FC<OpenFileDialogProps> = ({
                 className={`
                   px-3 py-1 text-sm font-medium rounded
                   focus:outline-none focus:ring-2 focus:ring-vscode-accent
-                  transition-colors
+                  transition-all duration-200
                   ${showRecentFiles 
                     ? 'bg-vscode-accent text-white' 
-                    : 'text-vscode-fg border border-vscode-border hover:bg-vscode-button-hover'
+                    : 'text-vscode-fg border border-vscode-border hover:bg-vscode-list-hover'
                   }
                 `}
               >
-                Recent Files
+                Recent Files ({recentFiles.length})
               </button>
             )}
           </div>
@@ -251,7 +304,20 @@ export const OpenFileDialog: React.FC<OpenFileDialogProps> = ({
 
         {/* File List */}
         <div className="flex-1 overflow-hidden">
-          {isLoading ? (
+          {error ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <div className="text-red-400 mb-2 text-lg">⚠️ Error</div>
+                <div className="text-vscode-fg-muted">{error}</div>
+                <button
+                  onClick={() => loadFiles(currentPath)}
+                  className="mt-3 px-3 py-1 text-sm bg-vscode-accent text-white rounded hover:bg-vscode-accent-hover transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          ) : isLoading ? (
             <div className="flex items-center justify-center h-full">
               <div className="flex items-center space-x-2 text-vscode-fg-muted">
                 <div className="animate-spin w-5 h-5 border-2 border-vscode-accent border-t-transparent rounded-full"></div>
@@ -259,53 +325,77 @@ export const OpenFileDialog: React.FC<OpenFileDialogProps> = ({
               </div>
             </div>
           ) : showRecentFiles && recentFiles.length > 0 ? (
-            <div className="h-full overflow-y-auto">
+            <div ref={listRef} className="h-full overflow-y-auto">
               <div className="p-2">
-                <h3 className="text-sm font-medium text-vscode-fg mb-2">Recent Files</h3>
-                {recentFiles.map((filePath, index) => (
-                  <div
-                    key={index}
-                    onClick={() => setSelectedFile(filePath)}
-                    onDoubleClick={() => handleFileDoubleClick({ name: filePath.split('/').pop() || '', path: filePath, isDirectory: false })}
-                    className={`
-                      flex items-center space-x-2 px-3 py-2 rounded cursor-pointer
-                      hover:bg-vscode-button-hover transition-colors
-                      ${selectedFile === filePath ? 'bg-vscode-accent bg-opacity-20' : ''}
-                    `}
-                  >
-                    <span>{getFileIcon(filePath.split('.').pop() || '')}</span>
-                    <span className="text-sm text-vscode-fg">{filePath.split('/').pop()}</span>
-                    <span className="text-xs text-vscode-fg-muted ml-auto">{filePath}</span>
-                  </div>
-                ))}
+                <h3 className="text-sm font-medium text-vscode-fg mb-2 px-2">Recent Files</h3>
+                {recentFiles.map((filePath, index) => {
+                  const isSelected = index === selectedIndex;
+                  return (
+                    <div
+                      key={index}
+                      onClick={() => handleRecentFileSelect(filePath)}
+                      className={`
+                        flex items-center space-x-2 px-3 py-2 rounded cursor-pointer
+                        transition-all duration-150
+                        ${isSelected 
+                          ? 'bg-vscode-list-active text-vscode-list-active-fg' 
+                          : 'hover:bg-vscode-list-hover'
+                        }
+                      `}
+                    >
+                      <span className="text-lg">{getFileIcon(filePath.split('.').pop() || '')}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm text-vscode-fg truncate">{filePath.split('/').pop()}</div>
+                        <div className="text-xs text-vscode-fg-muted truncate">{filePath}</div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ) : (
-            <div className="h-full overflow-y-auto">
+            <div ref={listRef} className="h-full overflow-y-auto">
               <div className="p-2">
                 {filteredFiles.length === 0 ? (
                   <div className="flex items-center justify-center h-32 text-vscode-fg-muted">
                     {searchQuery ? 'No files match your search' : 'No files found'}
                   </div>
                 ) : (
-                  filteredFiles.map((file, index) => (
-                    <div
-                      key={index}
-                      onClick={() => handleFileSelect(file)}
-                      onDoubleClick={() => handleFileDoubleClick(file)}
-                      className={`
-                        flex items-center space-x-2 px-3 py-2 rounded cursor-pointer
-                        hover:bg-vscode-button-hover transition-colors
-                        ${selectedFile === file.path ? 'bg-vscode-accent bg-opacity-20' : ''}
-                      `}
-                    >
-                      <span>{file.isDirectory ? '📁' : getFileIcon(file.name.split('.').pop() || '')}</span>
-                      <span className="text-sm text-vscode-fg flex-1">{file.name}</span>
-                      {!file.isDirectory && (
-                        <span className="text-xs text-vscode-fg-muted">{formatFileSize(file.size)}</span>
-                      )}
-                    </div>
-                  ))
+                  filteredFiles.map((file, index) => {
+                    const isSelected = index === selectedIndex;
+                    return (
+                      <div
+                        key={file.path}
+                        onClick={() => handleFileSelect(file, index)}
+                        onDoubleClick={() => handleFileDoubleClick(file)}
+                        className={`
+                          flex items-center space-x-2 px-3 py-2 rounded cursor-pointer
+                          transition-all duration-150
+                          ${isSelected 
+                            ? 'bg-vscode-list-active text-vscode-list-active-fg' 
+                            : 'hover:bg-vscode-list-hover'
+                          }
+                        `}
+                      >
+                        <span className="text-lg">
+                          {file.isDirectory ? '📁' : getFileIcon(file.name.split('.').pop() || '')}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm text-vscode-fg truncate">{file.name}</div>
+                          {!file.isDirectory && (
+                            <div className="text-xs text-vscode-fg-muted">
+                              {formatFileSize(file.size)}
+                              {file.lastModified && (
+                                <span className="ml-2">
+                                  {new Date(file.lastModified).toLocaleDateString()}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -323,41 +413,44 @@ export const OpenFileDialog: React.FC<OpenFileDialogProps> = ({
         )}
 
         {/* Actions */}
-        <div className="flex justify-end space-x-3 p-4 border-t border-vscode-border">
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="
-              px-4 py-2 text-sm font-medium text-vscode-fg
-              border border-vscode-border rounded hover:bg-vscode-button-hover
-              focus:outline-none focus:ring-2 focus:ring-vscode-accent
-              transition-colors
-            "
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleOpen}
-            disabled={!selectedFile}
-            className="
-              px-4 py-2 text-sm font-medium text-white
-              bg-vscode-accent hover:bg-vscode-accent-hover
-              border border-vscode-accent rounded
-              focus:outline-none focus:ring-2 focus:ring-vscode-accent
-              disabled:opacity-50 disabled:cursor-not-allowed
-              transition-colors
-            "
-          >
-            Open
-          </button>
-        </div>
-
-        {/* Keyboard Shortcuts Help */}
-        <div className="px-4 pb-3 text-xs text-vscode-fg-muted border-t border-vscode-border">
-          <div className="flex justify-between">
-            <span>Double-click to open • <kbd className="px-1 bg-vscode-keybinding-bg rounded">Enter</kbd> to open selected</span>
-            <span><kbd className="px-1 bg-vscode-keybinding-bg rounded">Esc</kbd> to cancel</span>
+        <div className="flex justify-between items-center p-4 border-t border-vscode-border">
+          <div className="text-xs text-vscode-fg-muted">
+            <div className="flex items-center space-x-4">
+              <span>Double-click to open</span>
+              <span><kbd className="px-1 bg-vscode-keybinding-bg rounded">↑↓</kbd> Navigate</span>
+              <span><kbd className="px-1 bg-vscode-keybinding-bg rounded">Enter</kbd> Open</span>
+              <span><kbd className="px-1 bg-vscode-keybinding-bg rounded">Esc</kbd> Cancel</span>
+            </div>
+          </div>
+          
+          <div className="flex space-x-3">
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="
+                px-4 py-2 text-sm font-medium text-vscode-fg
+                border border-vscode-border rounded hover:bg-vscode-list-hover
+                focus:outline-none focus:ring-2 focus:ring-vscode-accent
+                transition-all duration-200
+              "
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleOpen}
+              disabled={!selectedFile && (!filteredFiles[selectedIndex] || filteredFiles[selectedIndex]?.isDirectory)}
+              className="
+                px-4 py-2 text-sm font-medium text-white
+                bg-vscode-accent hover:bg-vscode-accent-hover
+                border border-vscode-accent rounded
+                focus:outline-none focus:ring-2 focus:ring-vscode-accent
+                disabled:opacity-50 disabled:cursor-not-allowed
+                transition-all duration-200
+              "
+            >
+              Open
+            </button>
           </div>
         </div>
       </div>

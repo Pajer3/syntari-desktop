@@ -63,6 +63,13 @@ pub enum AppError {
         field: Option<String>,
     },
     
+    /// Git repository errors
+    Git {
+        code: String,
+        message: String,
+        repository_path: Option<String>,
+    },
+    
     /// Internal/unexpected errors
     Internal {
         code: String,
@@ -187,6 +194,24 @@ impl AppError {
         }
     }
     
+    /// Create a git error
+    pub fn git_error<S: Into<String>>(code: S, message: S) -> Self {
+        Self::Git {
+            code: code.into(),
+            message: message.into(),
+            repository_path: None,
+        }
+    }
+    
+    /// Create a git error with repository path
+    pub fn git_error_with_path<S: Into<String>>(code: S, message: S, repository_path: S) -> Self {
+        Self::Git {
+            code: code.into(),
+            message: message.into(),
+            repository_path: Some(repository_path.into()),
+        }
+    }
+    
     /// Get the error code
     pub fn code(&self) -> &str {
         match self {
@@ -198,6 +223,7 @@ impl AppError {
             AppError::Config { code, .. } => code,
             AppError::Network { code, .. } => code,
             AppError::Validation { code, .. } => code,
+            AppError::Git { code, .. } => code,
             AppError::Internal { code, .. } => code,
         }
     }
@@ -213,6 +239,7 @@ impl AppError {
             AppError::Config { message, .. } => message,
             AppError::Network { message, .. } => message,
             AppError::Validation { message, .. } => message,
+            AppError::Git { message, .. } => message,
             AppError::Internal { message, .. } => message,
         }
     }
@@ -228,6 +255,7 @@ impl AppError {
             AppError::Config { .. } => false,
             AppError::Network { .. } => true,
             AppError::Validation { .. } => false, // User needs to fix input
+            AppError::Git { .. } => true, // Git errors are often recoverable
             AppError::Internal { .. } => false, // Internal errors typically not recoverable
         }
     }
@@ -381,6 +409,7 @@ impl AppError {
             AppError::Config { .. } => "config",
             AppError::Network { .. } => "network",
             AppError::Validation { .. } => "validation",
+            AppError::Git { .. } => "git",
             AppError::Internal { .. } => "internal",
         }
     }

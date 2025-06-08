@@ -46,13 +46,32 @@ const App: React.FC = () => {
   useGlobalKeyboardShortcuts();
   
   // ================================
-  // TAB MANAGEMENT
+  // TAB MANAGEMENT & UI STATE
   // ================================
   
   const tabManager = useTabManager();
   const [currentFile, setCurrentFile] = useState<FileInfo | null>(null);
   const [showPermissionDialog, setShowPermissionDialog] = useState(false);
   const [pendingProjectPath, setPendingProjectPath] = useState<string | null>(null);
+  
+  // Cool UI state for animations
+  const [isAppLoaded, setIsAppLoaded] = useState(false);
+  const [showStartupAnimation, setShowStartupAnimation] = useState(true);
+
+  // ================================
+  // STARTUP ANIMATION
+  // ================================
+  
+  useEffect(() => {
+    // Quick app startup - reduced animation time
+    const timer = setTimeout(() => {
+      setIsAppLoaded(true);
+      // Much faster startup
+      setTimeout(() => setShowStartupAnimation(false), 200);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   // ================================
   // FOLDER PICKER & PROJECT MANAGEMENT
@@ -125,11 +144,13 @@ const App: React.FC = () => {
         content: (
           <CodeEditor
             project={project}
-            onFileChange={(file, _content) => {
-              console.log(`File changed: ${file.name}`);
-              setCurrentFile(file);
+            onFileChange={(file: FileInfo | null) => {
+              if (file) {
+                console.log(`File changed: ${file.name}`);
+                setCurrentFile(file);
+              }
             }}
-            onRequestAI={(context) => {
+            onRequestAI={(context: any) => {
               console.log('🤖 AI request from editor:', context);
               // Switch to AI Assistant tab and prefill with context
               tabManager.switchToTab('ai-assistant');
@@ -391,76 +412,135 @@ const App: React.FC = () => {
 
   return (
     <div 
-      className="h-screen bg-gray-900 text-white flex flex-col overflow-hidden"
+      className={`
+        h-screen bg-gradient-to-br from-vscode-editor via-vscode-editor to-vscode-sidebar
+        text-white flex flex-col overflow-hidden relative
+        transition-all duration-500 ease-out
+        ${isAppLoaded ? 'opacity-100' : 'opacity-0'}
+      `}
       // DISABLED: Custom context menu
       // onContextMenu={handleContextMenu}
     >
-      {/* Header */}
-      <Header 
-        viewModel={appViewModel.viewModel}
-        aiProviders={[]}
-        onSettings={handleSettings}
-        onTogglePerformanceMode={appViewModel.togglePerformanceMode}
-      />
+      {/* Cool startup animation overlay */}
+      {showStartupAnimation && (
+        <div className="absolute inset-0 z-50 bg-gradient-to-br from-vscode-accent/20 to-purple-600/20 backdrop-blur-sm flex items-center justify-center animate-fadeOut">
+          <div className="text-center">
+            <div className="relative w-20 h-20 mx-auto mb-6">
+              <div className="absolute inset-0 border-4 border-vscode-accent/30 rounded-full animate-pulse"></div>
+              <div className="absolute inset-0 border-4 border-transparent border-t-vscode-accent border-r-vscode-accent rounded-full animate-spin"></div>
+              <div className="absolute inset-3 border-2 border-transparent border-t-blue-400 border-r-blue-400 rounded-full animate-spin animation-delay-300"></div>
+              <div className="absolute inset-6 w-8 h-8 bg-gradient-to-r from-vscode-accent to-blue-400 rounded-full animate-pulse"></div>
+            </div>
+            <h1 className="text-2xl font-bold mb-2 text-gradient animate-typing">Syntari AI IDE</h1>
+            <p className="text-vscode-fg-muted animate-fadeIn animation-delay-500">
+              Initializing the future of coding...
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Subtle animated background pattern */}
+      <div className="absolute inset-0 opacity-5">
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-vscode-accent/10 to-transparent animate-shimmer"></div>
+      </div>
+
+      {/* Enhanced Interactive Header with smooth entrance */}
+      <div className={`
+        transition-all duration-700 ease-out
+        ${isAppLoaded ? 'transform translate-y-0 opacity-100' : 'transform -translate-y-full opacity-0'}
+      `}>
+        <Header 
+          viewModel={appViewModel.viewModel}
+          aiProviders={[]}
+          onSettings={handleSettings}
+          onTogglePerformanceMode={appViewModel.togglePerformanceMode}
+          onOpenProject={handleOpenProject}
+          onNewFile={() => console.log('Create new file')}
+          onSaveFile={() => console.log('Save current file')}
+          onUndo={() => console.log('Undo last action')}
+          onRedo={() => console.log('Redo last action')}
+          onFind={() => console.log('Open find dialog')}
+          onCommandPalette={() => console.log('Open command palette')}
+          onHelp={() => console.log('Show help')}
+        />
+      </div>
       
-      {/* Main Content */}
-      <div className="flex-1 overflow-hidden">
+      {/* Main Content with smooth slide-in animation */}
+      <div className={`
+        flex-1 overflow-hidden relative
+        transition-all duration-700 ease-out animation-delay-300
+        ${isAppLoaded ? 'transform translate-y-0 opacity-100' : 'transform translate-y-8 opacity-0'}
+      `}>
         {(() => {
           switch (appViewModel.viewModel.currentView) {
             case 'welcome':
               return (
-                <WelcomeScreen 
-                  onOpenProject={handleOpenProject}
-                />
+                <div className="animate-scaleIn">
+                  <WelcomeScreen 
+                    onOpenProject={handleOpenProject}
+                  />
+                </div>
               );
               
             case 'editor':
               // Always show TabLayout when tabs exist, regardless of active tab
               if (tabManager.tabs.length > 0) {
                 return (
-                  <TabLayout
-                    tabs={tabManager.tabs}
-                    activeTabId={tabManager.activeTabId}
-                    onTabChange={tabManager.switchToTab}
-                    onTabClose={tabManager.removeTab}
-                    onTabReorder={tabManager.reorderTabs}
-                    className="h-full"
-                  />
+                  <div className="h-full animate-fadeIn">
+                    <TabLayout
+                      tabs={tabManager.tabs}
+                      activeTabId={tabManager.activeTabId}
+                      onTabChange={tabManager.switchToTab}
+                      onTabClose={tabManager.removeTab}
+                      onTabReorder={tabManager.reorderTabs}
+                      className="h-full"
+                    />
+                  </div>
                 );
               }
               // Fallback when no project is loaded
               return (
-                <div className="h-full bg-gray-900 text-white flex items-center justify-center">
-                  <div className="text-center max-w-md">
-                    <div className="text-6xl mb-4">📝</div>
-                    <h2 className="text-2xl font-semibold mb-2">Code Editor</h2>
-                    <p className="text-gray-400 mb-4">No project loaded</p>
-                    <div className="text-xs text-gray-500 mb-4 space-y-1">
-                      <div>Project in viewModel: {appViewModel.viewModel.project ? 'Yes' : 'No'}</div>
+                <div className="h-full bg-gradient-to-br from-vscode-editor to-vscode-sidebar text-white flex items-center justify-center animate-scaleIn">
+                  <div className="text-center max-w-md p-8 glass rounded-2xl shadow-lift">
+                    <div className="text-6xl mb-6 animate-bounce">📝</div>
+                    <h2 className="text-2xl font-semibold mb-4 text-white">Code Editor</h2>
+                    <p className="text-vscode-fg mb-6">No project loaded</p>
+                    <div className="text-xs text-vscode-fg mb-6 space-y-1 bg-vscode-sidebar/50 p-3 rounded-lg border border-vscode-border">
+                      <div>Project in viewModel: {appViewModel.viewModel.project ? '✅ Yes' : '❌ No'}</div>
                       <div>Active tabs: {tabManager.tabs.length}</div>
                       <div>Tab IDs: {tabManager.tabs.map(t => t.id).join(', ') || 'None'}</div>
                     </div>
                     <button
                       onClick={handleOpenProject}
-                      className="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                      className="px-8 py-3 gradient-accent hover:shadow-glow rounded-xl transition-all duration-300 font-medium btn-hover-lift focus-ring"
                     >
-                      Open Project
+                      🚀 Open Project
                     </button>
                   </div>
                 </div>
               );
               
             case 'chat':
-              return <ChatView chatViewModel={chatViewModel} />;
+              return (
+                <div className="animate-slideIn">
+                  <ChatView chatViewModel={chatViewModel} />
+                </div>
+              );
               
             case 'settings':
-              return <SettingsView />;
+              return (
+                <div className="animate-fadeIn">
+                  <SettingsView />
+                </div>
+              );
               
             default:
               return (
-                <WelcomeScreen 
-                  onOpenProject={handleOpenProject}
-                />
+                <div className="animate-scaleIn">
+                  <WelcomeScreen 
+                    onOpenProject={handleOpenProject}
+                  />
+                </div>
               );
           }
         })()}
@@ -478,13 +558,15 @@ const App: React.FC = () => {
       />
       */}
 
-      {/* Permission Dialog */}
+      {/* Permission Dialog with smooth animation */}
       {showPermissionDialog && (
-        <PermissionRequestDialog
-          isOpen={showPermissionDialog}
-          onConfirm={handlePermissionConfirm}
-          onCancel={handlePermissionCancel}
-        />
+        <div className="animate-scaleIn">
+          <PermissionRequestDialog
+            isOpen={showPermissionDialog}
+            onConfirm={handlePermissionConfirm}
+            onCancel={handlePermissionCancel}
+          />
+        </div>
       )}
     </div>
   );
