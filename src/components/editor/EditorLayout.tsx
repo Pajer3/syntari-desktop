@@ -15,8 +15,6 @@ import { OpenFileDialog } from './dialogs/OpenFileDialog';
 import { NewFileDialog } from './dialogs/NewFileDialog';
 import { TemplateManagerDialog } from './dialogs/TemplateManagerDialog';
 import { usePerformanceConfig } from './usePerformanceConfig';
-import { searchService } from '../../services';
-import type { SearchResult, SearchOptions } from '../../services/types';
 
 interface EditorLayoutProps {
   // State
@@ -181,12 +179,15 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
     updateDialogStates({ templateManager: false } as any);
   };
 
-  // Navigate to search result handler
-  const handleNavigateToSearchResult = (result: SearchResult) => {
-    // Navigate to search result - open file and go to line
-    onQuickOpenFileSelect(result.file);
+  // Navigate to file from search results
+  const handleNavigateToFile = (
+    file: string,
+    line?: number,
+    column?: number,
+  ) => {
+    onQuickOpenFileSelect(file);
     setTimeout(() => {
-      onGoToLine(result.line, result.column);
+      onGoToLine(line ?? 0, column);
     }, 100);
   };
 
@@ -392,8 +393,8 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
                <div className="p-4 border-b border-gray-700/30">
                 <h3 className="text-vscode-fg font-semibold text-sm mb-2">Search Results</h3>
                 <SearchPanel
-                  rootPath={safeProject.rootPath}
-                  onNavigateToResult={handleNavigateToSearchResult}
+                  projectPath={safeProject.rootPath}
+                  onNavigateToFile={handleNavigateToFile}
                   className="h-full"
                 />
               </div>
