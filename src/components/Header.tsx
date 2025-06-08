@@ -66,7 +66,7 @@ export const Header: React.FC<HeaderProps> = ({
   const headerRef = useRef<HTMLElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
-  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const searchTimeoutRef = useRef<number | null>(null);
   // Calculate AI status
   const availableProviders = aiProviders.filter(p => p.isAvailable).length;
   const totalProviders = aiProviders.length;
@@ -230,17 +230,17 @@ export const Header: React.FC<HeaderProps> = ({
   // Simplified debounced search effect (longer delay to reduce event load)
   useEffect(() => {
     if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
+      window.clearTimeout(searchTimeoutRef.current);
     }
     
-    searchTimeoutRef.current = setTimeout(() => {
+    searchTimeoutRef.current = window.setTimeout(() => {
       console.log('🔍 Debounce timeout fired, calling handleSearch');
       handleSearch(searchValue);
     }, 500); // Increased delay to reduce IBUS event load
     
     return () => {
       if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
+        window.clearTimeout(searchTimeoutRef.current);
       }
     };
   }, [searchValue, handleSearch]);

@@ -400,7 +400,7 @@ export const FileTabManager: React.FC<FileTabManagerProps> = ({
 
   // Enhanced file processing with grouping
   const processedFiles = useMemo(() => {
-    let result = [...openFiles];
+    const result = [...openFiles];
 
     // Apply file limits
     if (result.length > maxOpenFiles) {

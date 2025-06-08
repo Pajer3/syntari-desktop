@@ -179,17 +179,7 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
     updateDialogStates({ templateManager: false } as any);
   };
 
-  // Navigate to file from search results
-  const handleNavigateToFile = (
-    file: string,
-    line?: number,
-    column?: number,
-  ) => {
-    onQuickOpenFileSelect(file);
-    setTimeout(() => {
-      onGoToLine(line ?? 0, column);
-    }, 100);
-  };
+  // Navigate to search result handler removed - now handled inline in SearchPanel props
 
   // Enhanced create new file handler with project type detection
   const handleEnhancedCreateNewFile = async (fileName: string, _content?: string) => {
@@ -394,7 +384,18 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
                 <h3 className="text-vscode-fg font-semibold text-sm mb-2">Search Results</h3>
                 <SearchPanel
                   projectPath={safeProject.rootPath}
+<<<<<<< HEAD
                   onNavigateToFile={handleNavigateToFile}
+=======
+                  onNavigateToFile={(file: string, line?: number, column?: number) => {
+                    onQuickOpenFileSelect(file);
+                    if (line) {
+                      setTimeout(() => {
+                        onGoToLine(line, column);
+                      }, 100);
+                    }
+                  }}
+>>>>>>> 13d06c1 (Refactor header and editor components for improved functionality and performance)
                   className="h-full"
                 />
               </div>

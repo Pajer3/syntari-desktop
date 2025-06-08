@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import React, { useCallback } from 'react';
 import type { FileInfo } from '../../../types';
 import type { FileTab, EditorState } from './useEditorState';
 import { useRecentlyClosedTabs } from '../../../hooks/useRecentlyClosedTabs';
@@ -121,7 +121,7 @@ export const useTabManager = ({
           activeTabIndex: 0 
         });
         break;
-      case 2: // Close Tabs to the Right
+      case 2: { // Close Tabs to the Right
         const newTabs = fileTabs.slice(0, index + 1);
         const newActiveIndex = activeTabIndex > index ? index : activeTabIndex;
         updateEditorState({ 
@@ -129,6 +129,7 @@ export const useTabManager = ({
           activeTabIndex: newActiveIndex 
         });
         break;
+      }
       case 3: // Pin/Unpin Tab
         handleTabPin(index);
         break;

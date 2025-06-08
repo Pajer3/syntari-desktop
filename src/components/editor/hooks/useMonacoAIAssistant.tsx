@@ -1,7 +1,7 @@
 // Syntari AI IDE - Monaco AI Assistant Hook
 // Manages AI assistance state and integration with Monaco Editor
 
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
 
 interface AICodeSuggestion {

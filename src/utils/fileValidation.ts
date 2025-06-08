@@ -118,6 +118,7 @@ export function validateFileName(fileName: string): ValidationResult | null {
   }
 
   // Check for control characters
+  // eslint-disable-next-line no-control-regex
   const controlCharPattern = /[\x00-\x1f\x7f]/;
   if (controlCharPattern.test(fileName)) {
     return {
@@ -167,6 +168,7 @@ export function sanitizeFileName(fileName: string): string {
   sanitized = sanitized.replace(/[/\\]/g, '_');
   
   // Remove control characters
+  // eslint-disable-next-line no-control-regex
   sanitized = sanitized.replace(/[\x00-\x1f\x7f]/g, '');
   
   // Handle reserved names

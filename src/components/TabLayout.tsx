@@ -530,7 +530,7 @@ export const TabLayout: React.FC<TabLayoutProps> = ({
           }
         });
         break;
-      case 'close-to-right':
+      case 'close-to-right': {
         const fromIndex = tabs.findIndex(t => t.id === tabId);
         tabs.slice(fromIndex + 1).forEach(t => {
           if (!t.pinned) {
@@ -538,6 +538,7 @@ export const TabLayout: React.FC<TabLayoutProps> = ({
           }
         });
         break;
+      }
       case 'close-all':
         tabs.forEach(t => {
           if (!t.pinned) {

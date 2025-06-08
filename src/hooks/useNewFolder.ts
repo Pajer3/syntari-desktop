@@ -34,7 +34,8 @@ export const useNewFolder = (): NewFolderManager => {
       return { isValid: false, error: 'Folder name is too long (max 255 characters)' };
     }
 
-    // Check for invalid characters
+    // Check for invalid characters (including control characters)
+    // eslint-disable-next-line no-control-regex
     const invalidChars = /[<>:"/\\|?*\x00-\x1f]/;
     if (invalidChars.test(name)) {
       return { isValid: false, error: 'Folder name contains invalid characters' };
@@ -65,6 +66,7 @@ export const useNewFolder = (): NewFolderManager => {
     let candidateName = baseName;
     let counter = 1;
 
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       const fullPath = `${parentPath}/${candidateName}`;
       
