@@ -505,7 +505,7 @@ const App: React.FC = () => {
                     <div className="text-6xl mb-6 animate-bounce">📝</div>
                     <h2 className="text-2xl font-semibold mb-4 text-white">Code Editor</h2>
                     <p className="text-vscode-fg mb-6">No project loaded</p>
-                    <div className="text-xs text-vscode-fg mb-6 space-y-1 bg-vscode-sidebar/50 p-3 rounded-lg border border-vscode-border">
+                    <div className="text-xs text-vscode-fg mb-6 space-y-1 bg-vscode-sidebar/50 p-3 rounded-lg border border-gray-600/30">
                       <div>Project in viewModel: {appViewModel.viewModel.project ? '✅ Yes' : '❌ No'}</div>
                       <div>Active tabs: {tabManager.tabs.length}</div>
                       <div>Tab IDs: {tabManager.tabs.map(t => t.id).join(', ') || 'None'}</div>

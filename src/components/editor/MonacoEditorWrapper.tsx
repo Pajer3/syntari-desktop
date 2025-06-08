@@ -244,7 +244,7 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
     editor.onDidFocusEditorWidget(() => {
       const container = editor.getDomNode();
       if (container) {
-        container.style.boxShadow = '0 0 20px rgba(0, 122, 255, 0.3)';
+        container.style.boxShadow = '0 0 20px rgba(0, 122, 255, 0.1)';
         container.style.transition = 'box-shadow 0.3s ease';
       }
     });
@@ -578,7 +578,7 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
       {aiEnabled && <AIAssistantComponent />}
 
       {/* Subtle editor border */}
-      <div className="absolute inset-0 pointer-events-none border border-vscode-border/20 rounded-lg" />
+      <div className="absolute inset-0 pointer-events-none border border-gray-700/20 rounded-lg" />
     </div>
   );
 }); 

@@ -618,7 +618,7 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
       )}
       
       {/* File Explorer Header */}
-      <div className="file-explorer-header px-3 py-2 bg-vscode-sidebar border-b border-vscode-border text-xs font-medium text-vscode-fg flex items-center justify-between">
+              <div className="file-explorer-header px-3 py-2 bg-vscode-sidebar border-b border-gray-700/30 text-xs font-medium text-vscode-fg flex items-center justify-between">
         <span>EXPLORER</span>
         <div className="flex items-center gap-2">
           {/* Live file watcher status indicator */}
