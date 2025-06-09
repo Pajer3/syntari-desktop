@@ -5,7 +5,7 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { FixedSizeList as List } from 'react-window';
 import type { FileNode } from '../../types/fileSystem';
 import { fileSystemService } from '../../services/fileSystemService';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Search, X } from 'lucide-react';
 import { useFileExplorerWatcher } from '../../hooks/useFileSystemWatcher';
 import { useShortcut } from '../../hooks/useKeyboardShortcuts';
 import { invoke } from '@tauri-apps/api/core';
@@ -259,6 +259,10 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
   const [loadError, setLoadError] = useState<string | null>(null);
   const [currentlySelectedPath, setCurrentlySelectedPath] = useState<string | null>(selectedPath || null);
   
+  // Search state
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isSearchMode, setIsSearchMode] = useState<boolean>(false);
+  
   // Refs for performance optimization
   const listRef = useRef<List>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -454,14 +458,27 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
     }
   }, [expandedPaths, handleDirectoryToggle, onFileSelect]);
 
+  // Simple file filtering based on search query
+  const filteredNodes = useMemo(() => {
+    if (!searchQuery.trim() || !isSearchMode) {
+      return flatNodes;
+    }
+    
+    // Simple text matching for now
+    const query = searchQuery.toLowerCase();
+    return flatNodes.filter(node => 
+      node.name.toLowerCase().includes(query)
+    );
+  }, [flatNodes, searchQuery, isSearchMode]);
+
   // Prepare data for list items
   const listItemData: ListItemData = useMemo(() => ({
-    nodes: flatNodes,
+    nodes: filteredNodes,
     selectedPath,
     expandedPaths,
     onFileClick: handleFileClick,
     onDirectoryToggle: handleDirectoryToggle
-  }), [flatNodes, selectedPath, expandedPaths, handleFileClick, handleDirectoryToggle]);
+  }), [filteredNodes, selectedPath, expandedPaths, handleFileClick, handleDirectoryToggle]);
   
   // ================================
   // FILE OPERATIONS
@@ -547,6 +564,21 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
   }, [loadRootItems]);
 
   // ================================
+  // SEARCH FUNCTIONALITY
+  // ================================
+
+  // Search handlers
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    setIsSearchMode(value.trim().length > 0);
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
+    setIsSearchMode(false);
+  };
+
+  // ================================
   // KEYBOARD SHORTCUTS
   // ================================
 
@@ -561,6 +593,15 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
   useShortcut('fileManagement', 'refreshExplorer', () => {
     refreshFileExplorer().catch(console.error);
   }, [refreshFileExplorer]);
+  
+  // Search keyboard shortcut
+  useShortcut('search', 'quickOpen', () => {
+    const searchInput = document.querySelector('.file-search-bar input') as HTMLInputElement;
+    if (searchInput) {
+      searchInput.focus();
+      searchInput.select();
+    }
+  }, []);
 
   return (
     <div className={`file-explorer-virtualized h-full relative ${className}`}>
@@ -595,7 +636,7 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
       )}
       
       {/* File Explorer Header */}
-              <div className="file-explorer-header px-3 py-2 bg-vscode-sidebar border-b border-gray-700/30 text-xs font-medium text-vscode-fg flex items-center justify-between">
+      <div className="file-explorer-header px-3 py-2 bg-vscode-sidebar border-b border-gray-700/30 text-xs font-medium text-vscode-fg flex items-center justify-between">
         <span>EXPLORER</span>
         <div className="flex items-center gap-2">
           {/* Live file watcher status indicator */}
@@ -606,6 +647,35 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
             </div>
           )}
         </div>
+      </div>
+
+      {/* Search Bar */}
+      <div className="file-search-bar px-3 py-2 bg-vscode-sidebar border-b border-gray-700/30">
+        <div className="relative">
+          <div className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400">
+            <Search size={14} />
+          </div>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            placeholder="Search files... (Ctrl+P)"
+            className="w-full pl-8 pr-8 py-1.5 text-sm bg-vscode-input border border-gray-600 rounded text-vscode-fg placeholder-gray-400 focus:border-vscode-accent focus:outline-none"
+          />
+          {searchQuery && (
+            <button
+              onClick={clearSearch}
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+        {isSearchMode && (
+          <div className="text-xs text-gray-400 mt-1">
+            {filteredNodes.length} result{filteredNodes.length !== 1 ? 's' : ''} found
+          </div>
+        )}
       </div>
       
       {/* File Operation Error Display */}
@@ -627,13 +697,13 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
       )}
       
       {/* Virtualized List */}
-      <div className="file-list-container" style={{ height: height - 60, overflow: 'hidden' }}>
-        {flatNodes.length > 0 ? (
+      <div className="file-list-container" style={{ height: height - 120, overflow: 'hidden' }}>
+        {filteredNodes.length > 0 ? (
           <List
             ref={listRef}
-            height={height - 60} // Account for header
+            height={height - 120} // Account for header and search bar
             width="100%"
-            itemCount={flatNodes.length}
+            itemCount={filteredNodes.length}
             itemSize={24} // Height per item in pixels
             itemData={listItemData}
             overscanCount={10} // Render more extra items for smooth scrolling
@@ -645,9 +715,11 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
         ) : !isInitialLoading ? (
           <div className="empty-state">
             <div className="text-center py-8 text-gray-400">
-              <div className="text-2xl mb-2">📁</div>
-              <div className="text-sm">No files found</div>
-              <div className="text-xs mt-2 text-gray-500">Try selecting a different folder</div>
+              <div className="text-2xl mb-2">{isSearchMode ? '🔍' : '📁'}</div>
+              <div className="text-sm">{isSearchMode ? 'No search results' : 'No files found'}</div>
+              <div className="text-xs mt-2 text-gray-500">
+                {isSearchMode ? 'Try adjusting your search query' : 'Try selecting a different folder'}
+              </div>
             </div>
           </div>
         ) : null}
@@ -656,9 +728,18 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
       {/* Footer with stats */}
       <div className="file-explorer-footer">
         <div className="text-xs text-gray-400">
-          {flatNodes.length} items visible
-          {isInitialLoading && ' (loading...)'}
-          {folderLoadingPaths.size > 0 && ` • ${folderLoadingPaths.size} folder${folderLoadingPaths.size > 1 ? 's' : ''} expanding`}
+          {isSearchMode ? (
+            <>
+              {filteredNodes.length} search result{filteredNodes.length !== 1 ? 's' : ''}
+              {searchQuery && ` for "${searchQuery}"`}
+            </>
+          ) : (
+            <>
+              {filteredNodes.length} items visible
+              {isInitialLoading && ' (loading...)'}
+              {folderLoadingPaths.size > 0 && ` • ${folderLoadingPaths.size} folder${folderLoadingPaths.size > 1 ? 's' : ''} expanding`}
+            </>
+          )}
           {fileWatcher.isWatching && ` • Live updates: ${fileWatcher.eventCount} events`}
         </div>
       </div>

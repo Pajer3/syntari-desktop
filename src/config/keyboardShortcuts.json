@@ -193,6 +193,31 @@
             "Highlights matches",
             "Auto-scroll to match"
           ]
+        },
+        "quickOpen": {
+          "key": "Ctrl+P",
+          "description": "Quick file search with fuzzy matching",
+          "implemented": true,
+          "component": "VirtualizedFileExplorer",
+          "priority": "P0",
+          "businessImpact": "Instant file discovery - VS Code-style fuzzy search with debouncing and performance optimization",
+          "features": [
+            "Advanced fuzzy matching algorithm",
+            "300ms debounced search",
+            "Real-time search highlighting",
+            "Smart scoring with path/name weighting",
+            "File type filtering",
+            "Case sensitivity toggle",
+            "Regex support",
+            "Hidden file filtering",
+            "500 result limit for performance"
+          ],
+          "performance": {
+            "targetLatency": "300ms",
+            "debounceMs": 300,
+            "maxResults": 500,
+            "searchAlgorithm": "fuzzy-weighted"
+          }
         }
       }
     },
@@ -381,6 +406,42 @@
           "implemented": true,
           "businessImpact": "Live file system updates - manual refresh capability",
           "features": ["cache-invalidation", "live-updates"]
+        },
+        "selectAll": {
+          "key": "Ctrl+A",
+          "description": "Select all files in explorer",
+          "context": "fileExplorer",
+          "priority": "P0",
+          "implemented": true,
+          "businessImpact": "Bulk file operations - enables selection of all files for batch operations, critical for enterprise productivity",
+          "features": ["multi-selection", "bulk-operations", "visual-feedback"]
+        },
+        "copy": {
+          "key": "Ctrl+C",
+          "description": "Copy selected files to clipboard",
+          "context": "fileExplorer", 
+          "priority": "P0",
+          "implemented": true,
+          "businessImpact": "Essential file management - enables efficient file copying with multi-selection support",
+          "features": ["multi-file-copy", "clipboard-integration", "visual-feedback"]
+        },
+        "cut": {
+          "key": "Ctrl+X",
+          "description": "Cut selected files to clipboard",
+          "context": "fileExplorer",
+          "priority": "P0", 
+          "implemented": true,
+          "businessImpact": "Essential file management - enables efficient file moving with multi-selection support",
+          "features": ["multi-file-cut", "clipboard-integration", "visual-cut-indicator"]
+        },
+        "clearSelection": {
+          "key": "Escape",
+          "description": "Clear current file selection",
+          "context": "fileExplorer",
+          "priority": "P1",
+          "implemented": true,
+          "businessImpact": "User experience enhancement - provides quick way to clear multi-selection state",
+          "features": ["selection-management", "keyboard-navigation"]
         }
       }
     },
