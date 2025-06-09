@@ -8,6 +8,7 @@ import { getLanguageFromExtension } from '../../utils/editorUtils';
 import { useMonacoAIAssistant } from './hooks/useMonacoAIAssistant';
 import type { PerformanceConfig } from './usePerformanceConfig';
 import type { EditorFile } from './useFileCache';
+import React from 'react';
 
 interface MonacoEditorWrapperProps {
   selectedFile: EditorFile | null;
@@ -17,14 +18,12 @@ interface MonacoEditorWrapperProps {
   onContentChange: (content: string) => void;
   onSave: () => void;
   onAskAI: () => void;
-  isLoading?: boolean;
   theme?: string;
   fontSize?: number;
   readOnly?: boolean;
   minimap?: boolean;
   onAIRequest?: (context: any) => Promise<any[]>; // AI assistance callback
   aiEnabled?: boolean;
-  realtimeAI?: boolean;
 }
 
 export interface MonacoEditorRef {
@@ -37,6 +36,55 @@ export interface MonacoEditorRef {
   goToSymbol: () => void;
 }
 
+// Add Error Boundary component for Monaco Editor
+class MonacoErrorBoundary extends React.Component<
+  { children: React.ReactNode; onError?: (error: Error) => void },
+  { hasError: boolean; error?: Error }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('🚨 Monaco Editor Error Boundary caught error:', error, errorInfo);
+    this.props.onError?.(error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="monaco-error-fallback p-4 text-center">
+          <div className="text-red-400 mb-2">⚠️ Editor Error</div>
+          <div className="text-sm text-gray-400 mb-4">
+            The editor encountered an error and needs to reload.
+          </div>
+          <button
+            onClick={() => this.setState({ hasError: false, error: undefined })}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+          >
+            Reload Editor
+          </button>
+          {this.state.error && (
+            <details className="mt-4 text-xs text-gray-500">
+              <summary>Error Details</summary>
+              <pre className="mt-2 text-left bg-gray-800 p-2 rounded">
+                {this.state.error.message}
+              </pre>
+            </details>
+          )}
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapperProps>(({
   selectedFile,
   fileContent,
@@ -44,7 +92,6 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
   onContentChange,
   onSave,
   onAskAI,
-  isLoading = false,
   theme = 'vs-dark',
   fontSize = 14,
   readOnly = false,
@@ -61,7 +108,8 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
   
   // Cool UI state - simplified to prevent typing issues
   const [isEditorMounted, setIsEditorMounted] = useState(false);
-  const [showLoadingAnimation, setShowLoadingAnimation] = useState(false);
+  const [monacoError, setMonacoError] = useState<string | null>(null);
+
 
   // Get file language with fallback
   const language = useMemo(() => {
@@ -72,9 +120,7 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
   // AI Assistant Integration
   const {
     enabled: aiAssistantEnabled,
-    realtimeAssistance,
     toggleEnabled: toggleAIEnabled,
-    toggleRealtimeAssistance,
     AIAssistantComponent
   } = useMonacoAIAssistant(
     editorRef.current, 
@@ -185,13 +231,40 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
   const handleEditorDidMount = useCallback((editor: any, monaco: any) => {
     console.log('🚀 Monaco Editor mounted successfully');
     
+    // Validate editor before storing reference
+    if (!editor || !editor.getModel || typeof editor.layout !== 'function') {
+      console.error('❌ Invalid editor object received in mount handler');
+      return;
+    }
+
     editorRef.current = editor;
     isEditorReadyRef.current = true;
     isDisposedRef.current = false;
-    setIsEditorMounted(true);
     
-    // Simple ready state
-    setShowLoadingAnimation(false);
+    // Ensure editor layout is stable
+    try {
+      editor.layout();
+    } catch (layoutError) {
+      console.warn('⚠️ Initial editor layout failed:', layoutError);
+    }
+    
+    // Store reference only after validation
+    editorRef.current = editor;
+    
+    // Ensure editor layout is stable with error handling
+    try {
+      editor.layout();
+    } catch (layoutError) {
+      console.warn('⚠️ Initial editor layout failed:', layoutError);
+    }
+    
+    // Set ready flag only after everything is validated
+    isEditorReadyRef.current = true;
+    isDisposedRef.current = false;
+    
+    // Set mounted immediately to prevent layout shifts
+    setIsEditorMounted(true);
+    console.log('✅ Monaco Editor mounted and ready');
 
     // Enhanced keyboard shortcuts with visual feedback
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
@@ -258,18 +331,11 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
 
   }, [onSave, onAskAI, performanceMode, toggleAIEnabled, aiAssistantEnabled]);
 
-  // Show loading animation when needed - Fixed to not interfere with typing
-  useEffect(() => {
-    if (isLoading) {
-      setShowLoadingAnimation(true);
-      // Don't change editor opacity when just loading - keep it visible for typing
-    } else if (isEditorMounted) {
-      setShowLoadingAnimation(false);
-    }
-  }, [isLoading, isEditorMounted]);
 
-  // Enhanced editor configuration with performance optimizations
+
+  // Enhanced editor configuration with instant startup optimizations
   const editorOptions = useMemo(() => {
+    // Stable configuration - no fast startup mode to prevent layout shifts
     const baseOptions = {
       ...EDITOR_OPTIONS,
       fontSize,
@@ -277,14 +343,19 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
       theme,
       minimap: { enabled: minimap && !performanceMode },
       
-      // Performance optimizations
+      // Stable layout options to prevent shifting
       scrollBeyondLastLine: false,
       renderWhitespace: performanceMode ? 'none' : 'selection',
       renderLineHighlight: performanceMode ? 'none' : 'line',
       cursorBlinking: performanceMode ? ('solid' as const) : ('blink' as const),
-      cursorSmoothCaretAnimation: performanceMode ? ('off' as const) : ('on' as const),
-      smoothScrolling: !performanceMode,
+      cursorSmoothCaretAnimation: 'off' as const, // Always off to prevent layout shifts
+      smoothScrolling: false, // Always off to prevent layout shifts
       renderValidationDecorations: performanceMode ? 'off' as const : 'on' as const,
+      
+      // Consistent line number configuration to prevent jumping
+      lineNumbers: 'on' as const,
+      lineNumbersMinChars: 4, // Increased to handle more digits consistently
+      lineDecorationsWidth: 12, // Slightly larger for stability
       
       // Enhanced editing features
       acceptSuggestionOnCommitCharacter: true,
@@ -325,9 +396,6 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
         delay: performanceMode ? 1000 : 300,
         sticky: true,
       },
-      lineDecorationsWidth: 10,
-      lineNumbers: 'on' as const,
-      lineNumbersMinChars: 3,
       links: true,
       matchBrackets: performanceMode ? 'never' : 'always',
       mouseWheelScrollSensitivity: 1,
@@ -336,7 +404,7 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
       multiCursorModifier: 'alt' as const,
       overviewRulerBorder: true,
       overviewRulerLanes: performanceMode ? 2 : 3,
-      padding: { top: 0, bottom: 0 },
+      padding: { top: 8, bottom: 8 }, // Consistent padding
       parameterHints: { enabled: !performanceMode },
       quickSuggestions: !performanceMode,
       quickSuggestionsDelay: performanceMode ? 1000 : 500,
@@ -407,6 +475,12 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
     return baseOptions;
   }, [fontSize, readOnly, theme, minimap, performanceMode, selectedFile, fileContent.length]);
 
+  // Monaco error handler - must be defined before use
+  const handleMonacoError = useCallback((error: any) => {
+    console.error('❌ Monaco Editor critical error:', error);
+    setMonacoError(error?.message || 'Monaco Editor failed to load');
+  }, []);
+
   // Enhanced editor validation handler with better error handling
   const handleEditorValidation = useCallback((markers: any[]) => {
     if (isDisposedRef.current) return;
@@ -417,21 +491,66 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
     }
   }, []);
 
-  // Enhanced editor mounting with null safety
+  // Enhanced editor mounting with null safety and progressive feature enabling
   const handleEditorMount = useCallback((editor: any, monaco: any) => {
-    if (!editor || !monaco || isDisposedRef.current) return;
+    if (!editor || !monaco || isDisposedRef.current) {
+      console.warn('⚠️ Monaco mount cancelled - invalid editor or disposed');
+      return;
+    }
     
     try {
+      // Ensure editor is fully initialized before proceeding
+      const model = editor.getModel();
+      if (!model || typeof model.getValue !== 'function') {
+        console.warn('⚠️ Monaco editor model not ready, delaying mount...');
+        setTimeout(() => handleEditorMount(editor, monaco), 100);
+        return;
+      }
+
+      // Validate editor methods exist
+      if (typeof editor.layout !== 'function' || typeof editor.getPosition !== 'function') {
+        console.warn('⚠️ Monaco editor methods not available, delaying mount...');
+        setTimeout(() => handleEditorMount(editor, monaco), 100);
+        return;
+      }
+
       handleEditorDidMount(editor, monaco);
+      
+      // Store reference only after validation
+      editorRef.current = editor;
+      
+      // Ensure editor layout is stable with error handling
+      try {
+        editor.layout();
+      } catch (layoutError) {
+        console.warn('⚠️ Initial editor layout failed:', layoutError);
+      }
+      
+      // Set ready flag only after everything is validated
+      isEditorReadyRef.current = true;
+      isDisposedRef.current = false;
+      
+      // Set mounted immediately to prevent layout shifts
+      setIsEditorMounted(true);
+      console.log('✅ Monaco Editor mounted and ready');
+      
+      // NO delayed feature enabling to prevent layout shifts
+      // All features are now enabled immediately to maintain stable layout
+      
     } catch (error) {
       console.error('❌ Failed to mount Monaco editor:', error);
+      handleMonacoError(error);
+      // Reset state on error
+      isEditorReadyRef.current = false;
+      editorRef.current = null;
     }
-  }, [handleEditorDidMount]);
+  }, [handleEditorDidMount, handleMonacoError]);
 
   // Clean up on component unmount or file change
   useEffect(() => {
     isDisposedRef.current = false;
     isEditorReadyRef.current = false; // Reset ready state
+    setIsEditorMounted(false); // Reset mount state for new file
     lastContentRef.current = fileContent;
     
     return () => {
@@ -439,20 +558,46 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
     };
   }, [selectedFile?.path, disposeEditor, fileContent]);
 
-  // Update content reference when fileContent changes
-  useEffect(() => {
-    lastContentRef.current = fileContent;
-  }, [fileContent]);
+  // Language and content updates are now handled via the key prop and value prop
+  // This prevents race conditions by forcing clean remounts when files change
 
-  // Show loading state
-  if (isLoading || !selectedFile) {
+  // Handle Monaco errors gracefully
+  const handleMonacoErrorBoundary = useCallback((error: Error) => {
+    console.error('🚨 Monaco Error Boundary triggered:', error);
+    setIsEditorMounted(false);
+    isEditorReadyRef.current = false;
+    editorRef.current = null;
+    handleMonacoError(error);
+  }, [handleMonacoError]);
+
+  // Show no file state only (no loading since we removed isLoading)
+  if (!selectedFile) {
     return (
       <div className="flex items-center justify-center h-full bg-vscode-editor">
-        <div className="text-center">
-          <div className="animate-spin w-8 h-8 border-2 border-vscode-accent border-t-transparent rounded-full mx-auto mb-4"></div>
-          <div className="text-vscode-fg-muted">
-            {isLoading ? 'Loading editor...' : 'No file selected'}
+        <div className="text-center text-vscode-fg-muted">
+          No file selected
+        </div>
+      </div>
+    );
+  }
+
+  if (monacoError) {
+    return (
+      <div className="flex items-center justify-center h-full bg-vscode-editor">
+        <div className="text-center p-6">
+          <div className="text-red-400 mb-4">⚠️ Editor Loading Error</div>
+          <div className="text-vscode-fg-muted text-sm mb-4">
+            Monaco Editor failed to initialize properly.
           </div>
+          <button 
+            onClick={() => {
+              setMonacoError(null);
+              window.location.reload();
+            }}
+            className="px-4 py-2 bg-vscode-accent text-white rounded hover:bg-vscode-accent/80"
+          >
+            Reload Application
+          </button>
         </div>
       </div>
     );
@@ -460,125 +605,70 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
 
   return (
     <div className="h-full w-full relative overflow-hidden">
-      {/* Cool background gradient */}
-      <div className="absolute inset-0 bg-gradient-to-br from-vscode-editor via-vscode-editor to-vscode-editor/95 pointer-events-none" />
-      
-      {/* AI Assistant Controls */}
-      {aiEnabled && (
-        <div className="absolute top-3 right-3 z-20 flex items-center space-x-2">
-          <button
-            onClick={toggleAIEnabled}
-            className={`
-              px-3 py-1.5 text-xs font-medium rounded-full shadow-lg backdrop-blur-sm transition-all
-              ${aiAssistantEnabled 
-                ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white' 
-                : 'bg-gradient-to-r from-gray-500 to-gray-600 text-white'
-              }
-            `}
-            title={`AI Assistant: ${aiAssistantEnabled ? 'ON' : 'OFF'} (Ctrl+Shift+A)`}
-          >
-            🤖 AI {aiAssistantEnabled ? 'ON' : 'OFF'}
-          </button>
-          
-          {aiAssistantEnabled && (
-            <button
-              onClick={toggleRealtimeAssistance}
-              className={`
-                px-2 py-1.5 text-xs rounded-full transition-all
-                ${realtimeAssistance 
-                  ? 'bg-blue-500/80 text-white' 
-                  : 'bg-gray-500/80 text-white'
-                }
-              `}
-              title={`Realtime assistance: ${realtimeAssistance ? 'ON' : 'OFF'}`}
-            >
-              ⚡
-            </button>
-          )}
-        </div>
-      )}
-      
-      {/* Animated performance indicator */}
-      {performanceMode && (
-        <div className="absolute top-3 left-3 z-20 animate-pulse">
-          <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white text-xs font-medium px-3 py-1.5 rounded-full shadow-lg backdrop-blur-sm">
-            <span className="flex items-center gap-1">
-              ⚡ Performance Mode
-            </span>
+      {/* Minimal Status Indicators */}
+      <div className="monaco-editor-status">
+        {/* Performance Mode Indicator */}
+        {performanceMode && (
+          <div className="status-indicator">
+            ⚡ Performance
           </div>
-        </div>
-      )}
-      
-      {/* Stylish large file warning */}
-      {fileContent.length > 100000 && (
-        <div className="absolute top-12 left-3 z-20 animate-bounce">
-          <div className="bg-gradient-to-r from-yellow-500 to-amber-500 text-black text-xs font-medium px-3 py-1.5 rounded-full shadow-lg backdrop-blur-sm">
-            <span className="flex items-center gap-1">
-              📁 Large File ({Math.round(fileContent.length / 1024)}KB)
-            </span>
+        )}
+        
+        {/* Large File Warning */}
+        {fileContent.length > 100000 && (
+          <div className="status-indicator">
+            📁 {Math.round(fileContent.length / 1024)}KB
           </div>
-        </div>
-      )}
-
-      {/* Cool loading overlay */}
-      {showLoadingAnimation && (
-        <div className="absolute inset-0 z-30 bg-vscode-editor/80 backdrop-blur-sm flex items-center justify-center transition-all duration-500">
-          <div className="text-center p-8 bg-vscode-sidebar/90 rounded-2xl shadow-2xl border border-vscode-border/50 backdrop-blur-md">
-            {/* Modern spinner */}
-            <div className="relative w-12 h-12 mx-auto mb-4">
-              <div className="absolute inset-0 border-4 border-vscode-accent/30 rounded-full"></div>
-              <div className="absolute inset-0 border-4 border-transparent border-t-vscode-accent rounded-full animate-spin"></div>
-              <div className="absolute inset-2 border-2 border-transparent border-t-blue-400 rounded-full animate-spin animation-delay-150"></div>
-            </div>
-            <div className="text-vscode-fg font-medium mb-2">Loading Editor</div>
-            <div className="text-vscode-fg-muted text-sm">Preparing your code...</div>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
       
-      {/* Editor container - simplified to prevent typing issues */}
+      {/* Clean Editor Container */}
       <div className="h-full w-full">
-        <Editor
-          key={selectedFile.path} // Force remount on file change for better stability
-          height="100%"
-          language={language}
-          value={fileContent || ''} // Ensure value is never undefined
-          onChange={handleContentChange}
-          onMount={handleEditorMount}
-          onValidate={handleEditorValidation}
-          options={editorOptions as any}
-          theme={theme}
-          loading={
-            <div className="flex items-center justify-center h-full bg-vscode-editor">
-              <div className="text-center p-6">
-                {/* Ultra-modern loading animation */}
-                <div className="relative w-16 h-16 mx-auto mb-4">
-                  <div className="absolute inset-0 border-4 border-vscode-accent/20 rounded-full"></div>
-                  <div className="absolute inset-0 border-4 border-transparent border-t-vscode-accent border-r-vscode-accent rounded-full animate-spin"></div>
-                  <div className="absolute inset-3 border-2 border-transparent border-t-blue-400 border-r-blue-400 rounded-full animate-spin animation-delay-300"></div>
-                  <div className="absolute inset-6 w-4 h-4 bg-vscode-accent rounded-full animate-pulse"></div>
-                </div>
-                <div className="text-vscode-fg font-medium text-lg mb-2">
-                  Initializing Monaco Editor
-                </div>
-                <div className="text-vscode-fg-muted text-sm">
-                  Setting up the ultimate coding experience...
-                </div>
-                {/* Progress bar animation */}
-                <div className="mt-4 w-32 h-1 bg-vscode-border rounded-full mx-auto overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-vscode-accent to-blue-400 rounded-full animate-pulse"></div>
-                </div>
+        <MonacoErrorBoundary onError={handleMonacoErrorBoundary}>
+          <Editor
+            key={selectedFile.path}
+            height="100%"
+            language={language}
+            value={fileContent || ''}
+            onChange={handleContentChange}
+            onMount={handleEditorMount}
+            onValidate={handleEditorValidation}
+            options={editorOptions}
+            theme={theme}
+            loading={
+              <div className="h-full bg-vscode-editor flex items-center justify-center">
+                <div className="text-vscode-fg-muted text-sm">Loading Editor...</div>
               </div>
-            </div>
-          }
-        />
+            }
+            beforeMount={(monaco) => {
+              try {
+                if (!monaco) {
+                  console.error('❌ Monaco object is null in beforeMount');
+                  handleMonacoError(new Error('Monaco object is null'));
+                  return null;
+                }
+                
+                console.log('🚀 Monaco Editor before mount for:', selectedFile.path);
+                
+                if (!monaco.editor || !monaco.languages) {
+                  console.error('❌ Monaco editor or languages not available');
+                  handleMonacoError(new Error('Monaco not fully loaded'));
+                  return null;
+                }
+                
+                return monaco;
+              } catch (error) {
+                console.error('❌ Monaco before mount error:', error);
+                handleMonacoError(error);
+                return null;
+              }
+            }}
+          />
+        </MonacoErrorBoundary>
       </div>
 
       {/* AI Assistant Component */}
       {aiEnabled && <AIAssistantComponent />}
-
-      {/* Subtle editor border */}
-      <div className="absolute inset-0 pointer-events-none border border-gray-700/20 rounded-lg" />
     </div>
   );
 }); 

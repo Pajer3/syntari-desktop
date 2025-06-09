@@ -130,15 +130,12 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
   const {
     fileTabs,
     activeTabIndex,
+    currentDirectory,
     showSearchPanel,
     showQuickOpen,
-    // draggedTabIndex,   // Unused
-    // dragOverIndex,     // Unused
     showGoToLine,
     showSidebar,
-    currentDirectory,
     fileExplorerKey,
-    isLoading,
   } = editorState;
 
   // Terminal panel state (using local state for now)
@@ -305,26 +302,11 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
                   onContentChange={onContentChange}
                   onSave={onSave}
                   onAskAI={() => onAskAI({})}
-                  isLoading={isLoading}
                   theme="vs-dark"
                   fontSize={14}
                   minimap={!performanceConfig.performanceMode}
                   ref={monacoEditorRef}
                 />
-                
-                {/* Modern Loading overlay */}
-                {isLoading && (
-                  <div className="absolute inset-0 bg-vscode-editor bg-opacity-95 flex items-center justify-center z-10 backdrop-blur-sm">
-                    <div className="text-center">
-                      <div className="relative mb-4">
-                        <div className="animate-spin w-10 h-10 border-3 border-vscode-accent border-t-transparent rounded-full mx-auto"></div>
-                        <div className="absolute inset-0 w-10 h-10 border-3 border-vscode-accent border-opacity-20 rounded-full mx-auto"></div>
-                      </div>
-                      <div className="text-vscode-fg font-medium">Loading file...</div>
-                      <div className="text-vscode-fg-muted text-sm mt-1">Please wait</div>
-                    </div>
-                  </div>
-                )}
               </div>
                          ) : (
                /* Modern Welcome Screen */

@@ -9,6 +9,7 @@ import { useTabManager } from './editor/hooks/useTabManager';
 import { useFileOperations } from './editor/hooks/useFileOperations';
 import { useEditorShortcuts } from './editor/hooks/useEditorShortcuts';
 import { EditorLayout } from './editor/EditorLayout';
+import { TabContextMenu } from './editor/TabContextMenu';
 
 interface CodeEditorProps {
   project: ProjectContext;
@@ -44,6 +45,9 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     handleTabClose,
     handleTabMove,
     handleTabContextMenu,
+    contextMenu,
+    handleContextMenuAction,
+    closeContextMenu,
     handleDragStart,
     handleDragEnd,
     handleDragEnter,
@@ -311,6 +315,18 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         openFindReplaceRef={openFindReplaceRef}
         goToSymbolRef={goToSymbolRef}
         monacoEditorRef={monacoEditorRef}
+      />
+      
+      {/* Tab Context Menu */}
+      <TabContextMenu
+        visible={contextMenu.visible}
+        x={contextMenu.x}
+        y={contextMenu.y}
+        tabIndex={contextMenu.tabIndex}
+        tab={contextMenu.tabIndex >= 0 ? editorState.fileTabs[contextMenu.tabIndex] : null}
+        totalTabs={editorState.fileTabs.length}
+        onClose={closeContextMenu}
+        onAction={handleContextMenuAction}
       />
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import type { FileInfo } from '../../../types';
 import type { FileTab, EditorState } from './useEditorState';
 import { useRecentlyClosedTabs } from '../../../hooks/useRecentlyClosedTabs';
@@ -16,6 +16,14 @@ export const useTabManager = ({
 }: UseTabManagerProps) => {
   const { fileTabs, activeTabIndex } = editorState;
   const recentlyClosedTabs = useRecentlyClosedTabs();
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    tabIndex: number;
+  }>({ visible: false, x: 0, y: 0, tabIndex: -1 });
 
   // Tab selection
   const handleTabSelect = useCallback((index: number) => {
@@ -98,53 +106,68 @@ export const useTabManager = ({
     const tab = fileTabs[index];
     if (!tab) return;
 
-    const options = [
-      'Close Tab',
-      'Close Other Tabs', 
-      'Close Tabs to the Right',
-      tab.isPinned ? 'Unpin Tab' : 'Pin Tab',
-      'Reveal in Explorer',
-      'Copy Path'
-    ];
-    
-    // Simple implementation - in a real app, you'd show a proper context menu
-    const choice = prompt(`Context menu for ${tab.file.name}:\n${options.map((opt, i) => `${i + 1}. ${opt}`).join('\n')}\n\nEnter number (1-${options.length}):`);
-    const choiceIndex = parseInt(choice || '0') - 1;
-    
-    switch (choiceIndex) {
-      case 0: // Close Tab
-        handleTabClose(index);
+    // Set context menu state instead of showing prompt
+    setContextMenu({
+      visible: true,
+      x: event.clientX,
+      y: event.clientY,
+      tabIndex: index,
+    });
+  }, [fileTabs]);
+
+  // Context menu action handler
+  const handleContextMenuAction = useCallback((action: string, tabIndex: number) => {
+    const tab = fileTabs[tabIndex];
+    if (!tab) return;
+
+    switch (action) {
+      case 'close':
+        handleTabClose(tabIndex);
         break;
-      case 1: // Close Other Tabs
+      case 'close-others':
         updateEditorState({ 
-          fileTabs: [fileTabs[index]], 
+          fileTabs: [fileTabs[tabIndex]], 
           activeTabIndex: 0 
         });
         break;
-      case 2: { // Close Tabs to the Right
-        const newTabs = fileTabs.slice(0, index + 1);
-        const newActiveIndex = activeTabIndex > index ? index : activeTabIndex;
+      case 'close-to-right': {
+        const newTabs = fileTabs.slice(0, tabIndex + 1);
+        const newActiveIndex = activeTabIndex > tabIndex ? tabIndex : activeTabIndex;
         updateEditorState({ 
           fileTabs: newTabs, 
           activeTabIndex: newActiveIndex 
         });
         break;
       }
-      case 3: // Pin/Unpin Tab
-        handleTabPin(index);
+      case 'close-all':
+        updateEditorState({ 
+          fileTabs: [], 
+          activeTabIndex: -1 
+        });
         break;
-      case 4: // Reveal in Explorer
+      case 'pin':
+        handleTabPin(tabIndex);
+        break;
+      case 'reveal-explorer':
         console.log('Reveal in explorer:', tab.file.path);
         // TODO: Implement reveal in file explorer
         break;
-      case 5: // Copy Path
+      case 'copy-path':
         navigator.clipboard.writeText(tab.file.path);
         console.log('Copied path to clipboard:', tab.file.path);
         break;
       default:
         break;
     }
+    
+    // Close context menu
+    setContextMenu(prev => ({ ...prev, visible: false }));
   }, [fileTabs, activeTabIndex, handleTabClose, handleTabPin, updateEditorState]);
+
+  // Close context menu
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(prev => ({ ...prev, visible: false }));
+  }, []);
 
   // Drag and drop handlers
   const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
@@ -273,6 +296,11 @@ export const useTabManager = ({
     handleTabMove,
     handleTabPin,
     handleTabContextMenu,
+    
+    // Context menu
+    contextMenu,
+    handleContextMenuAction,
+    closeContextMenu,
     
     // Drag and drop
     handleDragStart,

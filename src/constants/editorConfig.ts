@@ -4,48 +4,68 @@
 export const EDITOR_OPTIONS = {
   // Core editor settings (enhanced from original)
   fontSize: 14,
-  fontFamily: 'JetBrains Mono, Fira Code, Monaco, Consolas, monospace',
+  fontFamily: 'JetBrains Mono, Fira Code, Cascadia Code, SF Mono, Monaco, Consolas, monospace',
   fontLigatures: true,
   lineHeight: 20,
-  letterSpacing: 0.5,
+  letterSpacing: 0.3,
   tabSize: 2,
   insertSpaces: true,
   lineNumbers: 'on' as const,
-  roundedSelection: false,
+  lineNumbersMinChars: 3, // Consistent width to prevent jumping
+  lineDecorationsWidth: 10, // Consistent decoration width
+  roundedSelection: true,
   readOnly: false,
   cursorStyle: 'line' as const,
-  cursorBlinking: 'smooth' as const,
-  cursorSmoothCaretAnimation: 'on' as const,
+  cursorBlinking: 'blink' as const, // Simple blink, no smooth animation
+  cursorSmoothCaretAnimation: 'off' as const, // Disable to prevent issues
+  cursorWidth: 2,
   
-  // VS Code-style performance optimizations
+  // Enhanced VS Code-style performance optimizations
   automaticLayout: true,
   scrollBeyondLastLine: false,
   wordWrap: 'off' as const, // Performance: disable by default
   wordWrapColumn: 120,
-  theme: 'vscode-professional',
+  theme: 'vs-dark',
   
-  // Minimap configuration (performance optimized)
-  minimap: {
-    enabled: true,
-    side: 'right' as const,
-    scale: 1,
-    showSlider: 'mouseover' as const,
-    maxColumn: 120, // Limit minimap rendering for performance
-  },
-  
-  // Bracket pair colorization
+  // Enhanced bracket pair colorization
   bracketPairColorization: {
     enabled: true,
     independentColorPoolPerBracketType: true,
   },
   
-  // Guide lines
+  // Enhanced guide lines
   guides: {
     indentation: true,
     bracketPairs: true,
     bracketPairsHorizontal: true,
     highlightActiveIndentation: true,
   },
+  
+  // Enhanced minimap configuration (performance optimized)
+  minimap: {
+    enabled: true,
+    side: 'right' as const,
+    scale: 1,
+    showSlider: 'mouseover' as const,
+    maxColumn: 120, // Limit minimap rendering for performance
+    renderCharacters: true,
+    autohide: false,
+  },
+  
+  // Enhanced line highlight
+  renderLineHighlight: 'all' as const,
+  renderLineHighlightOnlyWhenFocus: false,
+  
+  // Enhanced selection styling
+  selectionHighlight: true,
+  occurrencesHighlight: 'singleFile' as const,
+  
+  // Enhanced folding
+  folding: true,
+  foldingStrategy: 'auto' as const,
+  foldingHighlight: true,
+  showFoldingControls: 'mouseover' as const,
+  unfoldOnClickAfterEndOfLine: false,
   
   // IntelliSense suggestions (performance optimized)
   suggest: {
@@ -77,6 +97,8 @@ export const EDITOR_OPTIONS = {
     insertMode: 'insert' as const,
     filterGraceful: true,
     localityBonus: true,
+    snippetsPreventQuickSuggestions: false,
+    maxVisibleSuggestions: 12,
   },
   
   // Quick suggestions (optimized)
@@ -126,13 +148,6 @@ export const EDITOR_OPTIONS = {
     globalFindClipboard: false,
   },
   
-  // Code folding (performance optimized)
-  folding: true,
-  foldingStrategy: 'auto' as const,
-  foldingHighlight: false, // Performance: disable highlighting
-  unfoldOnClickAfterEndOfLine: false,
-  showFoldingControls: 'mouseover' as const,
-  
   // Formatting (performance optimized)
   formatOnPaste: false, // Performance: disable for large files
   formatOnType: false,  // Performance: disable for large files
@@ -156,9 +171,6 @@ export const EDITOR_OPTIONS = {
   multiCursorMergeOverlapping: true,
   multiCursorModifier: 'alt' as const,
   
-  // Occurrences highlight
-  occurrencesHighlight: 'singleFile' as const,
-  
   // Overview ruler border
   overviewRulerBorder: true,
   overviewRulerLanes: 3,
@@ -168,9 +180,6 @@ export const EDITOR_OPTIONS = {
   
   // Render indent guides
   renderIndentGuides: true,
-  
-  // Render line highlight
-  renderLineHighlight: 'line' as const,
   
   // Render whitespace (performance optimized)
   renderWhitespace: 'selection' as const, // Only show when selecting
@@ -198,9 +207,6 @@ export const EDITOR_OPTIONS = {
   
   // Selection clipboard
   selectionClipboard: false,
-  
-  // Selection highlight
-  selectionHighlight: true,
   
   // Smooth scrolling (performance aware)
   smoothScrolling: true,

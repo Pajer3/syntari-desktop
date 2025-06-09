@@ -20,6 +20,7 @@ import { ChatView } from './components/chat';
 import { SettingsView } from './components/layout';
 import type { FileInfo } from './types';
 import './App.css';
+import { configureMonaco } from './config/monaco.config';
 
 // ================================
 // MAIN APPLICATION COMPONENT
@@ -63,6 +64,9 @@ const App: React.FC = () => {
   // ================================
   
   useEffect(() => {
+    // Initialize Monaco for instant startup
+    configureMonaco();
+    
     // Quick app startup - reduced animation time
     const timer = setTimeout(() => {
       setIsAppLoaded(true);

@@ -301,7 +301,6 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
   const [loadedChildren, setLoadedChildren] = useState<Map<string, FileNode[]>>(new Map());
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [folderLoadingPaths, setFolderLoadingPaths] = useState<Set<string>>(new Set());
   const [fileError, setFileError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [currentlySelectedPath, setCurrentlySelectedPath] = useState<string | null>(selectedPath || null);
@@ -321,14 +320,17 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
   const abortControllerRef = useRef<AbortController | null>(null);
   
   // VS Code-style instant root loading (moved before file watcher to fix temporal dead zone)
-  const loadRootItems = useCallback(async (path?: string, preserveExpandedState = true) => {
+  const loadRootItems = useCallback(async (path?: string, preserveExpandedState = true, silent = false) => {
     const targetPath = path || rootPath;
     
     // Cancel any ongoing operation
     abortControllerRef.current?.abort();
     abortControllerRef.current = new AbortController();
     
-    setIsInitialLoading(true);
+    // Only show loading for initial loads, not auto-refreshes
+    if (!silent && !preserveExpandedState) {
+      setIsInitialLoading(true);
+    }
     setLoadError(null);
     
     try {
@@ -362,16 +364,19 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
         setLoadError(`Failed to load files from: ${targetPath} - ${err.message}`);
       }
     } finally {
-      setIsInitialLoading(false);
+      // Only update loading state if we were showing it
+      if (!silent && !preserveExpandedState) {
+        setIsInitialLoading(false);
+      }
       console.log('🏁 Loading process completed');
     }
   }, [rootPath]);
   
   // Live file system watcher for automatic updates
   const fileWatcher = useFileExplorerWatcher(rootPath, useCallback(() => {
-    // Force refresh the explorer when files change, but preserve expanded state
-    console.log('🔄 File system change detected, refreshing without clearing expanded folders...');
-    loadRootItems();
+    // Force refresh the explorer when files change, but preserve expanded state (silent)
+    console.log('🔄 File system change detected, refreshing silently...');
+    loadRootItems(undefined, true, true); // Silent refresh
   }, [loadRootItems]));
   
   // Memoized flat list for virtualization
@@ -402,8 +407,6 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
     
     // Load children if expanding and not already loaded
     if (shouldExpand && !loadedChildren.has(path)) {
-      setFolderLoadingPaths(prev => new Set(prev).add(path));
-      
       try {
         console.log('🔄 Loading folder contents:', path);
         const startTime = performance.now();
@@ -424,12 +427,7 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
         
       } catch (error) {
         console.error('Failed to load folder contents:', error);
-      } finally {
-        setFolderLoadingPaths(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(path);
-          return newSet;
-        });
+        setFileError(`Failed to load folder: ${error}`);
       }
     } else if (shouldExpand && listRef.current && expandedIndex !== -1) {
       // Auto-scroll for already loaded content
@@ -463,7 +461,7 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
     }
   }, [selectedPath, flatNodes]);
   
-  // Handle file click with VS Code-style error handling
+  // Handle file click with VS Code-style instant opening
   const handleFileClick = useCallback(async (node: FileNode) => {
     // Update selected file for keyboard operations
     setCurrentlySelectedPath(node.path);
@@ -475,33 +473,10 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
 
     try {
       setFileError(null);
-      console.log('📖 Opening file:', node.path);
+      console.log('📖 Opening file instantly:', node.path);
       
-      // Use the centralized service layer for smart file reading
-      const fileData = await fileSystemService.readFile(node.path);
-      
-      if (fileData.isTooLarge) {
-        setFileError(`File too large (${(fileData.size / 1024 / 1024).toFixed(1)} MB). Maximum supported size is 256 MB.`);
-        return;
-      }
-      
-      if (fileData.shouldUseHexMode) {
-        setFileError(`Large file (${(fileData.size / 1024 / 1024).toFixed(1)} MB). Opening in read-only mode for performance.`);
-        // Could trigger hex mode in the future
-        return;
-      }
-      
-      if (fileData.isBinary) {
-        setFileError('Cannot open binary file in text editor');
-        return;
-      }
-      
-      if (fileData.warning) {
-        // Show warning but still allow opening
-        console.warn('File warning:', fileData.warning);
-      }
-      
-      // File is safe to open
+      // VS Code-style instant opening - let the editor handle file validation
+      // No need to pre-read the file, just pass it to the editor
       onFileSelect?.(node);
       
     } catch (err) {
@@ -978,66 +953,30 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
 
   return (
     <div 
-      className={`file-explorer-virtualized h-full relative ${className}`}
+      className={`file-explorer-virtualized h-full relative flex flex-col ${className}`}
       onDragOver={handleGlobalDragOver}
       onDrop={handleGlobalDrop}
     >
-      {/* SINGLE Professional Loading Overlay - only for initial load */}
+      {/* Minimal loading indicator - only for initial load */}
       {isInitialLoading && (
-        <div className="absolute inset-0 z-50 bg-vscode-bg/80 backdrop-blur-sm flex items-center justify-center">
-          <div className="text-center">
-            {/* Animated VS Code-style loader */}
-            <div className="relative mb-4">
-              <div className="w-12 h-12 border-3 border-vscode-accent/30 border-t-vscode-accent rounded-full animate-spin mx-auto"></div>
-              <div className="absolute inset-0 w-8 h-8 border-2 border-vscode-accent/20 border-t-transparent rounded-full animate-spin mx-auto mt-2 ml-2"></div>
-            </div>
-            
-            {/* Progress text */}
-            <div className="text-vscode-fg text-sm font-medium mb-2">
-              Loading Project Root
-            </div>
-            
-            {/* Scanning indicator */}
-            <div className="text-vscode-fg-muted text-xs">
-              Instant VS Code-style loading...
-            </div>
-            
-            {/* VS Code style progress dots */}
-            <div className="flex justify-center mt-3 space-x-1">
-              <div className="w-2 h-2 bg-vscode-accent rounded-full animate-pulse"></div>
-              <div className="w-2 h-2 bg-vscode-accent/60 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-              <div className="w-2 h-2 bg-vscode-accent/30 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
-            </div>
-          </div>
+        <div className="absolute top-0 left-0 right-0 h-1 bg-vscode-accent/20 z-40">
+          <div className="h-full bg-vscode-accent animate-pulse"></div>
         </div>
       )}
       
       {/* File Explorer Header */}
-      <div className="file-explorer-header px-3 py-2 bg-vscode-sidebar border-b border-gray-700/30 text-xs font-medium text-vscode-fg flex items-center justify-between">
+      <div className="file-explorer-header px-3 py-2 bg-vscode-sidebar border-b border-gray-700/30 text-xs font-medium text-vscode-fg flex items-center justify-between shrink-0">
         <span>EXPLORER</span>
-        <div className="flex items-center gap-2">
-          {/* Drag status indicator */}
-          {isDragMode && draggedNode && (
-            <div className="flex items-center text-blue-400">
-              <Move size={12} className="mr-1 animate-bounce" />
-              <span className="text-xs">
-                {dragOperation === 'copy' ? 'Copying' : 'Moving'} {draggedNode.name}
-              </span>
-            </div>
-          )}
-          
-          {/* Live file watcher status indicator */}
-          {fileWatcher.isWatching && (
-            <div className="flex items-center text-vscode-accent">
-              <div className="w-2 h-2 bg-green-400 rounded-full mr-1 animate-pulse"></div>
-              <span className="text-xs">Live</span>
-            </div>
-          )}
-        </div>
+        {fileWatcher.isWatching && (
+          <div className="flex items-center text-gray-400">
+            <div className="w-1.5 h-1.5 bg-green-400 rounded-full mr-1"></div>
+            <span className="text-xs">Live</span>
+          </div>
+        )}
       </div>
 
       {/* Search Bar */}
-      <div className="file-search-bar px-3 py-2 bg-vscode-sidebar border-b border-gray-700/30">
+      <div className="file-search-bar px-3 py-2 bg-vscode-sidebar border-b border-gray-700/30 shrink-0">
         <div className="relative">
           <div className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400">
             <Search size={14} />
@@ -1084,50 +1023,47 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
       )}
       
       {/* Virtualized List */}
-      <div className="file-list-container" style={{ height: height - 120, overflow: 'hidden' }}>
+      <div className="file-list-container flex-1 overflow-hidden">
         {filteredNodes.length > 0 ? (
           <List
             ref={listRef}
-            height={height - 120} // Account for header and search bar
+            height={height - 140} // Account for header, search bar, and footer
             width="100%"
             itemCount={filteredNodes.length}
             itemSize={24} // Height per item in pixels
             itemData={listItemData}
-            overscanCount={10} // Render more extra items for smooth scrolling
+            overscanCount={5} // Reduced for better performance
             className="file-list"
             style={{ outline: 'none' }}
           >
             {FileExplorerItem}
           </List>
         ) : !isInitialLoading ? (
-          <div className="empty-state">
-            <div className="text-center py-8 text-gray-400">
-              <div className="text-2xl mb-2">{isSearchMode ? '🔍' : '📁'}</div>
+          <div className="flex items-center justify-center h-full text-gray-500">
+            <div className="text-center">
+              <div className="text-lg mb-2">{isSearchMode ? '🔍' : '📁'}</div>
               <div className="text-sm">{isSearchMode ? 'No search results' : 'No files found'}</div>
-              <div className="text-xs mt-2 text-gray-500">
-                {isSearchMode ? 'Try adjusting your search query' : 'Try selecting a different folder'}
-              </div>
             </div>
           </div>
         ) : null}
       </div>
       
-      {/* Footer with stats */}
-      <div className="file-explorer-footer">
-        <div className="text-xs text-gray-400">
-          {isSearchMode ? (
-            <>
-              {filteredNodes.length} search result{filteredNodes.length !== 1 ? 's' : ''}
-              {searchQuery && ` for "${searchQuery}"`}
-            </>
-          ) : (
-            <>
-              {filteredNodes.length} items visible
-              {isInitialLoading && ' (loading...)'}
-              {folderLoadingPaths.size > 0 && ` • ${folderLoadingPaths.size} folder${folderLoadingPaths.size > 1 ? 's' : ''} expanding`}
-            </>
+      {/* Simplified footer */}
+      <div className="file-explorer-footer px-3 py-1 border-t border-gray-700/30 shrink-0">
+        <div className="text-xs text-gray-500 flex items-center justify-between">
+          <span>
+            {isSearchMode ? (
+              `${filteredNodes.length} result${filteredNodes.length !== 1 ? 's' : ''}`
+            ) : (
+              `${filteredNodes.length} items`
+            )}
+          </span>
+          {fileWatcher.isWatching && (
+            <div className="flex items-center">
+              <div className="w-1.5 h-1.5 bg-green-400 rounded-full mr-1"></div>
+              <span>Live</span>
+            </div>
           )}
-          {fileWatcher.isWatching && ` • Live updates: ${fileWatcher.eventCount} events`}
         </div>
       </div>
     </div>

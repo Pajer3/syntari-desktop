@@ -58,13 +58,11 @@ export const useFileOperations = ({
       return;
     }
 
-    updateEditorState({ isLoading: true });
-    
     try {
       // Convert to FileInfo first
       const fileInfo = convertFileNode(node);
       
-      // Load file content using the proper API
+      // Load file content using the proper API (instant loading)
       const loadedFile = await fileLoader.loadFileContent(
         fileInfo,
         fileCache.getCachedContent,
@@ -75,7 +73,7 @@ export const useFileOperations = ({
         throw new Error('Failed to load file content');
       }
 
-      console.log('📄 File loaded:', node.name);
+      console.log('📄 File loaded instantly:', node.name);
       
       // Open in tab
       openFileInTab(fileInfo, loadedFile.content);
@@ -89,8 +87,6 @@ export const useFileOperations = ({
       updateEditorState({ 
         currentError: error instanceof Error ? error : new Error('Failed to load file') 
       });
-    } finally {
-      updateEditorState({ isLoading: false });
     }
   }, [
     fileCache, fileLoader, convertFileNode, openFileInTab, 
@@ -102,8 +98,6 @@ export const useFileOperations = ({
     updateEditorState({ showQuickOpen: false });
     
     try {
-      updateEditorState({ isLoading: true });
-      
       // Create FileInfo for the file path
       const fileInfo: FileInfo = {
         path: filePath,
@@ -114,7 +108,7 @@ export const useFileOperations = ({
         content: undefined,
       };
 
-      // Load file content using the proper API
+      // Load file content using the proper API (instant loading)
       const loadedFile = await fileLoader.loadFileContent(
         fileInfo,
         fileCache.getCachedContent,
@@ -125,7 +119,7 @@ export const useFileOperations = ({
         throw new Error('Failed to load file content');
       }
 
-      console.log('📄 Quick open file loaded:', filePath);
+      console.log('📄 Quick open file loaded instantly:', filePath);
       
       // Open in tab
       openFileInTab(fileInfo, loadedFile.content);
@@ -139,8 +133,6 @@ export const useFileOperations = ({
       updateEditorState({ 
         currentError: error instanceof Error ? error : new Error('Failed to load file') 
       });
-    } finally {
-      updateEditorState({ isLoading: false });
     }
   }, [
     fileCache, fileLoader, openFileInTab, recentFilePaths, 
@@ -172,8 +164,6 @@ export const useFileOperations = ({
     if (!activeTab) return;
 
     try {
-      updateEditorState({ isLoading: true });
-      
       // Handle unsaved files differently
       if (activeTab.file.path.startsWith('<unsaved>/')) {
         updateDialogStates({ saveAs: true });
@@ -198,8 +188,6 @@ export const useFileOperations = ({
       updateEditorState({ 
         currentError: error instanceof Error ? error : new Error('Failed to save file') 
       });
-    } finally {
-      updateEditorState({ isLoading: false });
     }
   }, [activeTab, fileTabs, activeTabIndex, fileSaver, updateEditorState, updateDialogStates]);
 
@@ -213,8 +201,6 @@ export const useFileOperations = ({
   // Create new file handler
   const handleCreateNewFile = useCallback(async (filePath: string, fileName: string): Promise<void> => {
     try {
-      updateEditorState({ isLoading: true });
-      
       // Create empty file
       await fileSaver.saveFile(filePath, '');
       
@@ -239,8 +225,6 @@ export const useFileOperations = ({
       updateEditorState({ 
         currentError: error instanceof Error ? error : new Error('Failed to create file') 
       });
-    } finally {
-      updateEditorState({ isLoading: false });
     }
   }, [fileSaver, openFileInTab, updateEditorState, updateDialogStates]);
 
@@ -249,7 +233,6 @@ export const useFileOperations = ({
     if (!activeTab) return;
 
     try {
-      updateEditorState({ isLoading: true });
       console.log('💾 Saving file as:', filePath);
       
       await fileSaver.saveFile(filePath, activeTab.content);
@@ -277,8 +260,6 @@ export const useFileOperations = ({
       updateEditorState({ 
         currentError: error instanceof Error ? error : new Error('Failed to save file') 
       });
-    } finally {
-      updateEditorState({ isLoading: false });
     }
   }, [activeTab, fileTabs, activeTabIndex, fileSaver, updateEditorState, updateDialogStates]);
 

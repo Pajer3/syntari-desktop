@@ -1,0 +1,220 @@
+/* ================================
+   MONACO EDITOR - CLEAN & MINIMAL
+   Simple, professional styling focused on usability
+   ================================ */
+
+/* ================================
+   CLEAN EDITOR CONTAINER
+   ================================ */
+
+.monaco-editor {
+  /* Simple, clean styling */
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, Consolas, monospace !important;
+  font-weight: 400;
+  letter-spacing: 0.2px;
+  
+  /* Clean border */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  
+  /* Simple focus state */
+  transition: border-color 0.2s ease;
+}
+
+.monaco-editor:focus-within {
+  border-color: rgba(0, 122, 204, 0.3);
+}
+
+/* ================================
+   CLEAN LINE NUMBERS
+   ================================ */
+
+.monaco-editor .margin {
+  background: #1a1a1a !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.monaco-editor .line-numbers {
+  color: #858585 !important;
+  font-weight: 400 !important;
+  font-size: 13px !important;
+  padding-right: 8px !important;
+  text-align: right !important;
+  min-width: 40px !important;
+  width: 40px !important;
+}
+
+/* Current line number - subtle highlight */
+.monaco-editor .current-line ~ .margin .line-numbers {
+  color: #cccccc !important;
+  font-weight: 500 !important;
+}
+
+/* ================================
+   CLEAN CURSOR
+   ================================ */
+
+.monaco-editor .cursor {
+  background: #cccccc !important;
+  width: 2px !important;
+}
+
+/* ================================
+   CLEAN SELECTION
+   ================================ */
+
+.monaco-editor .selected-text {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.monaco-editor .focused .selected-text {
+  background: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* ================================
+   CLEAN MINIMAP
+   ================================ */
+
+.monaco-editor .minimap {
+  border-left: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: #1a1a1a !important;
+}
+
+.monaco-editor .minimap-slider {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-radius: 2px !important;
+}
+
+.monaco-editor .minimap-slider:hover {
+  background: rgba(255, 255, 255, 0.3) !important;
+}
+
+/* ================================
+   CLEAN SCROLLBARS
+   ================================ */
+
+.monaco-editor .scrollbar .slider {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-radius: 3px !important;
+}
+
+.monaco-editor .scrollbar .slider:hover {
+  background: rgba(255, 255, 255, 0.3) !important;
+}
+
+/* ================================
+   CLEAN CURRENT LINE
+   ================================ */
+
+.monaco-editor .current-line {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* ================================
+   CLEAN WIDGETS
+   ================================ */
+
+.monaco-editor .find-widget {
+  background: #2d2d30 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 4px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+}
+
+.monaco-editor .suggest-widget {
+  background: #2d2d30 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 4px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+.monaco-editor .monaco-hover {
+  background: #2d2d30 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 4px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* ================================
+   REMOVE FANCY ANIMATIONS
+   ================================ */
+
+.monaco-editor * {
+  animation: none !important;
+}
+
+/* ================================
+   CONSISTENT LAYOUT
+   ================================ */
+
+.monaco-editor .view-lines {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.monaco-editor .view-line {
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+
+/* ================================
+   CLEAN STATUS INDICATORS (MINIMAL)
+   ================================ */
+
+.monaco-editor-status {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1000;
+  display: flex;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.monaco-editor-status .status-indicator {
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 500;
+  color: #cccccc;
+  backdrop-filter: blur(4px);
+}
+
+/* ================================
+   REMOVE LOADING ANIMATIONS
+   ================================ */
+
+.monaco-editor-loading::before {
+  display: none;
+}
+
+/* ================================
+   ACCESSIBILITY
+   ================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .monaco-editor * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* ================================
+   MOBILE RESPONSIVE
+   ================================ */
+
+@media (max-width: 768px) {
+  .monaco-editor .minimap {
+    display: none !important;
+  }
+  
+  .monaco-editor-status {
+    display: none !important;
+  }
+} 
