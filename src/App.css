@@ -21,7 +21,6 @@
   font-size: 14px;
   line-height: 1.5;
   font-weight: 400;
-
   /* These variables are now defined in variables.css */
 }
 
@@ -58,16 +57,6 @@ body {
    ================================ */
 
 *:focus {
-  outline: 2px solid var(--accent-blue);
-  outline-offset: -2px;
-}
-
-*:focus:not(:focus-visible) {
-  outline: none;
-}
-
-/* Professional Focus Styles */
-*:focus {
   outline: 1px solid rgba(0, 122, 204, 0.4);
   outline-offset: 1px;
 }
@@ -80,17 +69,6 @@ body {
    SELECTION STYLING
    ================================ */
 
-::selection {
-  background: var(--accent-blue);
-  color: white;
-}
-
-::-moz-selection {
-  background: var(--accent-blue);
-  color: white;
-}
-
-/* Professional Selection */
 ::selection {
   background: #264F78;
   color: #FFFFFF;
@@ -105,15 +83,6 @@ body {
    COMPONENT-SPECIFIC OVERRIDES
    ================================ */
 
-/* Button resets */
-button {
-  font-family: inherit;
-  font-size: inherit;
-  border: none;
-  background: none;
-  cursor: pointer;
-}
-
 /* Professional Button Styles */
 button {
   font-family: inherit;
@@ -123,15 +92,6 @@ button {
   cursor: pointer;
   color: inherit;
   transition: all 0.15s ease;
-}
-
-/* Input resets */
-input, textarea {
-  font-family: inherit;
-  font-size: inherit;
-  border: none;
-  background: none;
-  color: inherit;
 }
 
 /* Professional Input Styles */
@@ -167,16 +127,6 @@ input[type="text"]:focus, textarea:focus {
 input[type="text"]::placeholder, textarea::placeholder {
   color: #9ca3af;
   font-weight: 400;
-}
-
-/* Link resets */
-a {
-  color: var(--accent-blue);
-  text-decoration: none;
-}
-
-a:hover {
-  text-decoration: underline;
 }
 
 /* Professional Link Styles */

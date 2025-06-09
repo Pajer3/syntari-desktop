@@ -10,7 +10,7 @@ import React, {
   memo
 } from 'react';
 import type { ProjectContext, FileInfo } from '../../types';
-import { getFileIcon } from '../../utils/editorUtils';
+import { FileIcon } from '../ui/FileIcon';
 import { useShortcut } from '../../hooks/useKeyboardShortcuts';
 import { announceShortcut } from '../../utils/keyboardUtils';
 import { useFileExplorerWatcher } from '../../hooks/useFileSystemWatcher';
@@ -334,9 +334,13 @@ const FileTreeItem = memo<{
       )}
       
       {/* File/Folder Icon */}
-      <span className="mr-2 text-base flex-shrink-0">
-        {isDirectory ? (isExpanded ? '📂' : '📁') : getFileIcon(file.extension)}
-      </span>
+      <FileIcon 
+        fileName={file.name}
+        isDirectory={isDirectory}
+        isOpen={isExpanded}
+        size={16}
+        className="mr-2 flex-shrink-0"
+      />
       
       {/* File Name */}
       <span className="flex-1 truncate text-sm">
@@ -579,9 +583,13 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           <span className="text-xs mr-1 transition-transform duration-150 text-vscode-fg-muted">
             {expandedFolders.has(project.rootPath) ? '▼' : '▶'}
           </span>
-          <span className="text-base mr-2">
-            {expandedFolders.has(project.rootPath) ? '📂' : '📁'}
-          </span>
+          <FileIcon 
+            fileName="project-root"
+            isDirectory={true}
+            isOpen={expandedFolders.has(project.rootPath)}
+            size={16}
+            className="mr-2"
+          />
           <span className="font-semibold text-sm text-vscode-fg">
             {project.rootPath.split('/').pop() || 'Project'}
           </span>

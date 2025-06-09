@@ -9,6 +9,7 @@ import { AlertCircle } from 'lucide-react';
 import { useFileExplorerWatcher } from '../../hooks/useFileSystemWatcher';
 import { useShortcut } from '../../hooks/useKeyboardShortcuts';
 import { invoke } from '@tauri-apps/api/core';
+import { FileIcon } from '../ui/FileIcon';
 
 // ================================
 // TYPES
@@ -31,42 +32,7 @@ interface ListItemData {
   onDirectoryToggle: (path: string, expanded: boolean) => Promise<void>;
 }
 
-// ================================
-// ICON SPRITES (CSS Classes)
-// ================================
-
-const ICON_SPRITES = {
-  folder: '📁',
-  'folder-open': '📂',
-  typescript: '🔷',
-  tsx: '⚛️',
-  javascript: '📄',
-  jsx: '⚛️',
-  rust: '🦀',
-  python: '🐍',
-  go: '🐹',
-  java: '☕',
-  c: '📘',
-  cpp: '📘',
-  header: '📄',
-  csharp: '💜',
-  html: '🌐',
-  css: '🎨',
-  sass: '🎨',
-  less: '🎨',
-  vue: '💚',
-  svelte: '🧡',
-  json: '⚙️',
-  xml: '📄',
-  yaml: '⚙️',
-  toml: '⚙️',
-  config: '⚙️',
-  markdown: '📝',
-  text: '📄',
-  pdf: '📕',
-  image: '🖼️',
-  file: '📄'
-};
+// Icons are now handled by the FileIcon component
 
 // ================================
 // LIST ITEM COMPONENT
@@ -105,9 +71,6 @@ const FileExplorerItem: React.FC<{
       handleClick();
     }
   }, [handleClick]);
-  
-  const iconSprite = ICON_SPRITES[node.iconId as keyof typeof ICON_SPRITES] || ICON_SPRITES.file;
-  const displayIcon = node.isDirectory ? (isExpanded ? ICON_SPRITES['folder-open'] : ICON_SPRITES.folder) : iconSprite;
   
   return (
     <div
@@ -152,19 +115,19 @@ const FileExplorerItem: React.FC<{
           </span>
         )}
         
-        {/* File/Directory Icon with animation */}
-        <span 
-          className={`
-            inline-flex items-center justify-center w-5 h-5 mr-2 text-base
-            transition-all duration-200 ease-out
-            ${isSelected || isHovered ? 'scale-110' : 'scale-100'}
-            ${node.isDirectory && isExpanded ? 'animate-pulse' : ''}
-          `}
-          role="img" 
-          aria-label={node.isDirectory ? 'Directory' : 'File'}
-        >
-          {displayIcon}
-        </span>
+        {/* Modern File/Directory Icon */}
+        <div className={`
+          mr-2 transition-all duration-200 ease-out
+          ${isSelected || isHovered ? 'scale-110' : 'scale-100'}
+        `}>
+          <FileIcon 
+            fileName={node.name}
+            isDirectory={node.isDirectory}
+            isOpen={isExpanded}
+            size={16}
+            className="flex-shrink-0"
+          />
+        </div>
         
         {/* File Name with smooth highlighting */}
         <span 
@@ -362,6 +325,8 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
   
   // VS Code-style lazy folder expansion
   const handleDirectoryToggle = useCallback(async (path: string, shouldExpand: boolean) => {
+    const expandedIndex = flatNodes.findIndex(node => node.path === path);
+    
     setExpandedPaths(prev => {
       const newSet = new Set(prev);
       if (shouldExpand) {
@@ -384,14 +349,21 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
       
       try {
         console.log('🔄 Loading folder contents:', path);
-      const startTime = performance.now();
-      
+        const startTime = performance.now();
+        
         const children = await fileSystemService.loadFolderContents(path, true);
         const loadTime = performance.now() - startTime;
         
         console.log(`📦 Loaded ${children.length} items from ${path} in ${loadTime.toFixed(1)}ms`);
         
         setLoadedChildren(prev => new Map(prev).set(path, children));
+        
+        // Auto-scroll to ensure expanded content is visible
+        if (listRef.current && expandedIndex !== -1) {
+          setTimeout(() => {
+            listRef.current?.scrollToItem(expandedIndex, 'smart');
+          }, 50); // Small delay to allow state update
+        }
         
       } catch (error) {
         console.error('Failed to load folder contents:', error);
@@ -402,10 +374,15 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
           return newSet;
         });
       }
+    } else if (shouldExpand && listRef.current && expandedIndex !== -1) {
+      // Auto-scroll for already loaded content
+      setTimeout(() => {
+        listRef.current?.scrollToItem(expandedIndex, 'smart');
+      }, 50);
     }
     
     onDirectoryToggle?.(path, shouldExpand);
-  }, [loadedChildren, onDirectoryToggle]);
+  }, [loadedChildren, onDirectoryToggle, flatNodes]);
   
   // Initial load when rootPath changes
   useEffect(() => {
@@ -650,7 +627,7 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
       )}
       
       {/* Virtualized List */}
-      <div className="file-list-container">
+      <div className="file-list-container" style={{ height: height - 60, overflow: 'hidden' }}>
         {flatNodes.length > 0 ? (
           <List
             ref={listRef}
@@ -659,8 +636,9 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
             itemCount={flatNodes.length}
             itemSize={24} // Height per item in pixels
             itemData={listItemData}
-            overscanCount={5} // Render 5 extra items for smooth scrolling
+            overscanCount={10} // Render more extra items for smooth scrolling
             className="file-list"
+            style={{ outline: 'none' }}
           >
             {FileExplorerItem}
           </List>
