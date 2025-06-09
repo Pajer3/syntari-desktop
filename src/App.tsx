@@ -467,9 +467,10 @@ const App: React.FC = () => {
       
       {/* Main Content with smooth slide-in animation */}
       <div className={`
-        flex-1 overflow-hidden relative
+        flex-1 relative
         transition-all duration-700 ease-out animation-delay-300
         ${isAppLoaded ? 'transform translate-y-0 opacity-100' : 'transform translate-y-8 opacity-0'}
+        ${appViewModel.viewModel.currentView === 'welcome' ? 'overflow-y-auto' : 'overflow-hidden'}
       `}>
         {(() => {
           switch (appViewModel.viewModel.currentView) {

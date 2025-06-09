@@ -2,6 +2,7 @@
 // Context-aware header with integrated window controls and enhanced search
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { AppViewModel, AiProvider } from '../types';
 
@@ -66,7 +67,9 @@ export const Header: React.FC<HeaderProps> = ({
   const headerRef = useRef<HTMLElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  const menuButtonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
   const searchTimeoutRef = useRef<number | null>(null);
+  const [dropdownPositions, setDropdownPositions] = useState<{ [key: string]: { x: number; y: number } }>({});
   // Calculate AI status
   const availableProviders = aiProviders.filter(p => p.isAvailable).length;
   const totalProviders = aiProviders.length;
@@ -247,10 +250,26 @@ export const Header: React.FC<HeaderProps> = ({
 
   // Handle dropdown toggle
   const toggleDropdown = useCallback((menuId: string) => {
-    setActiveDropdown(current => current === menuId ? null : menuId);
+    if (activeDropdown === menuId) {
+      setActiveDropdown(null);
+      setDropdownPositions({});
+    } else {
+      // Calculate position for the dropdown
+      const buttonElement = menuButtonRefs.current[menuId];
+      if (buttonElement) {
+        const rect = buttonElement.getBoundingClientRect();
+        setDropdownPositions({
+          [menuId]: {
+            x: rect.left,
+            y: rect.bottom + 2 // Small gap below button
+          }
+        });
+      }
+      setActiveDropdown(menuId);
+    }
     setIsSearchFocused(false);
     setSearchResults([]);
-  }, []);
+  }, [activeDropdown]);
 
   // Check initial maximize state
   useEffect(() => {
@@ -272,8 +291,15 @@ export const Header: React.FC<HeaderProps> = ({
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
       
-      if (headerRef.current && !headerRef.current.contains(target)) {
+      // Check if click is outside header and dropdowns
+      const isOutsideHeader = headerRef.current && !headerRef.current.contains(target);
+      const isOutsideDropdowns = Object.values(dropdownRefs.current).every(
+        dropdown => !dropdown || !dropdown.contains(target)
+      );
+      
+      if (isOutsideHeader && isOutsideDropdowns) {
         setActiveDropdown(null);
+        setDropdownPositions({});
         setIsSearchFocused(false);
         setSearchResults([]);
       }
@@ -318,6 +344,7 @@ export const Header: React.FC<HeaderProps> = ({
       
       if (event.key === 'Escape') {
         setActiveDropdown(null);
+        setDropdownPositions({});
         setIsSearchFocused(false);
         setSearchResults([]);
       }
@@ -327,15 +354,24 @@ export const Header: React.FC<HeaderProps> = ({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [toggleDropdown]);
 
-  // Render dropdown menu
+  // Render dropdown menu using portal
   const renderDropdown = (menu: DropdownMenu) => {
-    if (activeDropdown !== menu.id) return null;
+    if (activeDropdown !== menu.id || !dropdownPositions[menu.id]) return null;
 
-    return (
+    const position = dropdownPositions[menu.id];
+
+    const dropdownContent = (
       <div
         ref={el => dropdownRefs.current[menu.id] = el}
-        className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-600 rounded-md shadow-2xl z-50 min-w-64 py-2"
-        style={{ backgroundColor: 'rgba(55, 65, 81, 0.98)' }}
+        className="fixed bg-gray-800 border border-gray-600 rounded-md shadow-2xl min-w-64 py-2"
+        style={{ 
+          left: `${position.x}px`,
+          top: `${position.y}px`,
+          zIndex: 99999,
+          backgroundColor: 'rgba(55, 65, 81, 0.98)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)'
+        }}
       >
         {menu.items.map((item, index) => (
           item.separator ? (
@@ -347,6 +383,7 @@ export const Header: React.FC<HeaderProps> = ({
                 if (!item.disabled) {
                   item.action();
                   setActiveDropdown(null);
+                  setDropdownPositions({});
                 }
               }}
               disabled={item.disabled}
@@ -372,6 +409,8 @@ export const Header: React.FC<HeaderProps> = ({
         ))}
       </div>
     );
+
+    return createPortal(dropdownContent, document.body);
   };
 
   // Simplified search results renderer
@@ -395,7 +434,14 @@ export const Header: React.FC<HeaderProps> = ({
 
     console.log('🔍 Showing dropdown with results:', searchResults.map(r => r.title));
     return (
-      <div className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-600 rounded-md shadow-lg z-50 w-full py-2">
+      <div 
+        className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-600 rounded-md shadow-lg z-[9999] w-full py-2"
+        style={{ 
+          backgroundColor: 'rgba(55, 65, 81, 0.98)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)'
+        }}
+      >
         <div className="px-3 py-1 text-xs text-gray-400 border-b border-gray-700/50">
           Found {searchResults.length} result(s)
         </div>
@@ -429,7 +475,7 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header 
       ref={headerRef}
-      className="border-b border-gray-600/50 px-4 py-2 flex items-center justify-between text-gray-100 h-14 relative z-40" 
+      className="border-b border-gray-600/50 px-4 py-2 flex items-center justify-between text-gray-100 h-14 relative z-[9998]" 
       style={{ backgroundColor: '#3F3F3F' }}
       data-tauri-drag-region
     >
@@ -461,6 +507,7 @@ export const Header: React.FC<HeaderProps> = ({
           {dropdownMenus.map((menu) => (
             <div key={menu.id} className="relative">
               <button 
+                ref={el => menuButtonRefs.current[menu.id] = el}
                 onClick={() => toggleDropdown(menu.id)}
                 className={`text-gray-200 hover:text-white hover:bg-gray-700/50 transition-colors px-3 py-1.5 rounded ${
                   activeDropdown === menu.id ? 'bg-gray-700/70 text-white' : ''
@@ -468,10 +515,12 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 {menu.label}
               </button>
-              {renderDropdown(menu)}
             </div>
           ))}
         </nav>
+        
+        {/* Render all dropdowns */}
+        {dropdownMenus.map(menu => renderDropdown(menu))}
       </div>
 
       {/* Center Section - Search Bar */}

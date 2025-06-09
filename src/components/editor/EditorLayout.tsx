@@ -384,9 +384,6 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
                 <h3 className="text-vscode-fg font-semibold text-sm mb-2">Search Results</h3>
                 <SearchPanel
                   projectPath={safeProject.rootPath}
-<<<<<<< HEAD
-                  onNavigateToFile={handleNavigateToFile}
-=======
                   onNavigateToFile={(file: string, line?: number, column?: number) => {
                     onQuickOpenFileSelect(file);
                     if (line) {
@@ -395,7 +392,6 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
                       }, 100);
                     }
                   }}
->>>>>>> 13d06c1 (Refactor header and editor components for improved functionality and performance)
                   className="h-full"
                 />
               </div>

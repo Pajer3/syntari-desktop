@@ -1,0 +1,69 @@
+/* ================================
+   PERFORMANCE MODE & OPTIMIZATIONS
+   ================================ */
+
+/* Performance Mode - Disable All Visual Effects */
+.performance-mode,
+.performance-mode * {
+  transition: none !important;
+  animation: none !important;
+  transform: none !important;
+  filter: none !important;
+  box-shadow: none !important;
+}
+
+/* Ensure fade-in elements are visible when animations are disabled */
+.performance-mode .animate-fade-in-up {
+  opacity: 1 !important;
+}
+
+/* Simple hover states for essential UI feedback */
+.performance-mode .vscode-tab:hover,
+.performance-mode .file-explorer-item:hover,
+.performance-mode .context-menu-item:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* ================================
+   ENHANCED EDITOR PERFORMANCE
+   ================================ */
+
+/* Optimize Monaco Editor rendering */
+.monaco-editor {
+  will-change: transform, opacity;
+}
+
+.monaco-editor .monaco-scrollable-element {
+  transform: translateZ(0);
+}
+
+.monaco-editor .view-lines {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.monaco-editor .cursors-layer {
+  will-change: transform;
+}
+
+/* Hide expensive editor features in performance mode */
+.performance-mode .monaco-editor .decorations-overview-ruler,
+.performance-mode .monaco-editor .minimap {
+  display: none;
+}
+
+/* ================================
+   MEMORY USAGE OPTIMIZATIONS
+   ================================ */
+
+.file-list-container {
+  contain: layout style paint;
+}
+
+.file-icon {
+  contain: layout style;
+}
+
+.file-explorer-item-virtualized {
+  contain: layout style paint;
+} 

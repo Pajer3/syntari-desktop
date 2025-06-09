@@ -1,0 +1,133 @@
+/* ================================
+   RESPONSIVE DESIGN & MEDIA QUERIES
+   ================================ */
+
+/* ================================
+   RESPONSIVE DESIGN
+   ================================ */
+
+@media (max-width: 768px) {
+  :root {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    font-size: 12px;
+  }
+}
+
+/* Professional Responsive Design */
+@media (max-width: 768px) {
+  :root {
+    --vscode-font-size: 12px;
+  }
+  
+  .file-explorer {
+    width: 200px;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --vscode-font-size: 11px;
+  }
+  
+  .editor-header {
+    height: 32px;
+    padding: 0 8px;
+  }
+}
+
+/* Mobile responsiveness for virtualized file explorer */
+@media (max-width: 768px) {
+  .file-explorer-item-virtualized {
+    min-height: 32px;
+  }
+  
+  .file-item-content {
+    padding: 4px 0;
+  }
+  
+  .file-icon {
+    width: 18px;
+    height: 18px;
+    font-size: 14px;
+  }
+  
+  .file-name {
+    font-size: 14px;
+  }
+}
+
+/* ================================
+   HIGH CONTRAST MODE SUPPORT
+   ================================ */
+
+@media (prefers-contrast: high) {
+  :root {
+    --text-primary: #ffffff;
+    --text-secondary: #ffffff;
+    --bg-primary: #000000;
+    --bg-secondary: #1a1a1a;
+    --border-primary: rgba(255, 255, 255, 0.3);
+  }
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+  :root {
+    --vscode-bg: #000000;
+    --vscode-fg: #FFFFFF;
+    --vscode-border: rgba(255, 255, 255, 0.3);
+    --vscode-accent: #0E639C;
+  }
+}
+
+/* High contrast mode for virtualized file explorer */
+@media (prefers-contrast: high) {
+  .file-explorer-item-virtualized:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+  }
+  
+  .file-explorer-item-virtualized.selected {
+    background-color: #0078d4;
+    outline: 2px solid white;
+  }
+  
+  .file-explorer-item-virtualized:focus {
+    outline: 2px solid #ffff00;
+  }
+}
+
+/* ================================
+   REDUCED MOTION SUPPORT
+   ================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Accessibility improvements for reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .file-explorer-item-virtualized,
+  .chevron {
+    transition: none;
+  }
+} 

@@ -1,0 +1,43 @@
+/* ================================
+   UTILITY CLASSES
+   ================================ */
+
+/* VSCode Color Classes (Most Used) */
+.bg-vscode-bg { background-color: var(--vscode-bg); }
+.bg-vscode-sidebar { background-color: var(--vscode-sidebar); }
+.bg-vscode-tab-bg { background-color: var(--vscode-tab-bg); }
+
+.text-vscode-fg { color: var(--vscode-fg); }
+.text-vscode-fg-muted { color: var(--vscode-fg-muted); }
+
+.border-vscode-border { border-color: var(--vscode-border); }
+
+/* Professional hover effects */
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+/* Glass morphism effects */
+.glass-bg {
+  background: rgba(30, 30, 30, 0.85);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(75, 85, 99, 0.2);
+}
+
+/* Enhanced Blur Loading Overlay */
+.backdrop-blur-sm {
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* Layout Utilities */
+.h-9 { height: 36px; }
+.min-w-0 { min-width: 0; }
+
+/* Professional 3D Border Animation */
+.border-3 { border-width: 3px; } 

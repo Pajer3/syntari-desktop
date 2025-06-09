@@ -1,0 +1,271 @@
+/* ================================
+   FILE EXPLORER STYLES
+   ================================ */
+
+/* File Explorer Styles */
+.file-explorer {
+  background: var(--vscode-sidebar);
+  color: var(--vscode-fg);
+}
+
+.file-explorer-header {
+  padding: 8px 12px;
+  background: var(--vscode-sidebar);
+  border-bottom: 1px solid rgba(75, 85, 99, 0.2);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--vscode-fg-muted);
+}
+
+.file-explorer-item {
+  padding: 4px 8px 4px 12px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background-color 0.1s ease;
+}
+
+.file-explorer-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.file-explorer-item.selected {
+  background: var(--vscode-accent);
+  color: white;
+}
+
+.file-explorer-item.folder {
+  font-weight: 500;
+}
+
+.file-explorer-item .icon {
+  margin-right: 6px;
+  width: 16px;
+  display: flex;
+  justify-content: center;
+}
+
+/* File explorer styling */
+.file-explorer-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  margin: 1px 0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 150ms ease-in-out;
+}
+
+.file-explorer-item:hover {
+  background-color: rgba(75, 85, 99, 0.3);
+}
+
+.file-explorer-item.selected {
+  background-color: rgba(59, 130, 246, 0.3);
+  color: white;
+}
+
+.file-explorer-item.folder {
+  font-weight: 500;
+}
+
+.file-explorer-item.file {
+  font-weight: 400;
+  color: #d1d5db;
+}
+
+/* Context menu improvements */
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  margin: 0;
+  border: none;
+  background: none;
+  color: #d1d5db;
+  cursor: pointer;
+  font-size: 14px;
+  font-family: inherit;
+  text-align: left;
+  width: 100%;
+  transition: background-color 150ms ease-in-out, color 150ms ease-in-out;
+}
+
+.context-menu-item:hover:not(:disabled) {
+  background-color: rgba(75, 85, 99, 0.5);
+  color: white;
+}
+
+.context-menu-item:disabled {
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
+.context-menu-item:focus {
+  outline: none;
+  background-color: rgba(59, 130, 246, 0.3);
+}
+
+/* ================================ */
+/* VIRTUALIZED FILE EXPLORER STYLES */
+/* ================================ */
+
+.virtualized-file-explorer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--vscode-sidebar);
+  color: var(--vscode-fg);
+  font-size: 13px;
+  user-select: none;
+}
+
+.file-explorer-header {
+  padding: 8px 12px;
+  background-color: var(--vscode-sidebar);
+  border-bottom: 1px solid var(--vscode-border);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--vscode-fg-muted);
+}
+
+.error-banner {
+  padding: 8px 12px;
+  background-color: var(--vscode-error-bg);
+  border-bottom: 1px solid var(--vscode-error-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.file-list-container {
+  flex: 1;
+  overflow: hidden;
+}
+
+.file-list {
+  outline: none;
+}
+
+.file-explorer-item-virtualized {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+  border: none;
+  outline: none;
+}
+
+.file-explorer-item-virtualized:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.file-explorer-item-virtualized.selected {
+  background-color: var(--vscode-accent);
+  color: white;
+}
+
+.file-explorer-item-virtualized:focus {
+  background-color: rgba(255, 255, 255, 0.15);
+  outline: 1px solid var(--vscode-accent);
+  outline-offset: -1px;
+}
+
+.file-item-content {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  padding: 2px 0;
+}
+
+.chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  font-size: 10px;
+  color: var(--vscode-fg-muted);
+  transition: transform 0.1s ease;
+}
+
+.file-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.file-size {
+  font-size: 11px;
+  color: var(--vscode-fg-muted);
+  margin-left: auto;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+.file-explorer-footer {
+  padding: 4px 12px;
+  background-color: var(--vscode-sidebar);
+  border-top: 1px solid var(--vscode-border);
+  font-size: 11px;
+  color: var(--vscode-fg-muted);
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+/* Code editor improvements */
+.code-editor-line-numbers {
+  background: #1f2937;
+  border-right: 1px solid rgba(75, 85, 99, 0.3);
+  color: #6b7280;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 16px 8px;
+  text-align: right;
+  user-select: none;
+  width: 60px;
+}
+
+.code-editor-content {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre;
+  word-wrap: break-word;
+}
+
+/* Syntax highlighting colors */
+.syntax-keyword { color: #3b82f6; }
+.syntax-string { color: #fbbf24; }
+.syntax-comment { color: #10b981; }
+.syntax-number { color: #a855f7; }
+.syntax-function { color: #06b6d4; }
+.syntax-variable { color: #f59e0b; } 

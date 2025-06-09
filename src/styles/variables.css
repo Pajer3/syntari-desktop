@@ -1,0 +1,38 @@
+/* ================================
+   CSS CUSTOM PROPERTIES & VARIABLES
+   ================================ */
+
+:root {
+  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 400;
+
+  /* Force dark theme */
+  color: #cccccc;
+  background-color: #1e1e1e;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+
+  /* VSCode Color Palette */
+  --vscode-bg: #1E1E1E;
+  --vscode-fg: #D4D4D4;
+  --vscode-fg-muted: #858585;
+  --vscode-sidebar: #252526;
+  --vscode-tab-bg: #2D2D30;
+  --vscode-border: rgba(75, 85, 99, 0.3);
+  --vscode-accent: #007ACC;
+  
+  /* Professional Typography */
+  --vscode-font-family: 'Fira Code', 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  --vscode-font-size: 13px;
+  --vscode-line-height: 1.4;
+  
+  /* Shadows */
+  --vscode-shadow: 0 2px 8px rgba(0, 0, 0, 0.32);
+  --vscode-shadow-large: 0 5px 26px rgba(0, 0, 0, 0.22), 0 4px 7px rgba(0, 0, 0, 0.28);
+} 
