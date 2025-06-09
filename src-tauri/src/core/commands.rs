@@ -92,6 +92,107 @@ pub async fn create_file(path: String, content: Option<String>) -> std::result::
     crate::filesystem::commands::file_ops::create_file_impl(path, content).await
 }
 
+#[tauri::command]
+pub async fn copy_file(source_path: String, target_path: String) -> std::result::Result<TauriResult<String>, String> {
+    use std::fs;
+    use std::path::Path;
+    
+    tracing::info!("Copying file from '{}' to '{}'", source_path, target_path);
+    
+    let source = Path::new(&source_path);
+    let target = Path::new(&target_path);
+    
+    if !source.exists() {
+        return Ok(TauriResult::error(format!("Source file does not exist: {}", source_path)));
+    }
+    
+    if target.exists() {
+        return Ok(TauriResult::error(format!("Target file already exists: {}", target_path)));
+    }
+    
+    // Create parent directories if they don't exist
+    if let Some(parent) = target.parent() {
+        if !parent.exists() {
+            match fs::create_dir_all(parent) {
+                Ok(_) => tracing::debug!("Created parent directories for: {}", target_path),
+                Err(e) => {
+                    tracing::error!("Failed to create parent directories: {}", e);
+                    return Ok(TauriResult::error(format!("Failed to create parent directories: {}", e)));
+                }
+            }
+        }
+    }
+    
+    // Copy file or directory
+    if source.is_dir() {
+        match copy_dir_recursive(source, target) {
+            Ok(_) => {
+                tracing::info!("Directory copied successfully from '{}' to '{}'", source_path, target_path);
+                Ok(TauriResult::success(format!("Directory copied to {}", target_path)))
+            }
+            Err(e) => {
+                tracing::error!("Failed to copy directory: {}", e);
+                Ok(TauriResult::error(format!("Failed to copy directory: {}", e)))
+            }
+        }
+    } else {
+        match fs::copy(source, target) {
+            Ok(_) => {
+                tracing::info!("File copied successfully from '{}' to '{}'", source_path, target_path);
+                Ok(TauriResult::success(format!("File copied to {}", target_path)))
+            }
+            Err(e) => {
+                tracing::error!("Failed to copy file: {}", e);
+                Ok(TauriResult::error(format!("Failed to copy file: {}", e)))
+            }
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn move_file(source_path: String, target_path: String) -> std::result::Result<TauriResult<String>, String> {
+    use std::fs;
+    use std::path::Path;
+    
+    tracing::info!("Moving file from '{}' to '{}'", source_path, target_path);
+    
+    let source = Path::new(&source_path);
+    let target = Path::new(&target_path);
+    
+    if !source.exists() {
+        return Ok(TauriResult::error(format!("Source file does not exist: {}", source_path)));
+    }
+    
+    if target.exists() {
+        return Ok(TauriResult::error(format!("Target file already exists: {}", target_path)));
+    }
+    
+    // Create parent directories if they don't exist
+    if let Some(parent) = target.parent() {
+        if !parent.exists() {
+            match fs::create_dir_all(parent) {
+                Ok(_) => tracing::debug!("Created parent directories for: {}", target_path),
+                Err(e) => {
+                    tracing::error!("Failed to create parent directories: {}", e);
+                    return Ok(TauriResult::error(format!("Failed to create parent directories: {}", e)));
+                }
+            }
+        }
+    }
+    
+    // Move file or directory
+    match fs::rename(source, target) {
+        Ok(_) => {
+            tracing::info!("File moved successfully from '{}' to '{}'", source_path, target_path);
+            Ok(TauriResult::success(format!("File moved to {}", target_path)))
+        }
+        Err(e) => {
+            tracing::error!("Failed to move file: {}", e);
+            Ok(TauriResult::error(format!("Failed to move file: {}", e)))
+        }
+    }
+}
+
 // ================================
 // INTERNAL HELPER FUNCTIONS
 // ================================
@@ -100,4 +201,33 @@ async fn get_stats_internal(state: &State<'_, AppState>) -> Result<std::collecti
     let stats = state.get_stats().await;
     tracing::debug!("Application stats: {:?}", stats);
     Ok(stats)
+}
+
+fn copy_dir_recursive(source: &std::path::Path, target: &std::path::Path) -> std::io::Result<()> {
+    use std::fs;
+    
+    if !source.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Source is not a directory",
+        ));
+    }
+    
+    if !target.exists() {
+        fs::create_dir_all(target)?;
+    }
+    
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let entry_path = entry.path();
+        let target_path = target.join(entry.file_name());
+        
+        if entry_path.is_dir() {
+            copy_dir_recursive(&entry_path, &target_path)?;
+        } else {
+            fs::copy(&entry_path, &target_path)?;
+        }
+    }
+    
+    Ok(())
 } 

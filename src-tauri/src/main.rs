@@ -33,6 +33,8 @@ fn main() {
             core::commands::read_file_smart,
             core::commands::save_file,
             core::commands::create_file,
+            core::commands::copy_file,
+            core::commands::move_file,
             
             // Project management commands  
             project::commands::open_project,

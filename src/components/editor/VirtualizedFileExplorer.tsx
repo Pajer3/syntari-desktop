@@ -5,10 +5,11 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { FixedSizeList as List } from 'react-window';
 import type { FileNode } from '../../types/fileSystem';
 import { fileSystemService } from '../../services/fileSystemService';
-import { AlertCircle, Search, X } from 'lucide-react';
+import { AlertCircle, Search, X, Move, Copy } from 'lucide-react';
 import { useFileExplorerWatcher } from '../../hooks/useFileSystemWatcher';
 import { useShortcut } from '../../hooks/useKeyboardShortcuts';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { FileIcon } from '../ui/FileIcon';
 
 // ================================
@@ -30,6 +31,15 @@ interface ListItemData {
   expandedPaths: Set<string>;
   onFileClick: (node: FileNode) => Promise<void>;
   onDirectoryToggle: (path: string, expanded: boolean) => Promise<void>;
+  // Drag & Drop
+  draggedNode?: FileNode | null;
+  dragOverPath?: string | null;
+  isDragMode?: boolean;
+  onDragStart?: (node: FileNode, e: React.DragEvent) => void;
+  onDragEnd?: () => void;
+  onDragOver?: (path: string, e: React.DragEvent) => void;
+  onDragLeave?: () => void;
+  onDrop?: (targetPath: string, e: React.DragEvent) => void;
 }
 
 // Icons are now handled by the FileIcon component
@@ -43,7 +53,11 @@ const FileExplorerItem: React.FC<{
   style: React.CSSProperties;
   data: ListItemData;
 }> = ({ index, style, data }) => {
-  const { nodes, selectedPath, expandedPaths, onFileClick, onDirectoryToggle } = data;
+  const { 
+    nodes, selectedPath, expandedPaths, onFileClick, onDirectoryToggle,
+    draggedNode, dragOverPath, isDragMode, onDragStart, onDragEnd, 
+    onDragOver, onDragLeave, onDrop 
+  } = data;
   const node = nodes[index];
   const [isHovered, setIsHovered] = useState(false);
   const [isClicking, setIsClicking] = useState(false);
@@ -53,6 +67,11 @@ const FileExplorerItem: React.FC<{
   const isSelected = selectedPath === node.path;
   const isExpanded = expandedPaths.has(node.path);
   const hasChildren = node.isDirectory && node.hasChildren;
+  
+  // Drag & Drop states
+  const isBeingDragged = draggedNode?.path === node.path;
+  const isDragTarget = dragOverPath === node.path;
+  const canBeDropTarget = node.isDirectory && !isBeingDragged;
   
   const handleClick = useCallback(() => {
     setIsClicking(true);
@@ -75,6 +94,12 @@ const FileExplorerItem: React.FC<{
   return (
     <div
       style={style}
+      draggable={!isDragMode || !isBeingDragged}
+      onDragStart={(e) => onDragStart?.(node, e)}
+      onDragEnd={onDragEnd}
+      onDragOver={canBeDropTarget ? (e) => onDragOver?.(node.path, e) : undefined}
+      onDragLeave={canBeDropTarget ? onDragLeave : undefined}
+      onDrop={canBeDropTarget ? (e) => onDrop?.(node.path, e) : undefined}
       className={`
         group relative flex items-center px-2 py-1 cursor-pointer select-none
         transition-all duration-200 ease-out
@@ -85,6 +110,9 @@ const FileExplorerItem: React.FC<{
         }
         ${isClicking ? 'scale-98 bg-vscode-list-active' : ''}
         ${node.isDirectory ? 'font-medium' : 'font-normal'}
+        ${isBeingDragged ? 'opacity-50 scale-95 transform rotate-1' : ''}
+        ${isDragTarget ? 'bg-blue-500/20 border-l-4 border-blue-400 ring-1 ring-blue-400/50' : ''}
+        ${canBeDropTarget && isDragMode ? 'border-dashed border-gray-400/50' : ''}
       `}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
@@ -94,6 +122,7 @@ const FileExplorerItem: React.FC<{
       role="treeitem"
       aria-selected={isSelected}
       aria-expanded={node.isDirectory ? isExpanded : undefined}
+      title={`${node.path}${isDragMode && canBeDropTarget ? ' (Drop zone)' : ''}`}
     >
       <div 
         className="flex items-center w-full transition-all duration-200"
@@ -159,6 +188,24 @@ const FileExplorerItem: React.FC<{
         {/* Hover effect */}
         {isHovered && !isSelected && (
           <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-vscode-fg-muted opacity-30 transition-opacity duration-200" />
+        )}
+
+        {/* Drag & Drop Visual Indicators */}
+        {isBeingDragged && (
+          <div className="absolute inset-0 bg-blue-500/10 border border-blue-400/50 rounded-sm pointer-events-none">
+            <div className="absolute top-1 right-1">
+              <Move size={12} className="text-blue-400" />
+            </div>
+          </div>
+        )}
+        
+        {isDragTarget && canBeDropTarget && (
+          <div className="absolute inset-0 bg-green-500/10 border-2 border-dashed border-green-400 rounded-sm pointer-events-none">
+            <div className="absolute top-1 right-1 flex items-center space-x-1">
+              <Copy size={10} className="text-green-400" />
+              <span className="text-xs text-green-400 font-semibold">DROP</span>
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -262,6 +309,12 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
   // Search state
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isSearchMode, setIsSearchMode] = useState<boolean>(false);
+  
+  // Drag & Drop state
+  const [draggedNode, setDraggedNode] = useState<FileNode | null>(null);
+  const [dragOverPath, setDragOverPath] = useState<string | null>(null);
+  const [isDragMode, setIsDragMode] = useState<boolean>(false);
+  const [dragOperation, setDragOperation] = useState<'move' | 'copy'>('move');
   
   // Refs for performance optimization
   const listRef = useRef<List>(null);
@@ -458,6 +511,188 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
     }
   }, [expandedPaths, handleDirectoryToggle, onFileSelect]);
 
+  // ================================
+  // DRAG & DROP FUNCTIONALITY
+  // ================================
+
+  const handleDragStart = useCallback((node: FileNode, e: React.DragEvent) => {
+    console.log('🎯 Drag started:', node.path);
+    setDraggedNode(node);
+    setIsDragMode(true);
+    
+    // Set drag data
+    e.dataTransfer.setData('text/plain', node.path);
+    e.dataTransfer.setData('application/syntari-file', JSON.stringify(node));
+    
+    // Determine operation based on modifier keys
+    const operation = e.ctrlKey ? 'copy' : 'move';
+    setDragOperation(operation);
+    e.dataTransfer.effectAllowed = operation === 'copy' ? 'copy' : 'move';
+    
+    // Create drag image
+    const dragImage = e.currentTarget.cloneNode(true) as HTMLElement;
+    dragImage.style.opacity = '0.8';
+    dragImage.style.transform = 'rotate(5deg)';
+    e.dataTransfer.setDragImage(dragImage, 20, 10);
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    console.log('🎯 Drag ended');
+    setDraggedNode(null);
+    setDragOverPath(null);
+    setIsDragMode(false);
+    setDragOperation('move');
+  }, []);
+
+  const handleDragOver = useCallback((targetPath: string, e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const targetNode = flatNodes.find(node => node.path === targetPath);
+    if (!targetNode?.isDirectory) return;
+    
+    // Don't allow dropping on itself or its children
+    if (draggedNode && (
+      draggedNode.path === targetPath ||
+      targetPath.startsWith(draggedNode.path + '/')
+    )) {
+      e.dataTransfer.dropEffect = 'none';
+      return;
+    }
+    
+    setDragOverPath(targetPath);
+    e.dataTransfer.dropEffect = dragOperation;
+  }, [flatNodes, draggedNode, dragOperation]);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverPath(null);
+  }, []);
+
+  const handleDrop = useCallback(async (targetPath: string, e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const targetNode = flatNodes.find(node => node.path === targetPath);
+    if (!targetNode?.isDirectory) {
+      console.warn('❌ Drop target is not a directory');
+      return;
+    }
+    
+    // Handle external file drops from system file manager
+    if (e.dataTransfer.files.length > 0) {
+      console.log('🌍 External file drop detected:', e.dataTransfer.files.length, 'files');
+      await handleExternalFileDrop(targetPath, e.dataTransfer.files);
+      return;
+    }
+    
+    // Handle internal drag & drop within the app
+    const dragData = e.dataTransfer.getData('application/syntari-file');
+    if (!dragData || !draggedNode) return;
+    
+    const sourceNode = JSON.parse(dragData) as FileNode;
+    
+    // Don't allow dropping on itself or its children
+    if (sourceNode.path === targetPath || targetPath.startsWith(sourceNode.path + '/')) {
+      console.warn('❌ Cannot drop item on itself or its children');
+      return;
+    }
+    
+    try {
+      setFileError(null);
+      const fileName = sourceNode.name;
+      const newPath = `${targetPath}/${fileName}`;
+      
+      console.log(`🎯 ${dragOperation === 'copy' ? 'Copying' : 'Moving'} "${sourceNode.path}" to "${newPath}"`);
+      
+      if (dragOperation === 'copy') {
+        // Copy file/directory
+        await invoke('copy_file', {
+          sourcePath: sourceNode.path,
+          targetPath: newPath
+        });
+        console.log('✅ File copied successfully');
+      } else {
+        // Move file/directory
+        await invoke('move_file', {
+          sourcePath: sourceNode.path,
+          targetPath: newPath
+        });
+        console.log('✅ File moved successfully');
+      }
+      
+      // Refresh the file tree
+      await loadRootItems();
+      
+      // Expand target directory to show the moved/copied item
+      if (!expandedPaths.has(targetPath)) {
+        await handleDirectoryToggle(targetPath, true);
+      }
+      
+    } catch (error) {
+      console.error(`❌ Failed to ${dragOperation} file:`, error);
+      setFileError(`Failed to ${dragOperation} file: ${error}`);
+    } finally {
+      handleDragEnd();
+    }
+  }, [flatNodes, draggedNode, dragOperation, loadRootItems, expandedPaths, handleDirectoryToggle]);
+
+  // Handle external file drops from system file manager
+  const handleExternalFileDrop = useCallback(async (targetPath: string, files: FileList) => {
+    try {
+      setFileError(null);
+      console.log(`📂 Dropping ${files.length} external files into: ${targetPath}`);
+      
+      const fileArray = Array.from(files);
+      let successCount = 0;
+      let errorCount = 0;
+      
+      for (const file of fileArray) {
+        try {
+          // Get the file path from the File object
+          // Note: In Tauri, we need to handle this differently than in a regular web app
+          const filePath = (file as any).path || file.name;
+          const targetFilePath = `${targetPath}/${file.name}`;
+          
+          console.log(`📋 Copying external file: ${filePath} → ${targetFilePath}`);
+          
+          // For external drops, always copy (don't move files from outside the project)
+          await invoke('copy_file', {
+            sourcePath: filePath,
+            targetPath: targetFilePath
+          });
+          
+          successCount++;
+          console.log(`✅ Successfully copied: ${file.name}`);
+          
+        } catch (error) {
+          errorCount++;
+          console.error(`❌ Failed to copy ${file.name}:`, error);
+        }
+      }
+      
+      // Show result summary
+      if (successCount > 0) {
+        console.log(`✅ Successfully copied ${successCount} files`);
+        
+        // Refresh the file tree
+        await loadRootItems();
+        
+        // Expand target directory to show the new files
+        if (!expandedPaths.has(targetPath)) {
+          await handleDirectoryToggle(targetPath, true);
+        }
+      }
+      
+      if (errorCount > 0) {
+        setFileError(`Failed to copy ${errorCount} files. Check console for details.`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Failed to handle external file drop:', error);
+      setFileError(`Failed to copy external files: ${error}`);
+    }
+  }, [loadRootItems, expandedPaths, handleDirectoryToggle]);
+
   // Simple file filtering based on search query
   const filteredNodes = useMemo(() => {
     if (!searchQuery.trim() || !isSearchMode) {
@@ -477,8 +712,21 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
     selectedPath,
     expandedPaths,
     onFileClick: handleFileClick,
-    onDirectoryToggle: handleDirectoryToggle
-  }), [filteredNodes, selectedPath, expandedPaths, handleFileClick, handleDirectoryToggle]);
+    onDirectoryToggle: handleDirectoryToggle,
+    // Drag & Drop
+    draggedNode,
+    dragOverPath,
+    isDragMode,
+    onDragStart: handleDragStart,
+    onDragEnd: handleDragEnd,
+    onDragOver: handleDragOver,
+    onDragLeave: handleDragLeave,
+    onDrop: handleDrop
+  }), [
+    filteredNodes, selectedPath, expandedPaths, handleFileClick, handleDirectoryToggle,
+    draggedNode, dragOverPath, isDragMode, handleDragStart, handleDragEnd,
+    handleDragOver, handleDragLeave, handleDrop
+  ]);
   
   // ================================
   // FILE OPERATIONS
@@ -579,6 +827,110 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
   };
 
   // ================================
+  // TAURI FILE DROP HANDLER
+  // ================================
+
+  // Handle Tauri file drops
+  const handleTauriFileDrop = useCallback(async (targetPath: string, filePaths: string[]) => {
+    try {
+      setFileError(null);
+      console.log(`📂 Dropping ${filePaths.length} Tauri files into: ${targetPath}`);
+      
+      let successCount = 0;
+      let errorCount = 0;
+      
+      for (const filePath of filePaths) {
+        try {
+          const fileName = filePath.split('/').pop() || filePath.split('\\').pop() || 'unknown';
+          const targetFilePath = `${targetPath}/${fileName}`;
+          
+          console.log(`📋 Copying Tauri file: ${filePath} → ${targetFilePath}`);
+          
+          // Debug: Log the exact parameters being sent
+          const copyParams = {
+            sourcePath: filePath,
+            targetPath: targetFilePath
+          };
+          console.log('🔍 Copy parameters (camelCase test):', copyParams);
+          
+          // For external drops, always copy (don't move files from outside the project)
+          // Note: Using camelCase as Tauri v2 might auto-convert to snake_case
+          await invoke('copy_file', copyParams);
+          
+          successCount++;
+          console.log(`✅ Successfully copied: ${fileName}`);
+          
+        } catch (error) {
+          errorCount++;
+          console.error(`❌ Failed to copy ${filePath}:`, error);
+          console.error(`❌ Error details:`, JSON.stringify(error, null, 2));
+          console.error(`❌ Error type:`, typeof error);
+        }
+      }
+      
+      // Show result summary
+      if (successCount > 0) {
+        console.log(`✅ Successfully copied ${successCount} files via Tauri`);
+        
+        // Refresh the file tree
+        await loadRootItems();
+        
+        // Expand target directory to show the new files
+        if (!expandedPaths.has(targetPath)) {
+          await handleDirectoryToggle(targetPath, true);
+        }
+      }
+      
+      if (errorCount > 0) {
+        setFileError(`Failed to copy ${errorCount} files via Tauri. Check console for details.`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Failed to handle Tauri file drop:', error);
+      setFileError(`Failed to copy external files: ${error}`);
+    }
+  }, [loadRootItems, expandedPaths, handleDirectoryToggle]);
+
+  // ================================
+  // TAURI FILE DROP LISTENER  
+  // ================================
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    const setupFileDropListener = async () => {
+      try {
+        unlisten = await listen('tauri://drag-drop', (event: any) => {
+          console.log('🌍 Tauri file drop detected:', event.payload);
+          
+          // Extract file paths from the payload
+          const filePaths = event.payload.paths || event.payload || [];
+          
+          if (filePaths && filePaths.length > 0) {
+            console.log('📂 Processing file paths:', filePaths);
+            handleTauriFileDrop(rootPath, filePaths);
+          } else {
+            console.warn('⚠️ No file paths found in drop event payload');
+          }
+        });
+        
+        console.log('✅ Tauri file drop listener registered');
+      } catch (error) {
+        console.error('❌ Failed to setup Tauri file drop listener:', error);
+      }
+    };
+
+    setupFileDropListener();
+
+    return () => {
+      if (unlisten) {
+        unlisten();
+        console.log('🧹 Tauri file drop listener cleaned up');
+      }
+    };
+  }, [rootPath, handleTauriFileDrop]);
+
+  // ================================
   // KEYBOARD SHORTCUTS
   // ================================
 
@@ -603,8 +955,33 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
     }
   }, []);
 
+  // Global drag & drop handlers for external files
+  const handleGlobalDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Allow external file drops
+    if (e.dataTransfer.types.includes('Files')) {
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  }, []);
+
+  const handleGlobalDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Handle external file drops on the root directory
+    if (e.dataTransfer.files.length > 0) {
+      console.log('🌍 External file drop on root directory');
+      await handleExternalFileDrop(rootPath, e.dataTransfer.files);
+    }
+  }, [rootPath, handleExternalFileDrop]);
+
   return (
-    <div className={`file-explorer-virtualized h-full relative ${className}`}>
+    <div 
+      className={`file-explorer-virtualized h-full relative ${className}`}
+      onDragOver={handleGlobalDragOver}
+      onDrop={handleGlobalDrop}
+    >
       {/* SINGLE Professional Loading Overlay - only for initial load */}
       {isInitialLoading && (
         <div className="absolute inset-0 z-50 bg-vscode-bg/80 backdrop-blur-sm flex items-center justify-center">
@@ -639,6 +1016,16 @@ export const VirtualizedFileExplorer: React.FC<VirtualizedFileExplorerProps> = (
       <div className="file-explorer-header px-3 py-2 bg-vscode-sidebar border-b border-gray-700/30 text-xs font-medium text-vscode-fg flex items-center justify-between">
         <span>EXPLORER</span>
         <div className="flex items-center gap-2">
+          {/* Drag status indicator */}
+          {isDragMode && draggedNode && (
+            <div className="flex items-center text-blue-400">
+              <Move size={12} className="mr-1 animate-bounce" />
+              <span className="text-xs">
+                {dragOperation === 'copy' ? 'Copying' : 'Moving'} {draggedNode.name}
+              </span>
+            </div>
+          )}
+          
           {/* Live file watcher status indicator */}
           {fileWatcher.isWatching && (
             <div className="flex items-center text-vscode-accent">
