@@ -1,6 +1,8 @@
 // Syntari AI IDE - VS Code-style Monaco Editor Performance Configuration
 // Unified professional editor settings with performance optimizations
 
+import { editor } from 'monaco-editor';
+
 export const EDITOR_OPTIONS = {
   // Core editor settings (enhanced from original)
   fontSize: 14,
@@ -25,7 +27,7 @@ export const EDITOR_OPTIONS = {
   scrollBeyondLastLine: false,
   wordWrap: 'off' as const, // Performance: disable by default
   wordWrapColumn: 120,
-  theme: 'vs-dark',
+  theme: 'gray-dark',
   
   // Enhanced bracket pair colorization
   bracketPairColorization: {
@@ -178,8 +180,8 @@ export const EDITOR_OPTIONS = {
   // Render control characters (performance optimized)
   renderControlCharacters: false,
   
-  // Render indent guides
-  renderIndentGuides: true,
+  // Render indent guides (handled via guides.indentation)
+  // renderIndentGuides: true, // Deprecated - use guides.indentation instead
   
   // Render whitespace (performance optimized)
   renderWhitespace: 'selection' as const, // Only show when selecting
@@ -414,9 +416,343 @@ export const FILE_SIZE_THRESHOLDS = {
   MAX_SAFE_SIZE: 256 * 1024 * 1024,     // 256MB - hex mode only
 } as const;
 
-// Performance monitoring thresholds
+// Performance thresholds based on VSCode implementation
 export const PERFORMANCE_THRESHOLDS = {
-  RENDER_WARNING_MS: 16,  // 60fps = 16ms per frame
-  SCROLL_WARNING_MS: 8,   // Scrolling should be < 8ms
-  TOKENIZE_WARNING_MS: 100, // Tokenization warning
+  // Large file size threshold (20MB) - above this, enable performance mode
+  LARGE_FILE_SIZE: 20 * 1024 * 1024, // 20MB
+  
+  // Maximum line length for tokenization (VSCode default: 20,000)
+  MAX_TOKENIZATION_LINE_LENGTH: 20_000,
+  
+  // Line count threshold for performance mode
+  LARGE_FILE_LINE_COUNT: 50_000,
+  
+  // Character count threshold for large files
+  LARGE_FILE_CHAR_COUNT: 1_000_000,
+} as const;
+
+// VSCode-based performance configuration
+export const VSCodePerformanceConfig = {
+  // Core performance settings from VSCode
+  largeFileOptimizations: true,
+  maxTokenizationLineLength: PERFORMANCE_THRESHOLDS.MAX_TOKENIZATION_LINE_LENGTH,
+  
+  // Async tokenization (VSCode experimental feature)
+  'experimental.asyncTokenization': true,
+  'experimental.asyncTokenizationLogging': false,
+  'experimental.asyncTokenizationVerification': false,
+  
+  // Memory optimization settings
+  trimAutoWhitespace: true,
+  detectIndentation: false, // Disabled for performance in large files
+  
+  // Rendering optimizations
+  stopRenderingLineAfter: 10000, // Stop rendering extremely long lines
+  disableMonospaceOptimizations: false,
+  
+  // Language service optimizations
+  wordBasedSuggestions: 'currentDocument', // Limit to current document only
+  semanticHighlighting: false, // Disable for performance
+  
+  // Folding and bracket matching optimizations
+  foldingMaxRegions: 5000,
+  bracketPairColorization: false,
+  guides: {
+    bracketPairs: false,
+    bracketPairsHorizontal: false,
+    highlightActiveBracketPair: false,
+    indentation: false,
+    highlightActiveIndentation: false,
+  },
+  
+  // Minimap optimizations
+  minimap: {
+    enabled: false,
+    maxColumn: 120,
+    renderCharacters: false,
+    showSlider: 'mouseover',
+    scale: 1,
+  },
+  
+  // Scrolling optimizations
+  smoothScrolling: false,
+  cursorSmoothCaretAnimation: 'off',
+  
+  // IntelliSense optimizations
+  quickSuggestions: false,
+  suggestOnTriggerCharacters: false,
+  acceptSuggestionOnEnter: 'off',
+  tabCompletion: 'off',
+  wordWrap: 'off',
+  
+  // Code lens and hover optimizations
+  codeLens: false,
+  hover: {
+    enabled: false,
+    delay: 300,
+    sticky: false,
+  },
+  
+  // Link detection optimization
+  links: false,
+  
+  // Color decorator optimization
+  colorDecorators: false,
+  
+  // Render optimizations
+  renderLineHighlight: 'none',
+  renderWhitespace: 'none',
+  renderControlCharacters: false,
+  renderIndentGuides: false,
+  highlightActiveIndentGuide: false,
+  renderValidationDecorations: 'off',
+  
+  // Selection optimizations
+  selectionHighlight: false,
+  occurrencesHighlight: false,
+  
+  // Find/replace optimizations
+  find: {
+    seedSearchStringFromSelection: 'never',
+    autoFindInSelection: 'never',
+  },
+} as const;
+
+// Base editor options (when performance mode is OFF)
+export const baseEditorOptions: editor.IStandaloneEditorConstructionOptions = {
+  automaticLayout: true,
+  theme: 'gray-dark',
+  fontSize: 14,
+  fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+  lineHeight: 21,
+  letterSpacing: 0,
+  fontWeight: '400',
+  
+  // Line number configuration (stable to prevent jumping)
+  lineNumbers: 'on',
+  lineNumbersMinChars: 4,
+  lineDecorationsWidth: 12,
+  
+  // Basic editor features
+  wordWrap: 'off',
+  wrappingIndent: 'indent',
+  scrollBeyondLastLine: false,
+  scrollBeyondLastColumn: 5,
+  
+  // Cursor and selection
+  cursorBlinking: 'blink',
+  cursorSmoothCaretAnimation: 'off', // Always off to prevent layout shifts
+  cursorWidth: 2,
+  selectOnLineNumbers: true,
+  
+  // Basic rendering
+  renderLineHighlight: 'line',
+  renderWhitespace: 'selection',
+  renderControlCharacters: false,
+  // renderIndentGuides: true, // Deprecated - use guides.indentation instead
+  // highlightActiveIndentGuide: true, // Deprecated - use guides.highlightActiveIndentation instead
+  
+  // Minimap (enabled by default)
+  minimap: {
+    enabled: true,
+    side: 'right',
+    showSlider: 'mouseover',
+    renderCharacters: true,
+    maxColumn: 120,
+    scale: 1,
+  },
+  
+  // Scrollbars
+  scrollbar: {
+    vertical: 'auto',
+    horizontal: 'auto',
+    useShadows: false,
+    verticalHasArrows: false,
+    horizontalHasArrows: false,
+    verticalScrollbarSize: 14,
+    horizontalScrollbarSize: 14,
+  },
+  
+  // Language features
+  quickSuggestions: {
+    other: true,
+    comments: false,
+    strings: false,
+  },
+  suggestOnTriggerCharacters: true,
+  acceptSuggestionOnEnter: 'on',
+  tabCompletion: 'on',
+  wordBasedSuggestions: 'matchingDocuments',
+  
+  // Code lens and hover
+  codeLens: true,
+  hover: {
+    enabled: true,
+    delay: 300,
+    sticky: true,
+  },
+  
+  // Links and colors
+  links: true,
+  colorDecorators: true,
+  
+  // Selection and highlighting
+  selectionHighlight: true,
+  occurrencesHighlight: 'singleFile' as const,
+  
+  // Folding
+  folding: true,
+  foldingStrategy: 'auto',
+  foldingHighlight: true,
+  foldingImportsByDefault: false,
+  unfoldOnClickAfterEndOfLine: false,
+  showFoldingControls: 'mouseover',
+  
+  // Bracket matching and guides
+  matchBrackets: 'always',
+  bracketPairColorization: {
+    enabled: true,
+    independentColorPoolPerBracketType: false,
+  },
+  guides: {
+    bracketPairs: true,
+    bracketPairsHorizontal: true,
+    highlightActiveBracketPair: true,
+    indentation: true,
+    highlightActiveIndentation: true,
+  },
+  
+  // Find widget
+  find: {
+    cursorMoveOnType: true,
+    seedSearchStringFromSelection: 'always',
+    autoFindInSelection: 'never',
+    addExtraSpaceOnTop: true,
+    loop: true,
+  },
+  
+  // Performance settings (reasonable defaults)
+  largeFileOptimizations: true,
+  maxTokenizationLineLength: PERFORMANCE_THRESHOLDS.MAX_TOKENIZATION_LINE_LENGTH,
+  stopRenderingLineAfter: 10000,
+  
+  // Smooth scrolling and animations
+  smoothScrolling: false, // Disabled to prevent layout issues
+  mouseWheelScrollSensitivity: 1,
+  fastScrollSensitivity: 5,
+  
+  // Multi-cursor and editing
+  multiCursorModifier: 'ctrlCmd',
+  multiCursorMergeOverlapping: true,
+  multiCursorPaste: 'spread',
+  
+  // Accessibility
+  accessibilitySupport: 'auto',
+  ariaLabel: 'Editor content',
+  
+  // Context menu
+  contextmenu: true,
+  
+  // Drag and drop
+  dragAndDrop: true,
+  dropIntoEditor: {
+    enabled: true,
+  },
+  
+  // Sticky scroll
+  stickyScroll: {
+    enabled: false, // Can be resource intensive
+    maxLineCount: 5,
+  },
+  
+  // Experimental features (conservative defaults)
+  // 'experimental.asyncTokenization': false, // Not available in current Monaco version
+} as const;
+
+// Performance mode options (for large files)
+export const performanceEditorOptions: editor.IStandaloneEditorConstructionOptions = {
+  ...baseEditorOptions,
+  ...VSCodePerformanceConfig,
+  
+  // Override specific settings for maximum performance
+  fontSize: 13, // Slightly smaller for better performance
+  lineHeight: 19,
+  
+  // Disable resource-intensive features
+  minimap: { enabled: false },
+  occurrencesHighlight: 'off' as const,
+  selectionHighlight: false,
+  renderLineHighlight: 'none',
+  renderWhitespace: 'none',
+  renderControlCharacters: false,
+  // renderIndentGuides: false, // Deprecated - use guides.indentation instead
+  // highlightActiveIndentGuide: false, // Deprecated - use guides.highlightActiveIndentation instead
+  
+  // Disable language features
+  quickSuggestions: false,
+  suggestOnTriggerCharacters: false,
+  hover: { enabled: false },
+  codeLens: false,
+  links: false,
+  colorDecorators: false,
+  
+  // Disable folding for performance
+  folding: false,
+  showFoldingControls: 'never',
+  
+  // Disable bracket features
+  matchBrackets: 'never',
+  bracketPairColorization: { enabled: false },
+  guides: {
+    bracketPairs: false,
+    bracketPairsHorizontal: false,
+    highlightActiveBracketPair: false,
+    indentation: false,
+    highlightActiveIndentation: false,
+  },
+  
+  // Disable sticky scroll
+  stickyScroll: { enabled: false },
+  
+  // Performance tokenization
+  // 'experimental.asyncTokenization': true, // Not available in current Monaco version
+  stopRenderingLineAfter: 5000, // More aggressive limit
+  maxTokenizationLineLength: 10000, // More aggressive limit
 } as const; 
+
+// Function to determine if performance mode should be enabled
+export function shouldUsePerformanceMode(
+  fileSize?: number,
+  lineCount?: number,
+  content?: string
+): boolean {
+  if (fileSize && fileSize > PERFORMANCE_THRESHOLDS.LARGE_FILE_SIZE) {
+    return true;
+  }
+  
+  if (lineCount && lineCount > PERFORMANCE_THRESHOLDS.LARGE_FILE_LINE_COUNT) {
+    return true;
+  }
+  
+  if (content && content.length > PERFORMANCE_THRESHOLDS.LARGE_FILE_CHAR_COUNT) {
+    return true;
+  }
+  
+  return false;
+}
+
+// Function to get appropriate editor options based on performance needs
+export function getEditorOptions(
+  performanceMode: boolean,
+  overrides: Partial<editor.IStandaloneEditorConstructionOptions> = {}
+): editor.IStandaloneEditorConstructionOptions {
+  const baseOptions = performanceMode ? performanceEditorOptions : baseEditorOptions;
+  
+  return {
+    ...baseOptions,
+    ...overrides,
+  };
+}
+
+// Export individual configurations for backwards compatibility
+export const editorOptions = baseEditorOptions; 

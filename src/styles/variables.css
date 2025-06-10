@@ -27,6 +27,10 @@
   --vscode-border: rgba(75, 85, 99, 0.3);
   --vscode-accent: #007ACC;
   
+  /* Editor specific variables */
+  --vscode-editor: #3a3a3a;
+  --bg-primary: #3a3a3a;
+  
   /* Professional Typography */
   --vscode-font-family: 'Fira Code', 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
   --vscode-font-size: 13px;

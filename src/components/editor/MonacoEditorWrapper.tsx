@@ -3,12 +3,17 @@
 
 import { useCallback, useRef, useEffect, useMemo, useState, forwardRef, useImperativeHandle } from 'react';
 import Editor from '@monaco-editor/react';
-import { EDITOR_OPTIONS } from '../../constants/editorConfig';
 import { getLanguageFromExtension } from '../../utils/editorUtils';
 import { useMonacoAIAssistant } from './hooks/useMonacoAIAssistant';
 import type { PerformanceConfig } from './usePerformanceConfig';
 import type { EditorFile } from './useFileCache';
 import React from 'react';
+import { 
+  shouldUsePerformanceMode, 
+  getEditorOptions, 
+  PERFORMANCE_THRESHOLDS
+} from '../../constants/editorConfig';
+import { registerCustomThemes, THEME_NAMES } from '../../constants/monacoThemes';
 
 interface MonacoEditorWrapperProps {
   selectedFile: EditorFile | null;
@@ -92,7 +97,7 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
   onContentChange,
   onSave,
   onAskAI,
-  theme = 'vs-dark',
+  theme = THEME_NAMES.GRAY_DARK,
   fontSize = 14,
   readOnly = false,
   minimap = true,
@@ -107,9 +112,34 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
   const mountTimeoutRef = useRef<number>();
   
   // Cool UI state - simplified to prevent typing issues
-  const [isEditorMounted, setIsEditorMounted] = useState(false);
   const [monacoError, setMonacoError] = useState<string | null>(null);
 
+  // Performance configuration based on VSCode standards
+  const performanceConfig = useMemo(() => {
+    const lineCount = fileContent ? fileContent.split('\n').length : 0;
+    const charCount = fileContent ? fileContent.length : 0;
+    const estimatedFileSize = charCount * 2; // Rough estimate (UTF-16)
+    
+    // Use VSCode's performance detection algorithm
+    const performanceMode = shouldUsePerformanceMode(
+      estimatedFileSize,
+      lineCount,
+      fileContent
+    );
+    
+    return {
+      performanceMode,
+      lineCount,
+      charCount,
+      estimatedFileSize,
+      // Performance indicators
+      isLargeFile: estimatedFileSize > PERFORMANCE_THRESHOLDS.LARGE_FILE_SIZE,
+      isLongFile: lineCount > PERFORMANCE_THRESHOLDS.LARGE_FILE_LINE_COUNT,
+      hasLongLines: fileContent ? fileContent.split('\n').some(line => 
+        line.length > PERFORMANCE_THRESHOLDS.MAX_TOKENIZATION_LINE_LENGTH
+      ) : false,
+    };
+  }, [fileContent]);
 
   // Get file language with fallback
   const language = useMemo(() => {
@@ -196,7 +226,6 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
         
         // Clear the reference
         editorRef.current = null;
-        setIsEditorMounted(false);
         
         console.log('✅ Monaco Editor disposed successfully');
       } catch (error) {
@@ -262,8 +291,6 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
     isEditorReadyRef.current = true;
     isDisposedRef.current = false;
     
-    // Set mounted immediately to prevent layout shifts
-    setIsEditorMounted(true);
     console.log('✅ Monaco Editor mounted and ready');
 
     // Enhanced keyboard shortcuts with visual feedback
@@ -331,149 +358,26 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
 
   }, [onSave, onAskAI, performanceMode, toggleAIEnabled, aiAssistantEnabled]);
 
-
-
-  // Enhanced editor configuration with instant startup optimizations
+  // Enhanced editor configuration with VSCode-based optimizations
   const editorOptions = useMemo(() => {
-    // Stable configuration - no fast startup mode to prevent layout shifts
-    const baseOptions = {
-      ...EDITOR_OPTIONS,
+    // Get base options based on performance mode
+    const baseOptions = getEditorOptions(performanceConfig.performanceMode, {
       fontSize,
       readOnly,
       theme,
-      minimap: { enabled: minimap && !performanceMode },
-      
-      // Stable layout options to prevent shifting
-      scrollBeyondLastLine: false,
-      renderWhitespace: performanceMode ? 'none' : 'selection',
-      renderLineHighlight: performanceMode ? 'none' : 'line',
-      cursorBlinking: performanceMode ? ('solid' as const) : ('blink' as const),
-      cursorSmoothCaretAnimation: 'off' as const, // Always off to prevent layout shifts
-      smoothScrolling: false, // Always off to prevent layout shifts
-      renderValidationDecorations: performanceMode ? 'off' as const : 'on' as const,
-      
-      // Consistent line number configuration to prevent jumping
-      lineNumbers: 'on' as const,
-      lineNumbersMinChars: 4, // Increased to handle more digits consistently
-      lineDecorationsWidth: 12, // Slightly larger for stability
-      
-      // Enhanced editing features
-      acceptSuggestionOnCommitCharacter: true,
-      acceptSuggestionOnEnter: 'on',
-      accessibilitySupport: 'auto' as const,
-      autoIndent: 'full',
-      automaticLayout: true,
-      codeLens: !performanceMode,
-      colorDecorators: !performanceMode,
-      contextmenu: true,
-      copyWithSyntaxHighlighting: true,
-      cursorStyle: 'line' as const,
-      cursorWidth: 2,
-      disableLayerHinting: performanceMode,
-      disableMonospaceOptimizations: false,
-      dragAndDrop: true,
-      emptySelectionClipboard: false,
-      extraEditorClassName: '',
-      fastScrollSensitivity: 5,
-      find: {
-        cursorMoveOnFindWidget: true,
-        seedSearchStringFromSelection: 'always' as const,
-        autoFindInSelection: 'never' as const,
-        addExtraSpaceOnTop: true,
-        loop: true,
+      // Override minimap based on performance and user preference
+      minimap: { 
+        enabled: minimap && !performanceConfig.performanceMode,
+        side: 'right',
+        showSlider: 'mouseover',
+        renderCharacters: !performanceConfig.performanceMode,
+        maxColumn: 120,
+        scale: 1,
       },
-      folding: !performanceMode,
-      foldingHighlight: !performanceMode,
-      foldingImportsByDefault: false,
-      fontLigatures: !performanceMode,
-      formatOnPaste: true,
-      formatOnType: !performanceMode,
-      glyphMargin: true,
-      hideCursorInOverviewRuler: false,
-      highlightActiveIndentGuide: !performanceMode,
-      hover: {
-        enabled: !performanceMode,
-        delay: performanceMode ? 1000 : 300,
-        sticky: true,
-      },
-      links: true,
-      matchBrackets: performanceMode ? 'never' : 'always',
-      mouseWheelScrollSensitivity: 1,
-      mouseWheelZoom: false,
-      multiCursorMergeOverlapping: true,
-      multiCursorModifier: 'alt' as const,
-      overviewRulerBorder: true,
-      overviewRulerLanes: performanceMode ? 2 : 3,
-      padding: { top: 8, bottom: 8 }, // Consistent padding
-      parameterHints: { enabled: !performanceMode },
-      quickSuggestions: !performanceMode,
-      quickSuggestionsDelay: performanceMode ? 1000 : 500,
-      renderControlCharacters: false,
-      renderFinalNewline: 'on' as const,
-      renderIndentGuides: !performanceMode,
-      rulers: [],
-      scrollbar: {
-        useShadows: !performanceMode,
-        verticalHasArrows: false,
-        horizontalHasArrows: false,
-        vertical: 'visible' as const,
-        horizontal: 'visible' as const,
-        verticalScrollbarSize: 14,
-        horizontalScrollbarSize: 12,
-        arrowSize: 11,
-      },
-      selectOnLineNumbers: true,
-      selectionClipboard: false,
-      selectionHighlight: !performanceMode,
-      showFoldingControls: performanceMode ? 'never' : 'mouseover',
-      showUnused: !performanceMode,
-      snippetSuggestions: performanceMode ? 'none' : 'top',
-      suggestOnTriggerCharacters: !performanceMode,
-      suggestSelection: 'first',
-      tabCompletion: 'off',
-      tabSize: 2,
-      unusualLineTerminators: 'prompt' as const,
-      useTabStops: true,
-      wordWrap: 'off' as const,
-      wordWrapBreakAfterCharacters: '\t})]?|/&.,;¢°¹²³£§€¥₹№…',
-      wordWrapBreakBeforeCharacters: '([{\'"〈《「『【〔（［｛｢£¥＄￡￥',
-      wrappingIndent: 'none' as const,
-      wrappingStrategy: 'simple' as const,
-    };
-
-    // Large file optimizations
-    if (selectedFile && fileContent.length > 100000) {
-      return {
-        ...baseOptions,
-        minimap: { enabled: false },
-        folding: false,
-        wordWrap: 'off' as const,
-        renderWhitespace: 'none',
-        renderLineHighlight: 'none',
-        cursorBlinking: 'solid' as const,
-        cursorSmoothCaretAnimation: 'off' as const,
-        smoothScrolling: false,
-        quickSuggestions: false,
-        parameterHints: { enabled: false },
-        hover: { enabled: false },
-        codeLens: false,
-        colorDecorators: false,
-        renderValidationDecorations: 'off' as const,
-        matchBrackets: 'never',
-        showUnused: false,
-        selectionHighlight: false,
-        occurrencesHighlight: false,
-        renderIndentGuides: false,
-        foldingHighlight: false,
-        fontLigatures: false,
-        formatOnType: false,
-        snippetSuggestions: 'none',
-        suggestOnTriggerCharacters: false,
-      };
-    }
+    });
 
     return baseOptions;
-  }, [fontSize, readOnly, theme, minimap, performanceMode, selectedFile, fileContent.length]);
+  }, [fontSize, readOnly, theme, minimap, performanceConfig.performanceMode]);
 
   // Monaco error handler - must be defined before use
   const handleMonacoError = useCallback((error: any) => {
@@ -499,6 +403,12 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
     }
     
     try {
+      // Register custom themes first
+      registerCustomThemes(monaco);
+      
+      // Apply the gray-dark theme explicitly
+      monaco.editor.setTheme('gray-dark');
+      
       // Ensure editor is fully initialized before proceeding
       const model = editor.getModel();
       if (!model || typeof model.getValue !== 'function') {
@@ -530,8 +440,6 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
       isEditorReadyRef.current = true;
       isDisposedRef.current = false;
       
-      // Set mounted immediately to prevent layout shifts
-      setIsEditorMounted(true);
       console.log('✅ Monaco Editor mounted and ready');
       
       // NO delayed feature enabling to prevent layout shifts
@@ -550,7 +458,6 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
   useEffect(() => {
     isDisposedRef.current = false;
     isEditorReadyRef.current = false; // Reset ready state
-    setIsEditorMounted(false); // Reset mount state for new file
     lastContentRef.current = fileContent;
     
     return () => {
@@ -564,7 +471,6 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
   // Handle Monaco errors gracefully
   const handleMonacoErrorBoundary = useCallback((error: Error) => {
     console.error('🚨 Monaco Error Boundary triggered:', error);
-    setIsEditorMounted(false);
     isEditorReadyRef.current = false;
     editorRef.current = null;
     handleMonacoError(error);
@@ -604,67 +510,67 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
   }
 
   return (
-    <div className="h-full w-full relative overflow-hidden">
-      {/* Minimal Status Indicators */}
-      <div className="monaco-editor-status">
-        {/* Performance Mode Indicator */}
-        {performanceMode && (
-          <div className="status-indicator">
-            ⚡ Performance
+    <div className="monaco-editor-container h-full">
+      {/* Performance mode indicator */}
+      {performanceConfig.performanceMode && (
+        <div className="performance-mode-indicator">
+          <span className="performance-badge">⚡ Performance Mode</span>
+          <span className="performance-details">
+            {performanceConfig.isLargeFile && "Large file"} 
+            {performanceConfig.isLongFile && "Long file"} 
+            {performanceConfig.hasLongLines && "Long lines"}
+          </span>
+        </div>
+      )}
+      
+      {/* VSCode-style file size warning */}
+      {performanceConfig.isLargeFile && (
+        <div className="large-file-warning">
+          <span className="warning-badge">
+            ⚠️ Large file ({Math.round(performanceConfig.estimatedFileSize / 1024 / 1024)}MB) - Some features disabled for performance
+          </span>
+        </div>
+      )}
+
+      <MonacoErrorBoundary onError={handleMonacoErrorBoundary}>
+        <Editor
+          key={selectedFile.path} // Force remount when file changes - this prevents race conditions
+          height="100%"
+          language={language}
+          value={fileContent || ''}
+          onChange={handleContentChange}
+          onMount={handleEditorMount}
+          onValidate={handleEditorValidation}
+          options={editorOptions}
+          loading={
+            <div className="monaco-loading">
+              <div className="loading-spinner"></div>
+              <span>Loading editor...</span>
+            </div>
+          }
+        />
+      </MonacoErrorBoundary>
+
+      {/* Performance status indicator */}
+      <div className="editor-status-bar">
+        {performanceConfig.performanceMode && (
+          <div className="status-item performance">
+            <span className="status-icon">⚡</span>
+            <span className="status-text">Performance Mode</span>
           </div>
         )}
         
-        {/* Large File Warning */}
-        {fileContent.length > 100000 && (
-          <div className="status-indicator">
-            📁 {Math.round(fileContent.length / 1024)}KB
+        <div className="status-item file-info">
+          <span className="status-text">
+            {performanceConfig.lineCount} lines, {Math.round(performanceConfig.charCount / 1024)}KB
+          </span>
+        </div>
+
+        {language && (
+          <div className="status-item language">
+            <span className="status-text">{language.toUpperCase()}</span>
           </div>
         )}
-      </div>
-      
-      {/* Clean Editor Container */}
-      <div className="h-full w-full">
-        <MonacoErrorBoundary onError={handleMonacoErrorBoundary}>
-          <Editor
-            key={selectedFile.path}
-            height="100%"
-            language={language}
-            value={fileContent || ''}
-            onChange={handleContentChange}
-            onMount={handleEditorMount}
-            onValidate={handleEditorValidation}
-            options={editorOptions}
-            theme={theme}
-            loading={
-              <div className="h-full bg-vscode-editor flex items-center justify-center">
-                <div className="text-vscode-fg-muted text-sm">Loading Editor...</div>
-              </div>
-            }
-            beforeMount={(monaco) => {
-              try {
-                if (!monaco) {
-                  console.error('❌ Monaco object is null in beforeMount');
-                  handleMonacoError(new Error('Monaco object is null'));
-                  return null;
-                }
-                
-                console.log('🚀 Monaco Editor before mount for:', selectedFile.path);
-                
-                if (!monaco.editor || !monaco.languages) {
-                  console.error('❌ Monaco editor or languages not available');
-                  handleMonacoError(new Error('Monaco not fully loaded'));
-                  return null;
-                }
-                
-                return monaco;
-              } catch (error) {
-                console.error('❌ Monaco before mount error:', error);
-                handleMonacoError(error);
-                return null;
-              }
-            }}
-          />
-        </MonacoErrorBoundary>
       </div>
 
       {/* AI Assistant Component */}
