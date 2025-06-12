@@ -32,6 +32,7 @@ fn main() {
             core::commands::set_user_preference,
             core::commands::read_file_smart,
             core::commands::save_file,
+            core::commands::write_file,
             core::commands::create_file,
             core::commands::copy_file,
             core::commands::move_file,

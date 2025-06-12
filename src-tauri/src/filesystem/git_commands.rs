@@ -234,9 +234,6 @@ pub async fn git_unstage_file(repository_path: String, file_path: String) -> App
     let head_commit = head.peel_to_commit()
         .map_err(|e| AppError::git_error("COMMIT_ERROR", &format!("Failed to get commit: {}", e)))?;
     
-    let head_tree = head_commit.tree()
-        .map_err(|e| AppError::git_error("TREE_ERROR", &format!("Failed to get tree: {}", e)))?;
-    
     // Convert absolute path to relative path if needed
     let relative_path = if file_path.starts_with(&repository_path) {
         file_path.strip_prefix(&repository_path)

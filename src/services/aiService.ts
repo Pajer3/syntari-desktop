@@ -31,9 +31,13 @@ class AIService {
    */
   async loadProviders(): Promise<AIProvider[]> {
     try {
-      const providersData = await invoke<any[]>('get_ai_providers');
+      const result = await invoke<{success: boolean; data?: any[]; error?: string}>('get_ai_providers');
       
-      this.providers = providersData.map(provider => ({
+      if (!result.success || !result.data) {
+        throw new Error(result.error || 'Failed to get AI providers from backend');
+      }
+      
+      this.providers = result.data.map(provider => ({
         id: provider.id,
         name: provider.name,
         model: provider.model,
@@ -72,7 +76,7 @@ class AIService {
       }
 
       // Call Tauri backend
-      const response = await invoke<any>('generate_ai_response', {
+      const result = await invoke<{success: boolean; data?: any; error?: string}>('generate_ai_response', {
         prompt: request.prompt,
         provider: providerId,
         model: request.model || provider.model,
@@ -80,6 +84,12 @@ class AIService {
         maxTokens: request.maxTokens || provider.maxTokens,
         stream: request.stream || false,
       });
+      
+      if (!result.success || !result.data) {
+        throw new Error(result.error || 'Failed to generate AI response');
+      }
+      
+      const response = result.data;
 
       const endTime = Date.now();
       const latency = endTime - startTime;
@@ -103,7 +113,8 @@ class AIService {
   }
 
   /**
-   * Generate streaming AI response
+   * Generate streaming AI response (fallback to regular response)
+   * Note: Backend streaming is not yet implemented, falling back to regular response
    */
   async generateStreamingResponse(
     request: AIRequest,
@@ -112,53 +123,24 @@ class AIService {
     onError: (error: ServiceError) => void
   ): Promise<void> {
     try {
-      const startTime = Date.now();
+      // Fallback: Use regular response and simulate streaming
+      const response = await this.generateResponse(request);
       
-      const providerId = request.provider || this.selectedProviderId;
-      if (!providerId) {
-        onError(this.handleError('NO_PROVIDER_SELECTED', 'No AI provider selected'));
-        return;
+      // Simulate streaming by chunking the response
+      const content = response.content;
+      const chunkSize = Math.max(1, Math.floor(content.length / 10)); // 10 chunks
+      
+      for (let i = 0; i < content.length; i += chunkSize) {
+        const chunk = content.slice(i, i + chunkSize);
+        onChunk(chunk);
+        
+        // Small delay to simulate streaming
+        await new Promise(resolve => setTimeout(resolve, 50));
       }
-
-      const provider = this.providers.find(p => p.id === providerId);
-      if (!provider) {
-        onError(this.handleError('PROVIDER_NOT_FOUND', `Provider ${providerId} not found`));
-        return;
-      }
-
-      // Call Tauri backend with streaming
-      await invoke('generate_ai_response', {
-        prompt: request.prompt,
-        provider: providerId,
-        model: request.model || provider.model,
-        temperature: request.temperature || 0.7,
-        maxTokens: request.maxTokens || provider.maxTokens,
-        stream: true,
-        onChunk: (chunk: string) => {
-          onChunk(chunk);
-        },
-        onComplete: (response: any) => {
-          const endTime = Date.now();
-          const latency = endTime - startTime;
-
-          const aiResponse: AIResponse = {
-            content: response.content,
-            provider: response.provider || providerId,
-            model: response.model || provider.model,
-            tokensUsed: response.tokens_used || 0,
-            cost: response.cost || 0,
-            latency,
-          };
-
-          this.addToCostHistory(aiResponse.cost);
-          onComplete(aiResponse);
-        },
-        onError: (error: any) => {
-          onError(this.handleError('STREAMING_FAILED', 'Streaming response failed', error));
-        }
-      });
+      
+      onComplete(response);
     } catch (error) {
-      onError(this.handleError('GENERATE_STREAMING_FAILED', 'Failed to start streaming response', error));
+      onError(this.handleError('GENERATE_STREAMING_FAILED', 'Failed to generate streaming response', error));
     }
   }
 

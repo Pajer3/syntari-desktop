@@ -3,7 +3,7 @@
 
 import { useCallback, useRef, useEffect, useMemo, useState, forwardRef, useImperativeHandle } from 'react';
 import Editor from '@monaco-editor/react';
-import { getLanguageFromExtension } from '../../utils/editorUtils';
+import { getLanguageFromExtension } from '../../services/languageService';
 import { useMonacoAIAssistant } from './hooks/useMonacoAIAssistant';
 import type { PerformanceConfig } from './usePerformanceConfig';
 import type { EditorFile } from './useFileCache';

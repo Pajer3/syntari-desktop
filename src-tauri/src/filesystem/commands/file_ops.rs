@@ -1,7 +1,7 @@
 // Syntari AI IDE - File Operations Commands
 // Basic file I/O operations with VS Code-style safety guards
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 // Removed unused imports - std::fs and GitignoreBuilder
 use crate::core::TauriResult;
 use tauri::Emitter;
@@ -10,6 +10,55 @@ use tauri::Emitter;
 const MAX_EDITOR_FILE_SIZE: u64 = 64 * 1024 * 1024; // 64MB - refuse to tokenize
 const MAX_SAFE_FILE_SIZE: u64 = 256 * 1024 * 1024;  // 256MB - hex mode only
 const LARGE_FILE_WARNING: u64 = 1024 * 1024;        // 1MB - show warning
+
+/// Security: Validate and sanitize file paths to prevent traversal attacks
+fn validate_path_security(path: &str) -> Result<PathBuf, String> {
+    let path = Path::new(path);
+    
+    // Reject obvious path traversal attempts
+    if path.to_string_lossy().contains("..") {
+        return Err("Path traversal not allowed: contains '..'".to_string());
+    }
+    
+    // Canonicalize the path to resolve any remaining traversal attempts
+    let canonical_path = match path.canonicalize() {
+        Ok(p) => p,
+        Err(_) => {
+            // If canonicalize fails, it might be because file doesn't exist yet
+            // Try canonicalizing the parent directory and append the filename
+            match path.parent() {
+                Some(parent) => {
+                    match parent.canonicalize() {
+                        Ok(canonical_parent) => {
+                            if let Some(filename) = path.file_name() {
+                                canonical_parent.join(filename)
+                            } else {
+                                return Err("Invalid file path".to_string());
+                            }
+                        }
+                        Err(_) => return Err("Parent directory is not accessible".to_string()),
+                    }
+                }
+                None => return Err("Invalid file path: no parent directory".to_string()),
+            }
+        }
+    };
+    
+    // Additional security: Ensure path is within reasonable bounds
+    // (This could be enhanced to check against project root/allowed directories)
+    let path_str = canonical_path.to_string_lossy();
+    
+    // Block access to sensitive system directories
+    if path_str.contains("/etc/") || 
+       path_str.contains("/proc/") || 
+       path_str.contains("/sys/") ||
+       path_str.contains("C:\\Windows\\") ||
+       path_str.contains("C:\\System32\\") {
+        return Err("Access to system directories is not allowed".to_string());
+    }
+    
+    Ok(canonical_path)
+}
 
 #[derive(serde::Serialize)]
 pub struct FileReadResult {
@@ -25,7 +74,13 @@ pub struct FileReadResult {
 // MOVED TO CORE: Duplicate command moved to core/commands.rs
 // #[tauri::command]
 pub async fn read_file_smart_impl(path: String) -> std::result::Result<TauriResult<FileReadResult>, String> {
-    let path = Path::new(&path);
+    // Security: Validate path first
+    let secure_path = match validate_path_security(&path) {
+        Ok(p) => p,
+        Err(e) => return Ok(TauriResult::error(format!("Security validation failed: {}", e))),
+    };
+    
+    let path = secure_path.as_path();
     
     // Get file metadata first (don't read content yet)
     let metadata = match std::fs::metadata(&path) {
@@ -128,7 +183,13 @@ pub async fn read_file(path: String) -> std::result::Result<TauriResult<String>,
 // MOVED TO CORE: Duplicate command moved to core/commands.rs
 // #[tauri::command]
 pub async fn save_file_impl(path: String, content: String) -> std::result::Result<TauriResult<String>, String> {
-    match std::fs::write(&path, content) {
+    // Security: Validate path first
+    let secure_path = match validate_path_security(&path) {
+        Ok(p) => p,
+        Err(e) => return Ok(TauriResult::error(format!("Security validation failed: {}", e))),
+    };
+    
+    match std::fs::write(&secure_path, content) {
         Ok(_) => Ok(TauriResult::success("File saved successfully".to_string())),
         Err(e) => Ok(TauriResult::error(format!("Failed to save file: {}", e))),
     }
@@ -139,11 +200,16 @@ pub async fn save_file_impl(path: String, content: String) -> std::result::Resul
 // #[tauri::command]
 pub async fn create_file_impl(path: String, content: Option<String>) -> Result<String, String> {
     use std::fs;
-    use std::path::Path;
     
     tracing::info!("Creating file: {}", path);
     
-    let file_path = Path::new(&path);
+    // Security: Validate path first
+    let secure_path = match validate_path_security(&path) {
+        Ok(p) => p,
+        Err(e) => return Err(format!("Security validation failed: {}", e)),
+    };
+    
+    let file_path = secure_path.as_path();
     
     if file_path.exists() {
         return Err(format!("File already exists: {}", path));
@@ -184,11 +250,16 @@ pub async fn delete_file(
     force: Option<bool>
 ) -> Result<String, String> {
     use std::fs;
-    use std::path::Path;
     
     tracing::info!("Deleting file: {} (force: {:?})", path, force);
     
-    let file_path = Path::new(&path);
+    // Security: Validate path first
+    let secure_path = match validate_path_security(&path) {
+        Ok(p) => p,
+        Err(e) => return Err(format!("Security validation failed: {}", e)),
+    };
+    
+    let file_path = secure_path.as_path();
     
     if !file_path.exists() {
         return Err(format!("File or directory does not exist: {}", path));

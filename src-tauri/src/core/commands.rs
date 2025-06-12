@@ -88,6 +88,13 @@ pub async fn save_file(path: String, content: String) -> std::result::Result<Tau
 }
 
 #[tauri::command]
+pub async fn write_file(path: String, content: String) -> std::result::Result<TauriResult<String>, String> {
+    // Frontend calls: invoke('write_file', { path: filePath, content: content })
+    // This is essentially identical to save_file - providing alias for compatibility
+    crate::filesystem::commands::file_ops::save_file_impl(path, content).await
+}
+
+#[tauri::command]
 pub async fn create_file(path: String, content: Option<String>) -> std::result::Result<String, String> {
     crate::filesystem::commands::file_ops::create_file_impl(path, content).await
 }

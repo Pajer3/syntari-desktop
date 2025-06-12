@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
 use notify::RecursiveMode;
 use notify_debouncer_mini::{new_debouncer, DebounceEventResult, DebouncedEvent};
@@ -332,8 +333,8 @@ impl FileSystemWatcher {
         app_handle: &AppHandle, 
         root_path: &Path
     ) {
-        static mut EVENT_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-        static mut LAST_LOG_TIME: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        static EVENT_COUNTER: AtomicUsize = AtomicUsize::new(0);
+        static LAST_LOG_TIME: AtomicU64 = AtomicU64::new(0);
         
         match result {
             Ok(events) => {
@@ -342,21 +343,15 @@ impl FileSystemWatcher {
                     .unwrap_or_default()
                     .as_secs();
                 
-                let event_count = unsafe { 
-                    EVENT_COUNTER.fetch_add(events.len(), std::sync::atomic::Ordering::Relaxed) 
-                };
+                let event_count = EVENT_COUNTER.fetch_add(events.len(), Ordering::Relaxed);
                 
-                let last_log = unsafe { 
-                    LAST_LOG_TIME.load(std::sync::atomic::Ordering::Relaxed) 
-                };
+                let last_log = LAST_LOG_TIME.load(Ordering::Relaxed);
                 
                 // Only log every 5 seconds to prevent spam
                 let should_log = current_time - last_log > 5;
                 
                 if should_log {
-                    unsafe {
-                        LAST_LOG_TIME.store(current_time, std::sync::atomic::Ordering::Relaxed);
-                    }
+                    LAST_LOG_TIME.store(current_time, Ordering::Relaxed);
                     
                     // Check if this is a problematic directory
                     let path_str = root_path.to_string_lossy();

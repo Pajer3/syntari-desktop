@@ -69,9 +69,6 @@ walkdir = "2.5.0"
 # Git integration
 git2 = { version = "0.20.2", optional = true }
 
-# Unix process management (for non-Windows platforms)
-nix = { version = "0.28", features = ["signal"] }
-
 # Unix process management (for non-Windows platforms) - only on Unix-like systems
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 nix = { version = "0.28", features = ["signal"] }

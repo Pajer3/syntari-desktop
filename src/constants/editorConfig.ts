@@ -296,71 +296,24 @@ export const LARGE_FILE_EDITOR_OPTIONS = {
   fastScrollSensitivity: 10,
 } as const;
 
-// Language mappings for file extensions
-export const LANGUAGE_MAP: Record<string, string> = {
-  '.js': 'javascript',
-  '.jsx': 'javascriptreact',
-  '.ts': 'typescript',
-  '.tsx': 'typescriptreact',
-  '.rs': 'rust',
-  '.py': 'python',
-  '.md': 'markdown',
-  '.json': 'json',
-  '.html': 'html',
-  '.css': 'css',
-  '.scss': 'scss',
-  '.sass': 'sass',
-  '.less': 'less',
-  '.xml': 'xml',
-  '.yaml': 'yaml',
-  '.yml': 'yaml',
-  '.toml': 'toml',
-  '.ini': 'ini',
-  '.sh': 'shell',
-  '.bash': 'shell',
-  '.zsh': 'shell',
-  '.fish': 'shell',
-  '.ps1': 'powershell',
-  '.psm1': 'powershell',
-  '.psd1': 'powershell',
-  '.sql': 'sql',
-  '.go': 'go',
-  '.java': 'java',
-  '.kt': 'kotlin',
-  '.swift': 'swift',
-  '.c': 'c',
-  '.cpp': 'cpp',
-  '.cxx': 'cpp',
-  '.cc': 'cpp',
-  '.h': 'c',
-  '.hpp': 'cpp',
-  '.hxx': 'cpp',
-  '.cs': 'csharp',
-  '.php': 'php',
-  '.rb': 'ruby',
-  '.lua': 'lua',
-  '.dart': 'dart',
-  '.r': 'r',
-  '.jl': 'julia',
-  '.scala': 'scala',
-  '.clj': 'clojure',
-  '.elm': 'elm',
-  '.ex': 'elixir',
-  '.exs': 'elixir',
-  '.erl': 'erlang',
-  '.hrl': 'erlang',
-  '.fs': 'fsharp',
-  '.fsx': 'fsharp',
-  '.ml': 'ocaml',
-  '.mli': 'ocaml',
-  '.hs': 'haskell',
-  '.lhs': 'haskell',
-  '.dockerfile': 'dockerfile',
-  '.Dockerfile': 'dockerfile',
-  '.tex': 'latex',
-  '.vue': 'vue',
-  '.svelte': 'svelte',
+// Language mappings are now handled by the LanguageService
+// This maintains compatibility while centralizing language management
+import { languageService } from '../services/languageService';
+
+export const LANGUAGE_MAP: Record<string, string> = {};
+
+// Initialize language map from language service
+export const initializeLanguageMap = () => {
+  const supportedLanguages = languageService.getAllLanguages();
+  supportedLanguages.forEach(lang => {
+    lang.extensions.forEach(ext => {
+      LANGUAGE_MAP[ext] = lang.id;
+    });
+  });
 };
+
+// Initialize on import
+initializeLanguageMap();
 
 // Professional file icons that match VSCode
 export const FILE_ICONS: Record<string, string> = {

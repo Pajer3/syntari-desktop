@@ -133,7 +133,7 @@ pub async fn list_directory(path: String) -> Result<Vec<String>, String> {
 
 /// Kill a running process (for command cancellation)
 #[command]
-pub async fn kill_process(_pid: u32) -> Result<(), String> {
+pub async fn kill_process(pid: u32) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         use std::process::Command;
@@ -150,10 +150,15 @@ pub async fn kill_process(_pid: u32) -> Result<(), String> {
     
     #[cfg(not(target_os = "windows"))]
     {
-        // For now, just return an error since nix is not available
-        // TODO: Add nix dependency or implement alternative solution
-        return Err(format!("Process termination not implemented for Unix platforms"));
+        use nix::sys::signal::{self, Signal};
+        use nix::unistd::Pid;
+        
+        let pid = Pid::from_raw(pid as i32);
+        signal::kill(pid, Signal::SIGTERM)
+            .map_err(|e| format!("Failed to kill process: {}", e))?;
     }
+    
+    Ok(())
 }
 
 /// Get system information
