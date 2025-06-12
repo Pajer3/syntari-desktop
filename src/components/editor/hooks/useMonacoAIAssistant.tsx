@@ -81,9 +81,17 @@ export const useMonacoAIAssistant = (
   const getCurrentContext = useCallback(() => {
     if (!editor) return null;
 
-    const model = editor.getModel();
-    const position = editor.getPosition();
-    if (!model || !position) return null;
+    // Add additional safety checks
+    try {
+      const model = editor.getModel();
+      const position = editor.getPosition();
+      if (!model || !position) return null;
+      
+      // Verify model is actually usable
+      if (typeof model.getLineContent !== 'function' || typeof model.getValue !== 'function') {
+        console.warn('⚠️ Editor model not fully initialized');
+        return null;
+      }
 
     const currentLine = model.getLineContent(position.lineNumber);
     const currentWord = model.getWordAtPosition(position);
@@ -99,16 +107,20 @@ export const useMonacoAIAssistant = (
       endColumn: model.getLineMaxColumn(endLine)
     });
 
-    return {
-      language,
-      currentLine,
-      currentWord: currentWord?.word || '',
-      position,
-      selection: selection ? model.getValueInRange(selection) : '',
-      surroundingText,
-      fullContent: model.getValue(),
-      fileName: model.uri?.path || 'untitled'
-    };
+      return {
+        language,
+        currentLine,
+        currentWord: currentWord?.word || '',
+        position,
+        selection: selection ? model.getValueInRange(selection) : '',
+        surroundingText,
+        fullContent: model.getValue(),
+        fileName: model.uri?.path || 'untitled'
+      };
+    } catch (error) {
+      console.warn('⚠️ Error getting editor context:', error);
+      return null;
+    }
   }, [editor, language]);
 
   // Request AI suggestions
@@ -147,9 +159,16 @@ export const useMonacoAIAssistant = (
     const suggestion = state.suggestions.find(s => s.id === suggestionId);
     if (!suggestion || !suggestion.code) return;
 
-    const model = editor.getModel();
-    const position = editor.getPosition();
-    if (!model || !position) return;
+    try {
+      const model = editor.getModel();
+      const position = editor.getPosition();
+      if (!model || !position) return;
+      
+      // Verify model is usable before attempting operations
+      if (typeof model.getLineContent !== 'function') {
+        console.warn('⚠️ Editor model not ready for suggestion application');
+        return;
+      }
 
     // Apply the suggestion
     if (suggestion.range) {
@@ -176,8 +195,12 @@ export const useMonacoAIAssistant = (
       }]);
     }
 
-    // Hide suggestions
-    setState(prev => ({ ...prev, showWidget: false, suggestions: [] }));
+      // Hide suggestions
+      setState(prev => ({ ...prev, showWidget: false, suggestions: [] }));
+    } catch (error) {
+      console.warn('⚠️ Error applying AI suggestion:', error);
+      setState(prev => ({ ...prev, showWidget: false, suggestions: [] }));
+    }
   }, [editor, state.suggestions]);
 
   // Dismiss suggestions
@@ -195,19 +218,27 @@ export const useMonacoAIAssistant = (
       }
 
       debounceTimeoutRef.current = window.setTimeout(() => {
-        const position = editor.getPosition();
-        if (!position) return;
+        try {
+          const position = editor.getPosition();
+          if (!position) return;
+          
+          // Verify editor model is available before proceeding
+          const model = editor.getModel();
+          if (!model) return;
 
-        // Only trigger if position actually changed significantly
-        const lastPos = lastPositionRef.current;
-        if (lastPos && 
-            Math.abs(lastPos.lineNumber - position.lineNumber) < 2 &&
-            Math.abs(lastPos.column - position.column) < 10) {
-          return;
+          // Only trigger if position actually changed significantly
+          const lastPos = lastPositionRef.current;
+          if (lastPos && 
+              Math.abs(lastPos.lineNumber - position.lineNumber) < 2 &&
+              Math.abs(lastPos.column - position.column) < 10) {
+            return;
+          }
+
+          lastPositionRef.current = position;
+          requestSuggestions();
+        } catch (error) {
+          console.warn('⚠️ Error in cursor change handler:', error);
         }
-
-        lastPositionRef.current = position;
-        requestSuggestions();
       }, 1000); // Debounce for 1 second
     };
 

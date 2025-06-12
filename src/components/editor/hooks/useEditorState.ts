@@ -50,8 +50,8 @@ export const useEditorState = (project: ProjectContext) => {
     lastAnalyzed: project?.lastAnalyzed || Date.now(),
   };
 
-  // Core editor state
-  const [editorState, setEditorState] = useState<EditorState>({
+  // Core editor state with lazy initialization to prevent reset on re-renders
+  const [editorState, setEditorState] = useState<EditorState>(() => ({
     fileTabs: [],
     activeTabIndex: -1,
     showSearchPanel: false,
@@ -65,19 +65,19 @@ export const useEditorState = (project: ProjectContext) => {
     fileExplorerKey: 0,
     isLoading: false,
     unsavedFileCounter: 1,
-  });
+  }));
 
-  // Dialog states
-  const [dialogStates, setDialogStates] = useState<DialogStates>({
+  // Dialog states with lazy initialization
+  const [dialogStates, setDialogStates] = useState<DialogStates>(() => ({
     saveAs: false,
     openFile: false,
     newFile: false,
     templateManager: false,
     unsavedChanges: { isOpen: false, tabIndex: -1, fileName: '' },
-  });
+  }));
 
-  // Other state
-  const [recentFilePaths, setRecentFilePaths] = useState<string[]>([]);
+  // Other state with lazy initialization
+  const [recentFilePaths, setRecentFilePaths] = useState<string[]>(() => []);
 
   // Refs for optimization
   const contentChangeTimeoutRef = useRef<number>();
@@ -95,7 +95,10 @@ export const useEditorState = (project: ProjectContext) => {
   }, []);
 
   const updateDialogStates = useCallback((updates: Partial<DialogStates>) => {
-    setDialogStates(prev => ({ ...prev, ...updates }));
+    setDialogStates(prev => {
+      const newState = { ...prev, ...updates };
+      return newState;
+    });
   }, []);
 
   // Computed values

@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { FileInfo } from '../../../types';
 import type { FileNode } from '../../../types/fileSystem';
 import type { EditorState, DialogStates } from './useEditorState';
@@ -27,6 +27,36 @@ export const useFileOperations = ({
 }: UseFileOperationsProps) => {
   const { fileTabs, activeTabIndex } = editorState;
   const activeTab = activeTabIndex >= 0 ? fileTabs[activeTabIndex] : null;
+
+  // Use ref to always access fresh state
+  const editorStateRef = useRef(editorState);
+  useEffect(() => {
+    editorStateRef.current = editorState;
+  }, [editorState]);
+
+  // Debug logging to track state synchronization
+  useEffect(() => {
+    console.log('📊 [DEBUG] useFileOperations state updated:', {
+      fileTabs: fileTabs.length,
+      activeTabIndex,
+      activeTab: activeTab ? {
+        path: activeTab.file.path,
+        name: activeTab.file.name,
+        isModified: activeTab.isModified
+      } : null,
+      tabPaths: fileTabs.map(tab => tab.file.path)
+    });
+  }, [fileTabs, activeTabIndex, activeTab]);
+
+  // Additional debugging for editorState parameter
+  useEffect(() => {
+    console.log('🔍 [DEBUG] editorState parameter changed:', {
+      fileTabs: editorState.fileTabs?.length || 0,
+      activeTabIndex: editorState.activeTabIndex,
+      hasFileTabs: !!editorState.fileTabs,
+      timestamp: Date.now()
+    });
+  }, [editorState]);
 
   // Custom hooks for file operations
   const fileCache = useFileCache();
@@ -161,35 +191,63 @@ export const useFileOperations = ({
 
   // Save file
   const handleSave = useCallback(async () => {
-    if (!activeTab) return;
+    console.log('💾 🔍 handleSave called!');
+    
+    // Always get fresh state from ref instead of using stale closure
+    const currentState = editorStateRef.current;
+    const currentTabs = currentState.fileTabs;
+    const currentActiveIndex = currentState.activeTabIndex;
+    const currentActiveTab = currentActiveIndex >= 0 ? currentTabs[currentActiveIndex] : null;
+    
+    console.log('💾 Current state:', {
+      activeTab: currentActiveTab ? {
+        path: currentActiveTab.file.path,
+        name: currentActiveTab.file.name,
+        isModified: currentActiveTab.isModified,
+        contentLength: currentActiveTab.content.length
+      } : null,
+      activeTabIndex: currentActiveIndex,
+      totalTabs: currentTabs.length,
+      tabPaths: currentTabs.map(tab => tab.file.path)
+    });
+
+    if (!currentActiveTab) {
+      console.log('💾 ❌ No active tab to save');
+      return;
+    }
 
     try {
       // Handle unsaved files differently
-      if (activeTab.file.path.startsWith('<unsaved>/')) {
+      if (currentActiveTab.file.path.startsWith('<unsaved>/')) {
+        console.log('💾 📝 Unsaved file detected, opening SaveAs dialog');
         updateDialogStates({ saveAs: true });
         return;
       }
+
+      console.log('💾 💽 Saving existing file:', currentActiveTab.file.path);
+      await fileSaver.saveFile(currentActiveTab.file.path, currentActiveTab.content);
       
-      console.log('💾 Saving file:', activeTab.file.name);
-      await fileSaver.saveFile(activeTab.file.path, activeTab.content);
-      
-      // Update tab to mark as saved
-      const newTabs = fileTabs.map((tab, index) => 
-        index === activeTabIndex 
+      // Mark tab as saved
+      const newTabs = currentTabs.map((tab, index) => 
+        index === currentActiveIndex 
           ? { ...tab, isModified: false }
           : tab
       );
       
       updateEditorState({ fileTabs: newTabs });
-      console.log('✅ File saved successfully:', activeTab.file.name);
+      
+      // Update cache
+      fileCache.setCachedContent(currentActiveTab.file.path, currentActiveTab.content);
+      
+      console.log('💾 ✅ File saved successfully');
       
     } catch (error) {
-      console.error('❌ Failed to save file:', error);
+      console.error('💾 ❌ Save failed:', error);
       updateEditorState({ 
         currentError: error instanceof Error ? error : new Error('Failed to save file') 
       });
     }
-  }, [activeTab, fileTabs, activeTabIndex, fileSaver, updateEditorState, updateDialogStates]);
+  }, [editorStateRef, fileSaver, fileCache, updateEditorState, updateDialogStates]);
 
   // Open file from dialog
   const handleOpenFileFromDialog = useCallback(async (filePath: string): Promise<void> => {
@@ -229,18 +287,35 @@ export const useFileOperations = ({
   }, [fileSaver, openFileInTab, updateEditorState, updateDialogStates]);
 
   // Save as file handler
-  const handleSaveAsFile = useCallback(async (filePath: string, fileName: string): Promise<void> => {
+  const handleSaveAsFile = useCallback(async (selectedPath: string, fileName: string): Promise<void> => {
     if (!activeTab) return;
 
+    // Construct the full file path by combining directory and filename
+    const fullFilePath = `${selectedPath}/${fileName}`;
+
+    console.log('💾 Debug - SaveAs called with:', {
+      selectedPath,
+      fileName,
+      fullFilePath,
+      activeTabPath: activeTab.file.path,
+      activeTabContent: activeTab.content.substring(0, 50) + '...'
+    });
+
     try {
-      console.log('💾 Saving file as:', filePath);
+      console.log('💾 Saving file as:', fullFilePath);
       
-      await fileSaver.saveFile(filePath, activeTab.content);
+      await fileSaver.saveFile(fullFilePath, activeTab.content);
+      
+      // Clear file system cache to ensure new file appears in explorer
+      const { fileSystemService } = await import('../../../services/fileSystemService');
+      fileSystemService.clearFolderCache(selectedPath);
+      fileSystemService.clearFolderCache(); // Clear all cache to be safe
+      console.log('🗑️ Cleared all file system cache to force refresh');
       
       // Update the tab with new file info
       const newFileInfo: FileInfo = {
         ...activeTab.file,
-        path: filePath,
+        path: fullFilePath,
         name: fileName,
       };
 
@@ -250,10 +325,26 @@ export const useFileOperations = ({
           : tab
       );
       
-      updateEditorState({ fileTabs: newTabs });
+      // Get current editor state to access fileExplorerKey
+      const currentState = editorStateRef.current;
+      
+      updateEditorState({ 
+        fileTabs: newTabs,
+        fileExplorerKey: currentState.fileExplorerKey + 1 // Force file explorer refresh
+      });
       updateDialogStates({ saveAs: false });
       
-      console.log('✅ File saved as:', filePath);
+      console.log('✅ File saved as:', fullFilePath);
+      console.log('🔄 File explorer refresh triggered');
+      
+      // Additional refresh after a delay to ensure filesystem sync
+      setTimeout(() => {
+        const currentState = editorStateRef.current;
+        updateEditorState({ 
+          fileExplorerKey: currentState.fileExplorerKey + 1 
+        });
+        console.log('🔄 Secondary file explorer refresh after 500ms');
+      }, 500);
       
     } catch (error) {
       console.error('❌ Failed to save file as:', error);
@@ -261,7 +352,7 @@ export const useFileOperations = ({
         currentError: error instanceof Error ? error : new Error('Failed to save file') 
       });
     }
-  }, [activeTab, fileTabs, activeTabIndex, fileSaver, updateEditorState, updateDialogStates]);
+  }, [activeTab, fileTabs, activeTabIndex, fileSaver, updateEditorState, updateDialogStates, editorStateRef]);
 
   return {
     handleFileSelect,

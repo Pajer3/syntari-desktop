@@ -69,6 +69,7 @@ class CommandService {
       keybinding: 'Ctrl+S',
       icon: '💾',
       action: async () => {
+        console.log('🎯 Command service save triggered!');
         const event = new CustomEvent('syntari:command', { 
           detail: { type: 'save-file' } 
         });

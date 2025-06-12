@@ -11,12 +11,18 @@ export default defineConfig(async () => ({
 
   // Monaco Editor optimization
   optimizeDeps: {
-    include: ['@monaco-editor/react'],
+    include: ['@monaco-editor/react', 'monaco-editor'],
   },
   
   define: {
     // Monaco Editor global configuration
     global: 'globalThis',
+  },
+
+  // Fix Monaco Editor web worker issues
+  worker: {
+    format: 'es',
+    plugins: () => [react(), tailwindcss()],
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

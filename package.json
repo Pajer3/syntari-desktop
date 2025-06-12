@@ -21,7 +21,7 @@
     "validate": "npm run type-check && npm run lint && npm run test --run"
   },
   "dependencies": {
-    "@monaco-editor/react": "^4.7.0",
+    "@monaco-editor/react": "^4.6.0",
     "@tailwindcss/vite": "^4.1.8",
     "@tauri-apps/api": "^2.5.0",
     "@tauri-apps/plugin-dialog": "^2.2.2",
@@ -69,7 +69,7 @@
   "languageServers": {
     "comment": "Language servers that can be optionally installed for enhanced IDE features",
     "typescript": "typescript-language-server",
-    "rust": "rust-analyzer", 
+    "rust": "rust-analyzer",
     "python": "pyright",
     "go": "gopls",
     "cpp": "clangd",

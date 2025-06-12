@@ -33,7 +33,8 @@ export const configureMonacoWorkers = () => {
     }
   };
 
-  console.log('🚀 Monaco workers configured for enhanced language support');
+  // Only log once during initial setup
+  // console.log('🚀 Monaco workers configured for enhanced language support');
 };
 
 // ================================
@@ -45,7 +46,8 @@ export const configureMonacoLanguages = async () => {
     // Get all supported languages from our language service
     const supportedLanguages = getAllSupportedLanguages();
     
-    console.log(`🔧 Configuring ${supportedLanguages.length} languages for Monaco Editor`);
+    // Reduce logging frequency
+    // console.log(`🔧 Configuring ${supportedLanguages.length} languages for Monaco Editor`);
     
     // Configure specific language features
     await configureTypeScriptDefaults();
@@ -54,7 +56,7 @@ export const configureMonacoLanguages = async () => {
     await configureHTMLDefaults();
     await configureJSONDefaults();
     
-    console.log('✅ Monaco language configuration complete');
+    // console.log('✅ Monaco language configuration complete');
     return true;
   } catch (error) {
     console.error('❌ Failed to configure Monaco languages:', error);
@@ -69,87 +71,126 @@ export const configureMonacoLanguages = async () => {
 const configureTypeScriptDefaults = async () => {
   const { languages } = await import('monaco-editor');
   
-  // Enhanced TypeScript configuration
+  // Enhanced TypeScript compiler options
   languages.typescript.typescriptDefaults.setCompilerOptions({
     target: languages.typescript.ScriptTarget.ES2020,
+    lib: [
+      'ES2020',
+      'DOM',
+      'DOM.Iterable',
+      'WebWorker'
+    ],
+    allowNonTsExtensions: true,
+    moduleResolution: languages.typescript.ModuleResolutionKind.NodeJs,
     module: languages.typescript.ModuleKind.ESNext,
-    lib: ['ES2020', 'DOM', 'DOM.Iterable'],
-    allowJs: true,
-    allowSyntheticDefaultImports: true,
+    noEmit: true,
     esModuleInterop: true,
-    forceConsistentCasingInFileNames: true,
+    jsx: languages.typescript.JsxEmit.ReactJSX,
+    reactNamespace: 'React',
+    allowJs: true,
+    checkJs: false,
+    allowSyntheticDefaultImports: true,
     strict: true,
+    noImplicitAny: false,
+    strictNullChecks: true,
+    strictFunctionTypes: true,
     noImplicitReturns: true,
     noFallthroughCasesInSwitch: true,
+    experimentalDecorators: true,
+    emitDecoratorMetadata: true,
+    skipLibCheck: true,
+    forceConsistentCasingInFileNames: true,
     resolveJsonModule: true,
     isolatedModules: true,
-    noEmit: true,
-    jsx: languages.typescript.JsxEmit.ReactJSX,
+    useDefineForClassFields: true
   });
-
-  // Enhanced diagnostics
+  
+  // Enhanced TypeScript diagnostics options
   languages.typescript.typescriptDefaults.setDiagnosticsOptions({
     noSemanticValidation: false,
     noSyntaxValidation: false,
-    noSuggestionDiagnostics: false,
+    onlyVisible: true
   });
 
-  console.log('📝 TypeScript defaults configured');
+  // Reduced logging
+  // console.log('📝 TypeScript defaults configured');
 };
 
 const configureJavaScriptDefaults = async () => {
   const { languages } = await import('monaco-editor');
   
-  // Enhanced JavaScript configuration
+  // Enhanced JavaScript compiler options
   languages.typescript.javascriptDefaults.setCompilerOptions({
     target: languages.typescript.ScriptTarget.ES2020,
+    lib: [
+      'ES2020',
+      'DOM',
+      'DOM.Iterable',
+      'WebWorker'
+    ],
+    allowNonTsExtensions: true,
+    moduleResolution: languages.typescript.ModuleResolutionKind.NodeJs,
     module: languages.typescript.ModuleKind.ESNext,
-    lib: ['ES2020', 'DOM', 'DOM.Iterable'],
-    allowJs: true,
-    checkJs: false, // Disable JS checking for performance
-    allowSyntheticDefaultImports: true,
+    noEmit: true,
     esModuleInterop: true,
+    jsx: languages.typescript.JsxEmit.ReactJSX,
+    allowJs: true,
+    checkJs: true,
+    allowSyntheticDefaultImports: true,
+    experimentalDecorators: true,
+    emitDecoratorMetadata: true,
+    skipLibCheck: true,
+    resolveJsonModule: true
   });
-
-  // Lighter diagnostics for JavaScript
+  
+  // Enhanced JavaScript diagnostics
   languages.typescript.javascriptDefaults.setDiagnosticsOptions({
-    noSemanticValidation: true,  // Disable for performance
+    noSemanticValidation: false,
     noSyntaxValidation: false,
-    noSuggestionDiagnostics: false,
+    onlyVisible: true
   });
 
-  console.log('📝 JavaScript defaults configured');
+  // console.log('📝 JavaScript defaults configured');
 };
 
 const configureCSSDefaults = async () => {
   const { languages } = await import('monaco-editor');
   
-  // Enhanced CSS configuration
+  // Enhanced CSS validation and IntelliSense
   languages.css.cssDefaults.setOptions({
     validate: true,
     lint: {
       compatibleVendorPrefixes: 'warning',
       vendorPrefix: 'warning',
       duplicateProperties: 'warning',
-      emptyRules: 'warning',
-      importStatement: 'ignore',
-      boxModel: 'ignore',
-      universalSelector: 'ignore',
-      zeroUnits: 'ignore',
+      emptyRulesets: 'warning',
+      importStatement: 'warning',
+      boxModel: 'warning',
+      universalSelector: 'warning',
+      zeroUnits: 'warning',
       fontFaceProperties: 'warning',
-      hexColorLength: 'error',
-      argumentsInColorFunction: 'error',
+      hexColorLength: 'warning',
+      argumentsInColorFunction: 'warning',
       unknownProperties: 'warning',
-      ieHack: 'ignore',
-      unknownVendorSpecificProperties: 'ignore',
+      ieHack: 'warning',
+      unknownVendorSpecificProperties: 'warning',
       propertyIgnoredDueToDisplay: 'warning',
-      important: 'ignore',
-      float: 'ignore',
-      idSelector: 'ignore'
-    }
+      important: 'warning',
+      float: 'warning',
+      idSelector: 'warning'
+    },
+    completion: {
+      triggerPropertyValueCompletion: true,
+      completePropertyWithSemicolon: true
+    },
+    hover: {
+      documentation: true,
+      references: true
+    },
+    documentSymbols: true
   });
 
-  console.log('🎨 CSS defaults configured');
+  // console.log('🎨 CSS defaults configured');
 };
 
 const configureHTMLDefaults = async () => {
@@ -161,7 +202,7 @@ const configureHTMLDefaults = async () => {
       tabSize: 2,
       insertSpaces: true,
       wrapLineLength: 120,
-      unformatted: 'default"',
+      unformatted: 'default',
       contentUnformatted: 'pre,code,textarea',
       indentInnerHtml: false,
       preserveNewLines: true,
@@ -175,10 +216,16 @@ const configureHTMLDefaults = async () => {
       html5: true,
       angular1: false,
       ionic: false
+    },
+    validate: true,
+    autoClosingTags: true,
+    autoCreateQuotes: true,
+    completion: {
+      attributeDefaultValue: 'doublequotes'
     }
   });
 
-  console.log('🏷️ HTML defaults configured');
+  // console.log('🏷️ HTML defaults configured');
 };
 
 const configureJSONDefaults = async () => {
@@ -192,11 +239,11 @@ const configureJSONDefaults = async () => {
     enableSchemaRequest: true,
     schemaRequest: 'warning',
     schemaValidation: 'warning',
-    comments: 'ignore',
+    comments: 'warning',
     trailingCommas: 'warning'
   });
 
-  console.log('📄 JSON defaults configured');
+  // console.log('📄 JSON defaults configured');
 };
 
 // ================================
@@ -205,7 +252,8 @@ const configureJSONDefaults = async () => {
 
 export const configureMonaco = async (): Promise<boolean> => {
   try {
-    console.log('🚀 Initializing Monaco Editor configuration...');
+    // Reduced startup logging
+    // console.log('🚀 Initializing Monaco Editor configuration...');
     
     // Step 1: Configure workers
     configureMonacoWorkers();
@@ -216,11 +264,38 @@ export const configureMonaco = async (): Promise<boolean> => {
     // Step 3: Initialize language service (this registers all languages)
     // Language service is already initialized on import
     
-    console.log('✅ Monaco Editor fully configured with enhanced language support');
+    // Only log successful completion
+    // console.log('✅ Monaco Editor fully configured with enhanced language support');
     return true;
   } catch (error) {
     console.error('❌ Failed to configure Monaco Editor:', error);
     return false;
+  }
+};
+
+// ================================
+// MONACO CONFIGURATION COMPLETION HANDLER
+// ================================
+
+export const handleMonacoConfigurationComplete = (): void => {
+  try {
+    // Final configuration steps
+    const completionTime = performance.now();
+    
+    // Log completion only once
+    // console.log('🎉 Monaco configuration completed successfully');
+    
+    // Emit configuration complete event
+    const event = new CustomEvent('monaco-configuration-complete', {
+      detail: { 
+        timestamp: completionTime,
+        status: 'success' 
+      }
+    });
+    window.dispatchEvent(event);
+    
+  } catch (error) {
+    console.error('❌ Error in Monaco configuration completion:', error);
   }
 };
 

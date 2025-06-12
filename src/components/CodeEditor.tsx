@@ -1,7 +1,7 @@
 // Syntari AI IDE - Code Editor Component
 // Refactored modular architecture for better maintainability and performance
 
-import React, { useRef, useCallback, useState } from 'react';
+import React, { useRef, useCallback, useState, useEffect } from 'react';
 import type { ProjectContext, FileInfo } from '../types';
 // import type { FileNode } from '../types/fileSystem'; // Unused
 import { useEditorState } from './editor/hooks/useEditorState';
@@ -10,6 +10,7 @@ import { useFileOperations } from './editor/hooks/useFileOperations';
 import { useEditorShortcuts } from './editor/hooks/useEditorShortcuts';
 import { EditorLayout } from './editor/EditorLayout';
 import { TabContextMenu } from './editor/TabContextMenu';
+import { commandService } from '../services';
 
 interface CodeEditorProps {
   project: ProjectContext;
@@ -180,6 +181,62 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     onRequestAI?.(context);
   }, [onRequestAI]);
 
+  // Initialize command service on mount
+  useEffect(() => {
+    commandService.initialize().catch(error => {
+      console.error('Failed to initialize command service:', error);
+    });
+  }, []);
+
+  // Add syntari:command event listener to handle commands from keyboard shortcuts
+  useEffect(() => {
+    const handleSyntariCommand = (event: CustomEvent) => {
+      const { type } = event.detail;
+      console.log('🎯 Syntari command received:', type);
+      
+      switch (type) {
+        case 'save-file':
+          console.log('🎯 Handling save-file command, calling handleSave');
+          handleSave();
+          break;
+        case 'save-as':
+          updateDialogStates({ saveAs: true });
+          break;
+        case 'new-file':
+          createNewFile();
+          break;
+        case 'open-file':
+          updateDialogStates({ openFile: true });
+          break;
+        case 'find':
+          handleShowFind();
+          break;
+        case 'find-replace':
+          handleShowFindReplace();
+          break;
+        case 'toggle-sidebar':
+          handleToggleSidebar();
+          break;
+        default:
+          console.log('🎯 Unhandled syntari:command:', type);
+      }
+    };
+
+    window.addEventListener('syntari:command', handleSyntariCommand as EventListener);
+    
+    return () => {
+      window.removeEventListener('syntari:command', handleSyntariCommand as EventListener);
+    };
+  }, [
+    handleSave, 
+    updateDialogStates, 
+    createNewFile, 
+    handleShowFind, 
+    handleShowFindReplace, 
+    handleToggleSidebar,
+    editorState // Added editorState to dependencies to ensure fresh closure
+  ]);
+
   // Keyboard shortcuts
   useEditorShortcuts({
     onSave: handleSave,
@@ -213,12 +270,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     updateEditorState({ showGoToLine: false });
   }, [updateEditorState]);
 
-  // Wrapper for NewFileDialog interface compatibility
-  const handleNewFileDialogCreate = useCallback(async (fileName: string) => {
-    const { currentDirectory } = editorState;
-    const fullPath = `${currentDirectory}/${fileName}`;
-    await handleCreateNewFile(fullPath, fileName);
-  }, [editorState, handleCreateNewFile]);
+  // This is now handled directly in EditorLayout
 
   // Unsaved dialog handlers
   const handleDialogSave = useCallback(() => {
@@ -294,10 +346,10 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-              onQuickOpenFileSelect={handleQuickOpenSelect}
-      onOpenFileFromDialog={handleOpenFileFromDialog}
-      onSaveAsFile={handleSaveAsFile}
-      onCreateNewFile={handleNewFileDialogCreate}
+        onQuickOpenFileSelect={handleQuickOpenSelect}
+        onOpenFileFromDialog={handleOpenFileFromDialog}
+        onSaveAsFile={handleSaveAsFile}
+        onCreateNewFile={handleCreateNewFile}
         onGoToLine={handleGoToLine}
         onDialogSave={handleDialogSave}
         onDialogDontSave={handleDialogDontSave}
@@ -315,6 +367,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         openFindReplaceRef={openFindReplaceRef}
         goToSymbolRef={goToSymbolRef}
         monacoEditorRef={monacoEditorRef}
+        openFileInTab={openFileInTab}
       />
       
       {/* Tab Context Menu */}

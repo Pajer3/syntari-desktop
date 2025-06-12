@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import type { FileInfo } from '../../../types';
 import type { FileTab, EditorState } from './useEditorState';
 import { useRecentlyClosedTabs } from '../../../hooks/useRecentlyClosedTabs';
+import { fileSystemService } from '../../../services/fileSystemService';
 
 interface UseTabManagerProps {
   editorState: EditorState;
@@ -219,11 +220,20 @@ export const useTabManager = ({
 
   // Open new file in tab
   const openFileInTab = useCallback((file: FileInfo, content: string) => {
+    console.log('🔗 [DEBUG] openFileInTab called with:', { 
+      filePath: file.path, 
+      fileName: file.name, 
+      contentLength: content.length,
+      currentTabsCount: fileTabs.length 
+    });
+    
     // Check if file is already open
     const existingIndex = fileTabs.findIndex(tab => tab.file.path === file.path);
+    console.log('🔗 [DEBUG] Existing tab index:', existingIndex);
     
     if (existingIndex !== -1) {
       // File already open, just focus it
+      console.log('🔗 [DEBUG] File already open, focusing existing tab');
       updateEditorState({ activeTabIndex: existingIndex });
       return;
     }
@@ -235,26 +245,92 @@ export const useTabManager = ({
       isModified: false,
       isPinned: false,
     };
+    console.log('🔗 [DEBUG] Creating new tab:', newTab);
 
     const newTabs = [...fileTabs, newTab];
+    const newActiveIndex = newTabs.length - 1;
+    console.log('🔗 [DEBUG] New tabs array length:', newTabs.length);
+    console.log('🔗 [DEBUG] New active index:', newActiveIndex);
+    
+    console.log('🔗 [DEBUG] Calling updateEditorState with new tabs...');
     updateEditorState({ 
       fileTabs: newTabs, 
-      activeTabIndex: newTabs.length - 1 
+      activeTabIndex: newActiveIndex 
     });
+    console.log('🔗 [DEBUG] updateEditorState called successfully');
 
     // Notify parent
+    console.log('🔗 [DEBUG] Notifying parent of file change...');
     onFileChange?.(file, content);
+    console.log('🔗 [DEBUG] openFileInTab completed');
   }, [fileTabs, updateEditorState, onFileChange]);
 
   // Create new unsaved file
-  const createNewFile = useCallback(() => {
-    const tempFileName = `Untitled-${editorState.unsavedFileCounter}`;
-    const tempPath = `<unsaved>/${tempFileName}`;
+  const createNewFile = useCallback(async () => {
+    console.log('🆕 [DEBUG] createNewFile called!');
+    console.log('🆕 [DEBUG] Current tabs:', fileTabs.length);
+    console.log('🆕 [DEBUG] Current active tab index:', activeTabIndex);
     
-    // Check if this temp file is already open
+    // Check if there's already an empty unsaved file that we can reuse
+    const existingEmptyUnsaved = fileTabs.find(tab => 
+      tab.file.path.startsWith('<unsaved>/') && 
+      tab.content.trim() === '' && 
+      !tab.isModified
+    );
+    
+    console.log('🆕 [DEBUG] Existing empty unsaved:', !!existingEmptyUnsaved);
+    
+    if (existingEmptyUnsaved) {
+      // Focus the existing empty unsaved tab instead of creating new one
+      const index = fileTabs.indexOf(existingEmptyUnsaved);
+      console.log('🆕 [DEBUG] Focusing existing empty tab at index:', index);
+      updateEditorState({ activeTabIndex: index });
+      return;
+    }
+    
+    // Generate a unique filename by checking current directory
+    let baseFileName = 'Untitled';
+    let fileName = baseFileName;
+    let counter = 1;
+    
+    try {
+      // Get current directory files to check for conflicts
+      const currentDir = editorState.currentDirectory || '';
+      console.log('🆕 [DEBUG] Current directory:', currentDir);
+      
+      if (currentDir) {
+        const existingFiles = await fileSystemService.loadFolderContents(currentDir, false);
+        const existingNames = new Set([
+          ...existingFiles.map(file => file.name),
+          ...fileTabs.map(tab => tab.file.name) // Also check open tabs
+        ]);
+        
+        console.log('🆕 [DEBUG] Existing file names:', Array.from(existingNames));
+        
+        // Find a unique name
+        while (existingNames.has(fileName) || existingNames.has(`${fileName}.txt`)) {
+          fileName = `${baseFileName}-${counter}`;
+          counter++;
+        }
+      } else {
+        // Fallback to counter-based naming if no current directory
+        fileName = `${baseFileName}-${editorState.unsavedFileCounter}`;
+      }
+    } catch (error) {
+      // If filesystem check fails, use fallback naming
+      console.log('🆕 [DEBUG] Filesystem check failed, using fallback:', error);
+      fileName = `${baseFileName}-${editorState.unsavedFileCounter}`;
+    }
+    
+    console.log('🆕 [DEBUG] Generated filename:', fileName);
+    
+    const tempPath = `<unsaved>/${fileName}`;
+    console.log('🆕 [DEBUG] Generated temp path:', tempPath);
+    
+    // Double-check this specific temp file isn't already open
     const existingTempTab = fileTabs.find(tab => tab.file.path === tempPath);
     if (existingTempTab) {
-      // Focus the existing unsaved tab
+      console.log('🆕 [DEBUG] Temp file already open, focusing it');
       const index = fileTabs.indexOf(existingTempTab);
       updateEditorState({ activeTabIndex: index });
       return;
@@ -263,31 +339,44 @@ export const useTabManager = ({
     // Create new unsaved file tab
     const fileInfo: FileInfo = {
       path: tempPath,
-      name: tempFileName,
+      name: fileName,
       extension: '',
       size: 0,
       lastModified: Date.now(),
       content: '',
       language: 'plaintext',
     };
+    
+    console.log('🆕 [DEBUG] Created file info:', fileInfo);
 
     const newTab: FileTab = {
       file: fileInfo,
       content: '',
-      isModified: true, // Mark as modified since it's unsaved
+      isModified: false, // Start as NOT modified since it's empty
       isPinned: false,
     };
+    
+    console.log('🆕 [DEBUG] Created new tab:', newTab);
 
     const newTabs = [...fileTabs, newTab];
+    const newActiveIndex = newTabs.length - 1;
+    
+    console.log('🆕 [DEBUG] New tabs array length:', newTabs.length);
+    console.log('🆕 [DEBUG] New active index will be:', newActiveIndex);
+    
+    console.log('🆕 [DEBUG] Calling updateEditorState...');
     updateEditorState({ 
       fileTabs: newTabs, 
-      activeTabIndex: newTabs.length - 1,
+      activeTabIndex: newActiveIndex,
       unsavedFileCounter: editorState.unsavedFileCounter + 1
     });
+    console.log('🆕 [DEBUG] updateEditorState called');
 
     // Notify parent
+    console.log('🆕 [DEBUG] Notifying parent onFileChange...');
     onFileChange?.(fileInfo, '');
-  }, [fileTabs, editorState.unsavedFileCounter, updateEditorState, onFileChange]);
+    console.log('🆕 [DEBUG] createNewFile completed successfully!');
+  }, [fileTabs, activeTabIndex, editorState.currentDirectory, editorState.unsavedFileCounter, updateEditorState, onFileChange]);
 
   return {
     // Tab operations

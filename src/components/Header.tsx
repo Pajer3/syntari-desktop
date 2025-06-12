@@ -207,7 +207,10 @@ export const Header: React.FC<HeaderProps> = ({
 
   // Simplified search functionality for testing
   const handleSearch = useCallback(async (query: string) => {
-    console.log('🔍 SIMPLE Search called with:', query);
+    // Only log searches with actual content to reduce spam
+    if (query.trim()) {
+      // console.log('🔍 Search called with:', query);
+    }
     
     if (!query.trim()) {
       setSearchResults([]);
@@ -219,7 +222,8 @@ export const Header: React.FC<HeaderProps> = ({
       { type: 'command', title: 'Test Command', description: 'A test command', action: () => console.log('Test!'), icon: '🧪' }
     ];
 
-    console.log('🔍 Setting test results:', testResults);
+    // Reduce logging frequency
+    // console.log('🔍 Setting test results:', testResults);
     setSearchResults(testResults);
   }, []);
 
@@ -237,7 +241,8 @@ export const Header: React.FC<HeaderProps> = ({
     }
     
     searchTimeoutRef.current = window.setTimeout(() => {
-      console.log('🔍 Debounce timeout fired, calling handleSearch');
+      // Only log when actually searching to reduce spam
+      // console.log('🔍 Debounce timeout fired, calling handleSearch');
       handleSearch(searchValue);
     }, 500); // Increased delay to reduce IBUS event load
     
@@ -415,11 +420,12 @@ export const Header: React.FC<HeaderProps> = ({
 
   // Simplified search results renderer
   const renderSearchResults = () => {
-    console.log('🔍 Render called - focused:', isSearchFocused, 'results:', searchResults.length, 'value:', searchValue);
+    // Remove excessive logging that causes console spam
+    // console.log('🔍 Render called - focused:', isSearchFocused, 'results:', searchResults.length, 'value:', searchValue);
     
     if (!isSearchFocused || searchResults.length === 0) {
       if (isSearchFocused && searchValue.trim()) {
-        console.log('🔍 Focused with text but no results - showing "no results" message');
+        // console.log('🔍 Focused with text but no results - showing "no results" message');
         return (
           <div className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-600 rounded-md shadow-lg z-50 w-full py-3">
             <div className="px-4 text-sm text-gray-400">
@@ -428,11 +434,11 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         );
       }
-      console.log('🔍 Not showing dropdown');
+      // console.log('🔍 Not showing dropdown');
       return null;
     }
 
-    console.log('🔍 Showing dropdown with results:', searchResults.map(r => r.title));
+    // console.log('🔍 Showing dropdown with results:', searchResults.map(r => r.title));
     return (
       <div 
         className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-600 rounded-md shadow-lg z-[9999] w-full py-2"
@@ -449,7 +455,7 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             key={index}
             onClick={() => {
-              console.log('🔍 Clicked result:', result.title);
+              // console.log('🔍 Clicked result:', result.title);
               result.action();
               setIsSearchFocused(false);
               setSearchValue('');
@@ -545,11 +551,12 @@ export const Header: React.FC<HeaderProps> = ({
             type="text"
             value={searchValue}
             onChange={(e) => {
-              console.log('🔍 onChange fired:', e.target.value);
+              // Reduce input event logging to prevent console spam
+              // console.log('🔍 onChange fired:', e.target.value);
               setSearchValue(e.target.value);
             }}
             onKeyDown={(e) => {
-              console.log('🔍 onKeyDown fired:', e.key, e.code);
+              // console.log('🔍 onKeyDown fired:', e.key, e.code);
               // Handle common keys directly to ensure they work
               if (e.key === 'Backspace' && searchValue.length > 0) {
                 e.preventDefault();
@@ -561,28 +568,28 @@ export const Header: React.FC<HeaderProps> = ({
               }
             }}
             onInput={(e) => {
-              console.log('🔍 onInput fired:', (e.target as HTMLInputElement).value);
+              // console.log('🔍 onInput fired:', (e.target as HTMLInputElement).value);
               const target = e.target as HTMLInputElement;
               setSearchValue(target.value);
             }}
             onFocus={(e) => {
-              console.log('🔍 onFocus fired');
+              // console.log('🔍 onFocus fired');
               e.stopPropagation();
               setIsSearchFocused(true);
               setActiveDropdown(null);
             }}
             onBlur={(e) => {
-              console.log('🔍 onBlur fired');
+              // console.log('🔍 onBlur fired');
               e.stopPropagation();
               setTimeout(() => setIsSearchFocused(false), 200);
             }}
             onMouseDown={(e) => {
-              console.log('🔍 onMouseDown fired');
+              // console.log('🔍 onMouseDown fired');
               e.stopPropagation();
               e.currentTarget.focus();
             }}
             onClick={(e) => {
-              console.log('🔍 onClick fired');
+              // console.log('🔍 onClick fired');
               e.stopPropagation();
               e.currentTarget.focus();
             }}

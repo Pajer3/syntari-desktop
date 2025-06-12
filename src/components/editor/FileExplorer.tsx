@@ -21,6 +21,7 @@ interface FileExplorerProps {
   height?: number;
   className?: string;
   forceVirtualization?: boolean; // Override automatic detection
+  draftFiles?: Array<{ path: string; name: string; isModified: boolean }>; // New prop for draft files
 }
 
 interface ListItemData {
@@ -115,8 +116,13 @@ const FileItemContent: React.FC<{
   const isSelected = selectedPath === node.path;
   const isExpanded = expandedPaths.has(node.path);
   const hasChildren = node.isDirectory && node.hasChildren;
+  const isDraft = (node as any).isDraft;
+  const isModified = (node as any).isModified;
+  const isSeparator = (node as any).isSeparator;
   
   const handleClick = useCallback(async () => {
+    if (isSeparator) return; // Don't handle separator clicks
+    
     if (node.isDirectory) {
       await onDirectoryToggle(node.path, !isExpanded);
       // Smart scrolling for virtualized lists
@@ -126,7 +132,20 @@ const FileItemContent: React.FC<{
     } else {
       await onFileClick(node);
     }
-  }, [node, isExpanded, onFileClick, onDirectoryToggle, onScrollToItem, index]);
+  }, [node, isExpanded, onFileClick, onDirectoryToggle, onScrollToItem, index, isSeparator]);
+  
+  // Handle separator display
+  if (isSeparator) {
+    return (
+      <div className="flex items-center justify-center py-2 text-gray-400 text-xs border-b border-gray-700/50">
+        <div className="flex items-center space-x-2">
+          <div className="w-8 h-px bg-gray-600"></div>
+          <span className="uppercase tracking-wide font-medium">UNSAVED FILES</span>
+          <div className="w-8 h-px bg-gray-600"></div>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div
@@ -136,12 +155,15 @@ const FileItemContent: React.FC<{
         hover:bg-gray-800/60
         ${isSelected 
           ? 'bg-blue-600/90 text-white' 
-          : 'text-gray-300'
+          : isDraft 
+            ? 'text-orange-400' // Draft files in orange
+            : 'text-gray-300'
         }
         ${node.isDirectory ? 'font-medium' : 'font-normal'}
+        ${isDraft ? 'italic' : ''}
       `}
       onClick={handleClick}
-      title={node.path}
+      title={isDraft ? `${node.path} (unsaved)` : node.path}
     >
       <div 
         className="flex items-center w-full py-1 px-2"
@@ -173,17 +195,27 @@ const FileItemContent: React.FC<{
             isDirectory={node.isDirectory}
             isOpen={isExpanded}
             size={16}
-            className="opacity-90"
+            className={`opacity-90 ${isDraft ? 'opacity-70' : ''}`}
           />
         </div>
         
         {/* File Name */}
         <span className="flex-1 truncate text-sm leading-tight">
           {node.name}
+          {isDraft && isModified && (
+            <span className="ml-1 text-yellow-400">●</span>
+          )}
         </span>
         
+        {/* Draft indicator */}
+        {isDraft && (
+          <span className="text-xs text-orange-400 ml-2 opacity-70">
+            draft
+          </span>
+        )}
+        
         {/* File Size */}
-        {!node.isDirectory && node.size !== undefined && (
+        {!node.isDirectory && !isDraft && node.size !== undefined && (
           <span className="text-xs text-gray-500 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
             {formatFileSize(node.size)}
           </span>
@@ -266,7 +298,8 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   onDirectoryToggle,
   height = 400,
   className = '',
-  forceVirtualization = false
+  forceVirtualization = false,
+  draftFiles = []
 }) => {
   // State management
   const [rootNodes, setRootNodes] = useState<readonly FileNode[]>([]);
@@ -280,6 +313,55 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   // Refs
   const listRef = useRef<List>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  
+  // Create draft file nodes
+  const draftNodes = useMemo(() => {
+    console.log('📁 [DEBUG] FileExplorer processing draftFiles:', {
+      draftFiles,
+      draftFilesLength: draftFiles.length,
+      draftPaths: draftFiles.map(f => f.path)
+    });
+    
+    return draftFiles
+      .filter(draft => draft.path.startsWith('<unsaved>/')) // Only show truly unsaved files
+      .map(draft => ({
+        path: draft.path,
+        name: draft.name,
+        isDirectory: false,
+        hasChildren: false,
+        size: 0,
+        lastModified: Date.now(),
+        depth: 0,
+        isDraft: true,
+        isModified: draft.isModified
+      } as FileNode & { isDraft: boolean; isModified: boolean }));
+  }, [draftFiles]);
+
+  // Combine draft files with regular files
+  const allRootNodes = useMemo(() => {
+    console.log('📁 [DEBUG] FileExplorer allRootNodes:', {
+      draftNodesLength: draftNodes.length,
+      rootNodesLength: rootNodes.length,
+      allNodesLength: draftNodes.length + rootNodes.length + (draftNodes.length > 0 ? 1 : 0)
+    });
+    
+    if (draftNodes.length === 0) return rootNodes;
+    
+    return [
+      ...draftNodes,
+      ...(draftNodes.length > 0 ? [{ 
+        path: '__separator__', 
+        name: 'separator', 
+        isDirectory: false, 
+        hasChildren: false, 
+        size: 0, 
+        lastModified: 0,
+        depth: 0,
+        isSeparator: true 
+      } as FileNode & { isSeparator: boolean }] : []),
+      ...rootNodes
+    ];
+  }, [draftNodes, rootNodes]);
   
   // Load root items
   const loadRootItems = useCallback(async (path?: string, preserveState = true, silent = false) => {
@@ -319,8 +401,8 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   
   // Build display list
   const flatNodes = useMemo(() => 
-    buildFlatList(rootNodes, expandedPaths, loadedChildren), 
-    [rootNodes, expandedPaths, loadedChildren, fileWatcher.refreshTrigger]
+    buildFlatList(allRootNodes, expandedPaths, loadedChildren), 
+    [allRootNodes, expandedPaths, loadedChildren, fileWatcher.refreshTrigger]
   );
   
   // Smart rendering decision
@@ -328,6 +410,9 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   
   // Directory toggle handler
   const handleDirectoryToggle = useCallback(async (path: string, shouldExpand: boolean) => {
+    // Don't allow toggling draft files or separators
+    if (path.startsWith('<unsaved>/') || path === '__separator__') return;
+    
     setExpandedPaths(prev => {
       const newSet = new Set(prev);
       if (shouldExpand) {
@@ -359,6 +444,9 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   
   // File click handler
   const handleFileClick = useCallback(async (node: FileNode) => {
+    // Don't allow clicking separators
+    if ((node as any).isSeparator) return;
+    
     try {
       setError(null);
       onFileSelect?.(node);
@@ -377,14 +465,14 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   // Search functionality
   const filteredNodes = useMemo(() => {
     if (!searchQuery.trim() || !isSearchMode) {
-      return shouldUseVirtualization ? flatNodes : rootNodes;
+      return shouldUseVirtualization ? flatNodes : allRootNodes;
     }
     
     const query = searchQuery.toLowerCase();
     return flatNodes.filter(node => 
-      node.name.toLowerCase().includes(query)
+      node.name.toLowerCase().includes(query) && !(node as any).isSeparator
     );
-  }, [flatNodes, rootNodes, searchQuery, isSearchMode, shouldUseVirtualization]);
+  }, [flatNodes, allRootNodes, searchQuery, isSearchMode, shouldUseVirtualization]);
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
@@ -496,7 +584,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
               style={{ height: height - 80 }}
             >
               <FileTree
-                nodes={rootNodes}
+                nodes={allRootNodes}
                 selectedPath={selectedPath}
                 expandedPaths={expandedPaths}
                 loadedChildren={loadedChildren}

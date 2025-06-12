@@ -113,18 +113,95 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
   
   // Cool UI state - simplified to prevent typing issues
   const [monacoError, setMonacoError] = useState<string | null>(null);
+  // Add state to control when Editor is safe to render
+  const [editorCanRender, setEditorCanRender] = useState(false);
+  // Add state to track when full features can be enabled
+  const [featuresEnabled, setFeaturesEnabled] = useState(false);
+
+  // Generate stable key that only changes when file actually changes, not content
+  const stableKey = useMemo(() => {
+    return selectedFile ? `monaco-${selectedFile.path}` : 'monaco-empty';
+  }, [selectedFile?.path]);
+
+  // Stability Check: Only re-render when essential props change
+  const stableContent = useMemo(() => {
+    // Ensure content stability to prevent unnecessary Monaco re-renders
+    if (typeof fileContent === 'string') {
+      return fileContent;
+    }
+    return '';
+  }, [fileContent]);
+
+  const stableOptions = useMemo(() => {
+    const baseOptions = getEditorOptions(performanceMode);
+    
+    return {
+      ...baseOptions,
+      fontSize,
+      minimap: minimap ? baseOptions.minimap : { enabled: false },
+      readOnly,
+      theme,
+    };
+  }, [performanceMode, fontSize, minimap, readOnly, theme]);
+
+  // Simplified logging for debugging (only when needed)
+  if (process.env.NODE_ENV === 'development') {
+    // console.log('✅ Rendering Monaco with stable content:', {
+    //   fileLength: stableContent.length,
+    //   hasFile: !!selectedFile,
+    //   readOnly,
+    //   performanceMode
+    // });
+  }
+
+  // Only allow editor to render when we have a stable state
+  useEffect(() => {
+    if (!selectedFile) {
+      setEditorCanRender(false);
+      setFeaturesEnabled(false);
+      return;
+    }
+
+    // Reset features state for new file
+    setFeaturesEnabled(false);
+
+    // CRITICAL: Only render if we have valid content (prevent null/undefined content issues)
+    const hasValidContent = typeof stableContent === 'string';
+    
+    if (!hasValidContent) {
+      console.log('⚠️ Waiting for valid content before rendering Monaco');
+      setEditorCanRender(false);
+      return;
+    }
+
+    // Small delay for stability, but not content-dependent
+    const renderTimeout = setTimeout(() => {
+      // Reduce console logging to prevent spam
+      // console.log('✅ Rendering Monaco with stable content:', { 
+      //   file: selectedFile.name, 
+      //   contentLength: stableContent.length
+      // });
+      setEditorCanRender(true);
+    }, 50);
+
+    return () => {
+      clearTimeout(renderTimeout);
+      setEditorCanRender(false);
+      setFeaturesEnabled(false);
+    };
+  }, [selectedFile?.path]); // Only depend on file path, NOT content
 
   // Performance configuration based on VSCode standards
   const performanceConfig = useMemo(() => {
-    const lineCount = fileContent ? fileContent.split('\n').length : 0;
-    const charCount = fileContent ? fileContent.length : 0;
+    const lineCount = stableContent ? stableContent.split('\n').length : 0;
+    const charCount = stableContent ? stableContent.length : 0;
     const estimatedFileSize = charCount * 2; // Rough estimate (UTF-16)
     
     // Use VSCode's performance detection algorithm
     const performanceMode = shouldUsePerformanceMode(
       estimatedFileSize,
       lineCount,
-      fileContent
+      stableContent
     );
     
     return {
@@ -135,11 +212,11 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
       // Performance indicators
       isLargeFile: estimatedFileSize > PERFORMANCE_THRESHOLDS.LARGE_FILE_SIZE,
       isLongFile: lineCount > PERFORMANCE_THRESHOLDS.LARGE_FILE_LINE_COUNT,
-      hasLongLines: fileContent ? fileContent.split('\n').some(line => 
+      hasLongLines: stableContent ? stableContent.split('\n').some(line => 
         line.length > PERFORMANCE_THRESHOLDS.MAX_TOKENIZATION_LINE_LENGTH
       ) : false,
     };
-  }, [fileContent]);
+  }, [stableContent]);
 
   // Get file language with fallback
   const language = useMemo(() => {
@@ -147,16 +224,29 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
     return getLanguageFromExtension(selectedFile.extension) || 'plaintext';
   }, [selectedFile]);
 
-  // AI Assistant Integration
-  const {
-    enabled: aiAssistantEnabled,
-    toggleEnabled: toggleAIEnabled,
-    AIAssistantComponent
-  } = useMonacoAIAssistant(
-    editorRef.current, 
-    language, 
-    aiEnabled ? onAIRequest : undefined
-  );
+  // AI Assistant Integration - COMPLETELY DISABLED FOR NOW to ensure Monaco stability
+  const aiAssistantResult = {
+    enabled: false,
+    realtimeAssistance: false,
+    suggestions: [],
+    isLoading: false,
+    showWidget: false,
+    toggleEnabled: () => {},
+    toggleRealtimeAssistance: () => {},
+    requestSuggestions: async () => {},
+    applySuggestion: () => {},
+    dismissSuggestions: () => {},
+    AIAssistantComponent: () => null
+  };
+
+  // AI assistant features available but not currently used in this view
+  // const {
+  //   enabled: aiAssistantEnabled,
+  //   suggestions: aiSuggestions,
+  //   showWidget: showAIWidget,
+  //   AIAssistantComponent,
+  //   toggleEnabled: toggleAIEnabled
+  // } = aiAssistantResult;
 
   // Expose editor methods via ref
   useImperativeHandle(ref, () => ({
@@ -198,38 +288,38 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
     }
   }), []);
 
-  // Enhanced editor disposal with better cleanup
+  // Dispose editor with enhanced cleanup
   const disposeEditor = useCallback(() => {
     if (editorRef.current && !isDisposedRef.current) {
       try {
-        console.log('🧹 Disposing Monaco Editor...');
-        
-        // Clear any pending timeouts
+        // Clear all timeouts first
         if (contentChangeTimeoutRef.current) {
           clearTimeout(contentChangeTimeoutRef.current);
           contentChangeTimeoutRef.current = undefined;
         }
-        
+
         if (mountTimeoutRef.current) {
           clearTimeout(mountTimeoutRef.current);
           mountTimeoutRef.current = undefined;
         }
+
+        // Reduce logging frequency
+        // console.log('🧹 Disposing Monaco Editor...');
         
-        // Mark as disposed and not ready before cleanup
         isDisposedRef.current = true;
         isEditorReadyRef.current = false;
         
-        // Dispose of the editor instance safely
-        if (editorRef.current && typeof editorRef.current.dispose === 'function') {
-          editorRef.current.dispose();
-        }
-        
-        // Clear the reference
+        // Dispose the Monaco editor instance
+        editorRef.current.dispose();
         editorRef.current = null;
         
-        console.log('✅ Monaco Editor disposed successfully');
+        // console.log('✅ Monaco Editor disposed successfully');
       } catch (error) {
-        console.warn('⚠️ Error during editor disposal:', error);
+        console.error('❌ Error disposing Monaco Editor:', error);
+        // Force cleanup even if there's an error
+        isDisposedRef.current = true;
+        isEditorReadyRef.current = false;
+        editorRef.current = null;
       }
     }
   }, []);
@@ -258,105 +348,58 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
 
   // Cool editor mount handler with animations
   const handleEditorDidMount = useCallback((editor: any, monaco: any) => {
-    console.log('🚀 Monaco Editor mounted successfully');
-    
-    // Validate editor before storing reference
-    if (!editor || !editor.getModel || typeof editor.layout !== 'function') {
-      console.error('❌ Invalid editor object received in mount handler');
+    // Prevent duplicate mounting
+    if (isDisposedRef.current || editorRef.current) {
       return;
     }
 
-    editorRef.current = editor;
-    isEditorReadyRef.current = true;
-    isDisposedRef.current = false;
-    
-    // Ensure editor layout is stable
     try {
-      editor.layout();
-    } catch (layoutError) {
-      console.warn('⚠️ Initial editor layout failed:', layoutError);
+      // Reduce logging during mount process
+      // console.log('🚀 Monaco Editor mounted successfully');
+      
+      editorRef.current = editor;
+      isEditorReadyRef.current = true;
+
+      // Register custom themes
+      registerCustomThemes(monaco);
+
+      // Wait for the model to be fully ready before enabling features  
+      const waitForModel = () => {
+        const model = editor.getModel();
+        if (model) {
+          // Reduce logging frequency
+          // console.log('✅ Monaco Editor model ready');
+          
+          // Enable features after a brief delay
+          setTimeout(() => {
+            setFeaturesEnabled(true);
+            // console.log('✅ Monaco Editor features enabled');
+          }, 100);
+          
+          // Apply full options after features are ready
+          setTimeout(() => {
+            // console.log('✅ Monaco Editor full options applied');
+            editor.updateOptions({
+              // Ensure stable layout after mounting
+              automaticLayout: true,
+              // Other options are already applied via the Editor component
+            });
+          }, 150);
+        } else {
+          // Model not ready yet, wait a bit more
+          setTimeout(waitForModel, 50);
+        }
+      };
+
+      waitForModel();
+
+      // console.log('✅ Monaco Editor mounted and ready');
+    } catch (error) {
+      console.error('❌ Error in handleEditorDidMount:', error);
+      setMonacoError(`Editor mount failed: ${error}`);
+      isDisposedRef.current = false; // Allow retry
     }
-    
-    // Store reference only after validation
-    editorRef.current = editor;
-    
-    // Ensure editor layout is stable with error handling
-    try {
-      editor.layout();
-    } catch (layoutError) {
-      console.warn('⚠️ Initial editor layout failed:', layoutError);
-    }
-    
-    // Set ready flag only after everything is validated
-    isEditorReadyRef.current = true;
-    isDisposedRef.current = false;
-    
-    console.log('✅ Monaco Editor mounted and ready');
-
-    // Enhanced keyboard shortcuts with visual feedback
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      // Add save animation
-      const saveIndicator = document.createElement('div');
-      saveIndicator.innerHTML = '💾 Saved!';
-      saveIndicator.className = 'fixed top-4 right-4 bg-green-500/90 text-white px-3 py-2 rounded-lg shadow-lg z-50 animate-pulse';
-      document.body.appendChild(saveIndicator);
-      
-      onSave();
-      
-      setTimeout(() => {
-        saveIndicator.style.opacity = '0';
-        saveIndicator.style.transform = 'translateY(-10px)';
-        setTimeout(() => document.body.removeChild(saveIndicator), 300);
-      }, 1000);
-    });
-
-    // AI assistance shortcut (Ctrl+K)
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, () => {
-      onAskAI();
-    });
-
-    // Toggle AI assistant (Ctrl+Shift+A)
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyA, () => {
-      toggleAIEnabled();
-      const status = aiAssistantEnabled ? 'disabled' : 'enabled';
-      
-      // Show feedback
-      const indicator = document.createElement('div');
-      indicator.innerHTML = `🤖 AI Assistant ${status}`;
-      indicator.className = 'fixed top-4 right-4 bg-blue-500/90 text-white px-3 py-2 rounded-lg shadow-lg z-50';
-      document.body.appendChild(indicator);
-      
-      setTimeout(() => {
-        indicator.style.opacity = '0';
-        setTimeout(() => document.body.removeChild(indicator), 300);
-      }, 2000);
-    });
-
-    // Add smooth cursor animations
-    if (!performanceMode) {
-      editor.updateOptions({
-        cursorSmoothCaretAnimation: true,
-        smoothScrolling: true,
-      });
-    }
-
-    // Cool focus effects
-    editor.onDidFocusEditorWidget(() => {
-      const container = editor.getDomNode();
-      if (container) {
-        container.style.boxShadow = '0 0 20px rgba(0, 122, 255, 0.1)';
-        container.style.transition = 'box-shadow 0.3s ease';
-      }
-    });
-
-    editor.onDidBlurEditorWidget(() => {
-      const container = editor.getDomNode();
-      if (container) {
-        container.style.boxShadow = 'none';
-      }
-    });
-
-  }, [onSave, onAskAI, performanceMode, toggleAIEnabled, aiAssistantEnabled]);
+  }, []);
 
   // Enhanced editor configuration with VSCode-based optimizations
   const editorOptions = useMemo(() => {
@@ -376,7 +419,77 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
       },
     });
 
-    return baseOptions;
+    // Balanced safe options - keep essential functionality while preventing model access issues
+    const balancedOptions = {
+      ...baseOptions,
+      
+      // Keep essential editor features
+      fontSize,
+      fontFamily: baseOptions.fontFamily,
+      readOnly,
+      automaticLayout: true,
+      
+      // Safe model-related options
+      bracketPairColorization: { enabled: !performanceConfig.performanceMode },
+      guides: {
+        bracketPairs: !performanceConfig.performanceMode,
+        indentation: true, // Keep indentation guides
+      },
+      
+      // Keep language features but make them safer
+      quickSuggestions: !performanceConfig.performanceMode,
+      suggestOnTriggerCharacters: !performanceConfig.performanceMode,
+      codeLens: false, // Disable this as it can cause model access issues
+      hover: { enabled: !performanceConfig.performanceMode },
+      
+      // Keep selection features
+      occurrencesHighlight: 'singleFile' as const,
+      selectionHighlight: true,
+      
+      // Safe folding
+      folding: !performanceConfig.performanceMode,
+      showFoldingControls: performanceConfig.performanceMode ? 'never' as const : 'always' as const,
+      
+      // Keep essential features
+      links: true,
+      colorDecorators: !performanceConfig.performanceMode,
+      renderLineHighlight: 'line' as const,
+      matchBrackets: 'always' as const,
+      
+      // Keep formatting features
+      formatOnPaste: !performanceConfig.performanceMode,
+      formatOnType: !performanceConfig.performanceMode,
+      
+      // Smoother experience
+      cursorSmoothCaretAnimation: 'off' as const, // Keep off for performance
+      smoothScrolling: false,
+      
+      // Keep context menu and find
+      contextmenu: true,
+      find: {
+        ...baseOptions.find,
+        seedSearchStringFromSelection: 'never' as const, // Fix type error
+      },
+    };
+
+    return balancedOptions;
+  }, [fontSize, readOnly, theme, minimap, performanceConfig.performanceMode]);
+
+  // Enhanced options for after editor is stable (full feature set)
+  const fullEditorOptions = useMemo(() => {
+    return getEditorOptions(performanceConfig.performanceMode, {
+      fontSize,
+      readOnly,
+      theme,
+      minimap: { 
+        enabled: minimap && !performanceConfig.performanceMode,
+        side: 'right',
+        showSlider: 'mouseover',
+        renderCharacters: !performanceConfig.performanceMode,
+        maxColumn: 120,
+        scale: 1,
+      },
+    });
   }, [fontSize, readOnly, theme, minimap, performanceConfig.performanceMode]);
 
   // Monaco error handler - must be defined before use
@@ -403,47 +516,59 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
     }
     
     try {
+      console.log('🚀 Monaco mount starting...', { 
+        hasEditor: !!editor, 
+        hasMonaco: !!monaco,
+        contentLength: stableContent.length 
+      });
+
       // Register custom themes first
       registerCustomThemes(monaco);
       
       // Apply the gray-dark theme explicitly
       monaco.editor.setTheme('gray-dark');
       
-      // Ensure editor is fully initialized before proceeding
+      // CRITICAL: Wait for model AND validate it's actually usable
       const model = editor.getModel();
-      if (!model || typeof model.getValue !== 'function') {
-        console.warn('⚠️ Monaco editor model not ready, delaying mount...');
-        setTimeout(() => handleEditorMount(editor, monaco), 100);
+      if (!model) {
+        console.warn('⚠️ No model available yet, retrying...');
+        setTimeout(() => handleEditorMount(editor, monaco), 50);
+        return;
+      }
+
+      // Validate model methods exist and are callable
+      if (typeof model.getValue !== 'function' || 
+          typeof model.getLineCount !== 'function' ||
+          typeof model.getLineContent !== 'function') {
+        console.warn('⚠️ Model methods not ready, retrying...');
+        setTimeout(() => handleEditorMount(editor, monaco), 50);
         return;
       }
 
       // Validate editor methods exist
-      if (typeof editor.layout !== 'function' || typeof editor.getPosition !== 'function') {
-        console.warn('⚠️ Monaco editor methods not available, delaying mount...');
-        setTimeout(() => handleEditorMount(editor, monaco), 100);
+      if (typeof editor.layout !== 'function' || 
+          typeof editor.getPosition !== 'function' ||
+          typeof editor.updateOptions !== 'function') {
+        console.warn('⚠️ Editor methods not available, retrying...');
+        setTimeout(() => handleEditorMount(editor, monaco), 50);
+        return;
+      }
+
+      // Test that we can safely call model methods
+      try {
+        const testValue = model.getValue();
+        const testLineCount = model.getLineCount();
+        console.log('✅ Model validation passed:', { 
+          valueLength: testValue.length, 
+          lineCount: testLineCount 
+        });
+      } catch (modelError) {
+        console.warn('⚠️ Model validation failed, retrying...', modelError);
+        setTimeout(() => handleEditorMount(editor, monaco), 50);
         return;
       }
 
       handleEditorDidMount(editor, monaco);
-      
-      // Store reference only after validation
-      editorRef.current = editor;
-      
-      // Ensure editor layout is stable with error handling
-      try {
-        editor.layout();
-      } catch (layoutError) {
-        console.warn('⚠️ Initial editor layout failed:', layoutError);
-      }
-      
-      // Set ready flag only after everything is validated
-      isEditorReadyRef.current = true;
-      isDisposedRef.current = false;
-      
-      console.log('✅ Monaco Editor mounted and ready');
-      
-      // NO delayed feature enabling to prevent layout shifts
-      // All features are now enabled immediately to maintain stable layout
       
     } catch (error) {
       console.error('❌ Failed to mount Monaco editor:', error);
@@ -452,18 +577,18 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
       isEditorReadyRef.current = false;
       editorRef.current = null;
     }
-  }, [handleEditorDidMount, handleMonacoError]);
+  }, [handleEditorDidMount, handleMonacoError, stableContent.length]);
 
   // Clean up on component unmount or file change
   useEffect(() => {
     isDisposedRef.current = false;
     isEditorReadyRef.current = false; // Reset ready state
-    lastContentRef.current = fileContent;
+    lastContentRef.current = stableContent;
     
     return () => {
       disposeEditor();
     };
-  }, [selectedFile?.path, disposeEditor, fileContent]);
+  }, [selectedFile?.path, disposeEditor, stableContent]);
 
   // Language and content updates are now handled via the key prop and value prop
   // This prevents race conditions by forcing clean remounts when files change
@@ -533,22 +658,42 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
       )}
 
       <MonacoErrorBoundary onError={handleMonacoErrorBoundary}>
-        <Editor
-          key={selectedFile.path} // Force remount when file changes - this prevents race conditions
-          height="100%"
-          language={language}
-          value={fileContent || ''}
-          onChange={handleContentChange}
-          onMount={handleEditorMount}
-          onValidate={handleEditorValidation}
-          options={editorOptions}
-          loading={
+        {editorCanRender ? (
+          <React.Suspense fallback={
+            <div className="flex items-center justify-center h-full bg-vscode-editor">
+              <div className="monaco-loading">
+                <div className="loading-spinner"></div>
+                <span>Loading editor...</span>
+              </div>
+            </div>
+          }>
+            <Editor
+              key={stableKey}
+              height="100%"
+              language={language}
+              value={stableContent}
+              onChange={handleContentChange}
+              onMount={handleEditorMount}
+              onValidate={handleEditorValidation}
+              options={editorOptions}
+              theme="vs-dark" // Use built-in theme for stability
+              loading={
+                <div className="monaco-loading">
+                  <div className="loading-spinner"></div>
+                  <span>Loading editor...</span>
+                </div>
+              }
+              path={selectedFile?.path} // Critical for model management
+            />
+          </React.Suspense>
+        ) : (
+          <div className="flex items-center justify-center h-full bg-vscode-editor">
             <div className="monaco-loading">
               <div className="loading-spinner"></div>
-              <span>Loading editor...</span>
+              <span>Preparing editor...</span>
             </div>
-          }
-        />
+          </div>
+        )}
       </MonacoErrorBoundary>
 
       {/* Performance status indicator */}
@@ -573,8 +718,8 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
         )}
       </div>
 
-      {/* AI Assistant Component */}
-      {aiEnabled && <AIAssistantComponent />}
+      {/* AI Assistant Component - DISABLED FOR NOW */}
+      {/* {aiEnabled && editorCanRender && featuresEnabled && <AIAssistantComponent />} */}
     </div>
   );
 }); 

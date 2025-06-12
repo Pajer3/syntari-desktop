@@ -376,16 +376,13 @@ export class LanguageService {
   }
 
   constructor() {
-    this.initializeCoreLanguages();
-  }
-
-  private initializeCoreLanguages(): void {
-    // Register all core languages
+    // Auto-register core languages on instantiation
     CORE_LANGUAGES.forEach(lang => {
       this.registerLanguage(lang);
     });
-
-    console.log(`🚀 Language Service initialized with ${CORE_LANGUAGES.length} languages`);
+    
+    // Reduced logging frequency - only log summary on startup
+    // console.log(`🚀 Language Service initialized with ${CORE_LANGUAGES.length} languages`);
   }
 
   registerLanguage(langDef: LanguageDefinition): void {
@@ -406,7 +403,8 @@ export class LanguageService {
       languages.setMonarchTokensProvider(langDef.id, langDef.monarchGrammar);
     }
 
-    console.log(`📝 Registered language: ${langDef.name} (${langDef.extensions.join(', ')})`);
+    // Reduce logging frequency - only log when debug mode is enabled
+    // console.log(`📝 Registered language: ${langDef.name} (${langDef.extensions.join(', ')})`);
   }
 
   getLanguageByExtension(extension: string): string {
@@ -510,4 +508,5 @@ export const isLanguageSupported = (languageId: string): boolean => {
 };
 
 // Initialize on import
-console.log('🚀 Language Service module loaded'); 
+// Initialize language service - reduce startup logging
+// console.log('🚀 Language Service module loaded'); 

@@ -67,40 +67,55 @@ class EnhancedKeyboardShortcutsManager {
   private shortcuts: Record<string, Record<string, KeyboardShortcut>> = {};
   private handlers: Record<string, ShortcutHandler> = {};
   private executionMetrics: ShortcutExecutionMetrics[] = [];
-  private debugMode: boolean = false;
+  private debugMode: boolean = false; // Disabled by default to reduce console spam
   private isInitialized = false;
   private readonly maxMetricsHistory = 1000;
 
   constructor() {
-    // Enable debug mode in development
-    this.debugMode = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+    // Initialize manager
+    this.initialize();
   }
 
   initialize(): void {
     if (this.isInitialized) return;
-    
+
     try {
-      const loadedShortcuts: Record<string, Record<string, KeyboardShortcut>> = {};
+      // Load keyboard shortcuts configuration - extract shortcuts from nested structure
+      this.shortcuts = {};
       
-      Object.entries(keyboardConfig.categories).forEach(([categoryId, category]) => {
-        if (category.shortcuts) {
-          loadedShortcuts[categoryId] = category.shortcuts as Record<string, KeyboardShortcut>;
+      // Each category in the JSON has metadata (name, description, etc.) and a 'shortcuts' property
+      Object.entries(keyboardConfig.categories).forEach(([categoryId, categoryData]: [string, any]) => {
+        if (categoryData && categoryData.shortcuts) {
+          this.shortcuts[categoryId] = categoryData.shortcuts;
         }
       });
       
-      this.shortcuts = loadedShortcuts;
       this.isInitialized = true;
-      
+
+      // Enhanced logging for debugging
+      console.log('🎮 [DEBUG] Keyboard shortcuts initialized');
+      console.log('🎮 [DEBUG] Categories loaded:', Object.keys(this.shortcuts));
+      console.log('🎮 [DEBUG] fileManagement shortcuts:', Object.keys(this.shortcuts.fileManagement || {}));
+      if (this.shortcuts.fileManagement?.saveFile) {
+        console.log('🎮 [DEBUG] saveFile shortcut found:', this.shortcuts.fileManagement.saveFile);
+      }
+
+      // Only log when debug mode is enabled
       if (this.debugMode) {
+        const implementedCount = this.getImplementedShortcutsCount();
+        const totalCount = Object.values(this.shortcuts).reduce(
+          (sum, category) => sum + Object.keys(category).length, 0
+        );
+
         console.log('🎮 Enhanced keyboard shortcuts manager initialized:', {
-          categories: Object.keys(loadedShortcuts),
-          totalShortcuts: Object.values(loadedShortcuts).reduce((sum, cat) => sum + Object.keys(cat).length, 0),
-          implementedShortcuts: this.getImplementedShortcutsCount()
+          implementedShortcuts: implementedCount,
+          totalShortcuts: totalCount,
+          categories: Object.keys(this.shortcuts).length,
+          debugMode: this.debugMode
         });
       }
     } catch (error) {
       console.error('🚨 Failed to initialize keyboard shortcuts manager:', error);
-      throw new Error(`Keyboard shortcuts initialization failed: ${error}`);
     }
   }
 
@@ -122,6 +137,7 @@ class EnhancedKeyboardShortcutsManager {
 
     this.handlers[shortcutId] = handler;
     
+    // Only log in debug mode to reduce console spam
     if (this.debugMode) {
       console.log(`🎮 Registered handler for: ${shortcutId}`);
     }
@@ -131,6 +147,7 @@ class EnhancedKeyboardShortcutsManager {
     if (this.handlers[shortcutId]) {
       delete this.handlers[shortcutId];
       
+      // Only log in debug mode to reduce console spam
       if (this.debugMode) {
         console.log(`🎮 Unregistered handler for: ${shortcutId}`);
       }
@@ -144,9 +161,28 @@ class EnhancedKeyboardShortcutsManager {
     let handled = false;
     let executedShortcut: string | null = null;
     
+    // Enhanced logging for Ctrl+S debugging
+    const currentShortcut = [
+      event.ctrlKey && 'ctrl',
+      event.shiftKey && 'shift', 
+      event.altKey && 'alt',
+      event.key.toLowerCase()
+    ].filter(Boolean).join('+');
+    
+    if (currentShortcut === 'ctrl+s') {
+      console.log('🎮 [DEBUG] Ctrl+S in handleKeyboard method');
+      console.log('🎮 [DEBUG] Initialized?', this.isInitialized);
+      console.log('🎮 [DEBUG] Shortcuts count:', Object.keys(this.shortcuts).length);
+      console.log('🎮 [DEBUG] Handlers count:', Object.keys(this.handlers).length);
+    }
+    
     try {
       // Find matching shortcuts
       const matches = this.findMatchingShortcuts(event);
+      
+      if (currentShortcut === 'ctrl+s') {
+        console.log('🎮 [DEBUG] Ctrl+S matches found:', matches);
+      }
       
       if (this.debugMode && matches.length > 0) {
         console.log(`🎮 Found ${matches.length} matching shortcuts:`, matches);
@@ -156,13 +192,20 @@ class EnhancedKeyboardShortcutsManager {
       for (const shortcutId of matches) {
         const handler = this.handlers[shortcutId];
         
+        if (currentShortcut === 'ctrl+s') {
+          console.log(`🎮 [DEBUG] Checking handler for ${shortcutId}:`, !!handler);
+        }
+        
         if (handler) {
-          if (this.debugMode) {
+          if (this.debugMode || currentShortcut === 'ctrl+s') {
             console.log(`🎮 Executing handler for: ${shortcutId}`);
           }
           
           try {
             const result = handler(event);
+            if (currentShortcut === 'ctrl+s') {
+              console.log(`🎮 [DEBUG] Handler result for ${shortcutId}:`, result);
+            }
             if (result !== false) {
               handled = true;
               executedShortcut = shortcutId;
@@ -171,7 +214,7 @@ class EnhancedKeyboardShortcutsManager {
             console.error(`🚨 Error executing handler for ${shortcutId}:`, handlerError);
             this.recordExecution(shortcutId, startTime, false, String(handlerError));
           }
-        } else if (this.debugMode) {
+        } else if (this.debugMode || currentShortcut === 'ctrl+s') {
           console.warn(`🎮 No handler found for matched shortcut: ${shortcutId}`);
         }
       }
@@ -188,20 +231,57 @@ class EnhancedKeyboardShortcutsManager {
       }
     }
 
+    if (currentShortcut === 'ctrl+s') {
+      console.log('🎮 [DEBUG] Final handled result for Ctrl+S:', handled);
+    }
+
     return handled;
   }
 
   private findMatchingShortcuts(event: KeyboardEvent): string[] {
     const matches: string[] = [];
     
+    // Enhanced logging for Ctrl+S debugging
+    const currentShortcut = [
+      event.ctrlKey && 'ctrl',
+      event.shiftKey && 'shift', 
+      event.altKey && 'alt',
+      event.key.toLowerCase()
+    ].filter(Boolean).join('+');
+    
+    if (currentShortcut === 'ctrl+s') {
+      console.log('🎮 [DEBUG] findMatchingShortcuts - Looking for Ctrl+S');
+      console.log('🎮 [DEBUG] Available shortcut categories:', Object.keys(this.shortcuts));
+    }
+    
     Object.entries(this.shortcuts).forEach(([categoryId, categoryShortcuts]) => {
+      if (currentShortcut === 'ctrl+s') {
+        console.log(`🎮 [DEBUG] Checking category: ${categoryId}`, Object.keys(categoryShortcuts));
+      }
+      
       Object.entries(categoryShortcuts).forEach(([shortcutId, shortcut]) => {
+        if (currentShortcut === 'ctrl+s' && shortcutId === 'saveFile') {
+          console.log(`🎮 [DEBUG] Found saveFile shortcut:`, shortcut);
+          console.log(`🎮 [DEBUG] Shortcut key: "${shortcut.key}", implemented: ${shortcut.implemented}`);
+          console.log(`🎮 [DEBUG] Trying to match "${shortcut.key}" with current event`);
+        }
+        
         if (shortcut.implemented && this.matchesShortcut(event, shortcut.key)) {
           const fullId = `${categoryId}.${shortcutId}`;
           matches.push(fullId);
+          
+          if (currentShortcut === 'ctrl+s') {
+            console.log(`🎮 [DEBUG] MATCH FOUND: ${fullId}`);
+          }
+        } else if (currentShortcut === 'ctrl+s' && shortcutId === 'saveFile') {
+          console.log(`🎮 [DEBUG] saveFile not matched - implemented: ${shortcut.implemented}, matches: ${this.matchesShortcut(event, shortcut.key)}`);
         }
       });
     });
+
+    if (currentShortcut === 'ctrl+s') {
+      console.log('🎮 [DEBUG] Final matches for Ctrl+S:', matches);
+    }
 
     return matches;
   }
@@ -492,7 +572,20 @@ export const useGlobalKeyboardShortcuts = () => {
         e.key.toLowerCase()
       ].filter(Boolean).join('+');
 
+      // Debug logging for Ctrl+S specifically
+      if (currentShortcut === 'ctrl+s') {
+        console.log('⌨️ 🔍 Ctrl+S detected!', {
+          target: target.tagName,
+          isInputElement,
+          currentShortcut,
+          allowedInInputs: allowedInInputs.includes(currentShortcut)
+        });
+      }
+
       if (isInputElement && !allowedInInputs.includes(currentShortcut)) {
+        if (currentShortcut === 'ctrl+s') {
+          console.log('⌨️ ❌ Ctrl+S blocked due to input element');
+        }
         return;
       }
 
@@ -509,6 +602,11 @@ export const useGlobalKeyboardShortcuts = () => {
       };
 
       const handled = handlerRef.current(keyboardEvent);
+      
+      if (currentShortcut === 'ctrl+s') {
+        console.log('⌨️ 🔍 Ctrl+S handled result:', handled);
+      }
+      
       if (handled) {
         e.preventDefault();
         e.stopPropagation();

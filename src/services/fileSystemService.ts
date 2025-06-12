@@ -612,36 +612,44 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
   /**
    * Invalidate caches and force refresh - called when file system changes detected
    */
-  invalidateCache(affectedPath?: string): void {
-    console.log('🔄 Invalidating file system cache', affectedPath ? `for: ${affectedPath}` : '(all)');
-    
-    this.lastRefreshTime = Date.now();
-    
+  private invalidateCache(affectedPath?: string): void {
+    const startTime = performance.now();
+    let invalidatedCount = 0;
+
+    // Reduce logging frequency to prevent console spam
+    // console.log('🔄 Invalidating file system cache', affectedPath ? `for: ${affectedPath}` : '(all)');
+
     if (affectedPath) {
-      // Enhanced cache invalidation logic for different cache key formats
-      const pathsToInvalidate = Array.from(this.folderContentsCache.keys())
-        .filter(cachedKey => {
-          // Handle root cache keys (format: "root:/path:includeHidden")
-          if (cachedKey.startsWith('root:')) {
-            const rootPath = cachedKey.split(':')[1]; // Extract path from "root:/path:true"
-            return rootPath && (affectedPath.startsWith(rootPath) || rootPath.startsWith(affectedPath));
-          }
-          
-          // Handle regular folder cache keys (format: "/path")
-          return affectedPath.startsWith(cachedKey) || cachedKey.startsWith(affectedPath);
-        });
+      // Invalidate specific path and its children
+      const keysToDelete: string[] = [];
       
-      pathsToInvalidate.forEach(key => {
+      for (const [key] of this.folderContentsCache) {
+        // Check if the cached path is the affected path or a child of it
+        if (key === affectedPath || key.startsWith(affectedPath + '/') || affectedPath.startsWith(key + '/')) {
+          keysToDelete.push(key);
+        }
+      }
+      
+      keysToDelete.forEach(key => {
         this.folderContentsCache.delete(key);
-        console.log(`🗑️ Invalidated cache for key: ${key}`);
+        invalidatedCount++;
+        // Only log specific deletions in debug mode
+        // console.log('🗑️ Invalidated cache for key:', key);
       });
-      
-      console.log(`🔄 Cache invalidation complete: ${pathsToInvalidate.length} entries invalidated`);
     } else {
-      // Full cache invalidation
+      // Clear entire cache
+      invalidatedCount = this.folderContentsCache.size;
       this.folderContentsCache.clear();
       this.iconCache.clear();
-      console.log('🗑️ Full cache invalidation complete');
+    }
+
+    const duration = performance.now() - startTime;
+    // Reduce completion logging
+    // console.log(`🔄 Cache invalidation complete: ${invalidatedCount} entries invalidated`);
+    
+    // Only log performance warnings if significant
+    if (duration > 10) {
+      console.warn(`⚠️ Cache invalidation took ${duration.toFixed(2)}ms for ${invalidatedCount} entries`);
     }
   }
 

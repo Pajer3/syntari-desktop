@@ -390,7 +390,8 @@ export const useFileExplorerWatcher = (
         debouncedRefresh();
       } else if (isDirectory) {
         // For directory modifications, be more selective - only refresh if it's a new directory or significant change
-        console.log('📁 Directory modified (ignoring unless significant):', path);
+        // Reduce logging to prevent console spam
+        // console.log('📁 Directory modified (ignoring unless significant):', path);
         // Don't refresh on every directory modification as it's usually just filesystem metadata
       } else {
         // Skip refresh for regular file modifications that don't affect the tree structure

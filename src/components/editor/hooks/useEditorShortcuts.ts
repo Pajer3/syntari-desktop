@@ -41,6 +41,7 @@ export const useEditorShortcuts = ({
   
   // File operations
   const handleSave = useCallback((e: any) => {
+    console.log('⌨️ 🔍 Save shortcut triggered!', e);
     e.preventDefault();
     onSave();
   }, [onSave]);

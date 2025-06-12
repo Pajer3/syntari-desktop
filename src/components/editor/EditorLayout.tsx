@@ -4,6 +4,7 @@ import type { FileNode } from '../../types/fileSystem';
 import type { FileTab, EditorState, DialogStates } from './hooks/useEditorState';
 import { FileExplorer } from './FileExplorer';
 import { MonacoEditorWrapper } from './MonacoEditorWrapper';
+import { SimpleMonacoWrapper } from './SimpleMonacoWrapper';
 import { FileTabBar } from './FileTabBar';
 import { SearchPanel } from './search/SearchPanel';
 import { TerminalPanel } from '../ui/TerminalPanel';
@@ -15,6 +16,8 @@ import { OpenFileDialog } from './dialogs/OpenFileDialog';
 import { NewFileDialog } from './dialogs/NewFileDialog';
 import { TemplateManagerDialog } from './dialogs/TemplateManagerDialog';
 import { usePerformanceConfig } from './usePerformanceConfig';
+import { useFileSave } from './useFileSave';
+import type { FileInfo } from '../../types';
 
 interface EditorLayoutProps {
   // State
@@ -63,6 +66,7 @@ interface EditorLayoutProps {
   // New file handler
   createNewFile: () => void;
   handleOpenFile: () => void;
+  openFileInTab: (file: FileInfo, content: string) => void;
   
   // Current line info
   getCurrentLine: () => number;
@@ -106,7 +110,7 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
   onQuickOpenFileSelect,
   onOpenFileFromDialog,
   onSaveAsFile,
-  onCreateNewFile,
+        onCreateNewFile: handleCreateNewFileOld,
   onGoToLine,
   onDialogSave,
   onDialogDontSave,
@@ -124,8 +128,10 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
   // openFindReplaceRef, // Unused
   // goToSymbolRef,     // Unused
   monacoEditorRef,
+  openFileInTab,
 }) => {
   const performanceConfig = usePerformanceConfig();
+  const fileSaver = useFileSave();
   
   const {
     fileTabs,
@@ -179,8 +185,55 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
   // Navigate to search result handler removed - now handled inline in SearchPanel props
 
   // Enhanced create new file handler with project type detection
-  const handleEnhancedCreateNewFile = async (fileName: string, _content?: string) => {
-    await onCreateNewFile(currentDirectory, fileName);
+  const handleEnhancedCreateNewFile = async (fileName: string, content?: string) => {
+    console.log('📄 [DEBUG] handleEnhancedCreateNewFile called with:', { fileName, content: content?.substring(0, 50) + '...', currentDirectory });
+    
+    // Construct the full file path properly
+    const fullPath = currentDirectory ? `${currentDirectory}/${fileName}` : fileName;
+    console.log('📄 [DEBUG] Full path constructed:', fullPath);
+    
+    try {
+      // Create the file with content using the file saver directly
+      console.log('📄 [DEBUG] Saving file to disk...');
+      await fileSaver.saveFile(fullPath, content || '');
+      console.log('📄 [DEBUG] File saved to disk successfully');
+      
+      // Create FileInfo
+      const fileInfo: FileInfo = {
+        path: fullPath,
+        name: fileName,
+        extension: fileName.split('.').pop() || '',
+        size: (content || '').length,
+        lastModified: Date.now(),
+        content: content || '',
+      };
+      console.log('📄 [DEBUG] FileInfo created:', fileInfo);
+      
+      // Open in tab with the content - openFileInTab will set isModified: false
+      console.log('📄 [DEBUG] Calling openFileInTab...');
+      openFileInTab(fileInfo, content || '');
+      console.log('📄 [DEBUG] openFileInTab called successfully');
+      
+      // Ensure the file explorer is refreshed to show the new file
+      console.log('📄 [DEBUG] Refreshing file explorer...');
+      updateEditorState({ fileExplorerKey: editorState.fileExplorerKey + 1 });
+      
+      // Additional refresh with delay to ensure filesystem sync
+      setTimeout(() => {
+        console.log('📄 [DEBUG] Secondary refresh after 500ms...');
+        updateEditorState({ fileExplorerKey: editorState.fileExplorerKey + 2 });
+      }, 500);
+      
+      console.log('📄 [DEBUG] Closing dialog...');
+      updateDialogStates({ newFile: false });
+      console.log('✅ New file created with content:', fullPath);
+      
+    } catch (error) {
+      console.error('❌ Failed to create new file:', error);
+      updateEditorState({ 
+        currentError: error instanceof Error ? error : new Error('Failed to create file') 
+      });
+    }
   };
 
   // Detect project type from package.json or other indicators
@@ -214,20 +267,39 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
            `}>
             {showSidebar && (
               <div className="h-full">
-                <FileExplorer
-                  key={fileExplorerKey}
-                  rootPath={safeProject.rootPath}
-                  onFileSelect={onFileSelect}
-                  height={600}
-                  className="h-full transition-opacity duration-200"
-                  selectedPath={activeTab?.file.path}
-                  onDirectoryToggle={(path: string, expanded: boolean) => {
-                    // Track the current directory when users navigate
-                    if (expanded) {
-                      updateEditorState({ currentDirectory: path });
-                    }
-                  }}
-                />
+                {(() => {
+                  const draftFiles = editorState.fileTabs
+                    .filter(tab => tab.file.path.startsWith('<unsaved>/'))
+                    .map(tab => ({
+                      path: tab.file.path,
+                      name: tab.file.name,
+                      isModified: tab.isModified
+                    }));
+                  
+                  console.log('📁 [DEBUG] EditorLayout draftFiles for FileExplorer:', {
+                    totalTabs: editorState.fileTabs.length,
+                    draftFiles: draftFiles,
+                    tabPaths: editorState.fileTabs.map(tab => tab.file.path)
+                  });
+                  
+                  return (
+                    <FileExplorer
+                      key={fileExplorerKey}
+                      rootPath={safeProject.rootPath}
+                      onFileSelect={onFileSelect}
+                      height={600}
+                      className="h-full transition-opacity duration-200"
+                      selectedPath={activeTab?.file.path}
+                      draftFiles={draftFiles}
+                      onDirectoryToggle={(path: string, expanded: boolean) => {
+                        // Track the current directory when users navigate
+                        if (expanded) {
+                          updateEditorState({ currentDirectory: path });
+                        }
+                      }}
+                    />
+                  );
+                })()}
               </div>
             )}
           </div>
@@ -294,18 +366,13 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
             {/* Editor Content */}
             {activeTab ? (
               <div className="flex-1 relative overflow-hidden">
-                <MonacoEditorWrapper
+                <SimpleMonacoWrapper
                   selectedFile={activeTab.file as any}
                   fileContent={activeTab.content}
-                  perfConfig={performanceConfig.perfConfig}
-                  performanceMode={performanceConfig.performanceMode}
                   onContentChange={onContentChange}
                   onSave={onSave}
-                  onAskAI={() => onAskAI({})}
-                  theme="vs-dark"
                   fontSize={14}
-                  minimap={!performanceConfig.performanceMode}
-                  ref={monacoEditorRef}
+                  readOnly={false}
                 />
               </div>
                          ) : (
