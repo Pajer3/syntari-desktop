@@ -2,7 +2,7 @@ import React from 'react';
 import type { ProjectContext } from '../../types';
 import type { FileNode } from '../../types/fileSystem';
 import type { FileTab, EditorState, DialogStates } from './hooks/useEditorState';
-import { VirtualizedFileExplorer } from './VirtualizedFileExplorer';
+import { FileExplorer } from './FileExplorer';
 import { MonacoEditorWrapper } from './MonacoEditorWrapper';
 import { FileTabBar } from './FileTabBar';
 import { SearchPanel } from './search/SearchPanel';
@@ -214,7 +214,7 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
            `}>
             {showSidebar && (
               <div className="h-full">
-                <VirtualizedFileExplorer
+                <FileExplorer
                   key={fileExplorerKey}
                   rootPath={safeProject.rootPath}
                   onFileSelect={onFileSelect}

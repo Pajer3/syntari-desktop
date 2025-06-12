@@ -3,7 +3,8 @@
 
 import React from 'react';
 import type { FileInfo } from '../../types';
-import { getFileIcon, getLanguageFromExtension } from '../../utils/editorUtils';
+import { getLanguageFromExtension } from '../../utils/editorUtils';
+import { EnhancedFileIcon } from '../ui/EnhancedFileIcon';
 
 interface EditorHeaderProps {
   selectedFile: FileInfo;
@@ -26,7 +27,11 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
     <div className="vscode-tab active editor-header">
       {/* Tab Content */}
       <div className="editor-file-info">
-        <span className="icon text-sm">{getFileIcon(selectedFile.extension)}</span>
+        <EnhancedFileIcon 
+          fileName={selectedFile.name}
+          size={16}
+          className="icon"
+        />
         <span className="file-name">{selectedFile.name}</span>
         {isModified && <div className="status-dot modified" title="File has unsaved changes"></div>}
         {isLoading && <div className="status-dot loading" title="Loading..."></div>}

@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { getFileIcon } from '../../utils/editorUtils';
+import { getFileIcon } from '../../config/fileIconMap';
+import { EnhancedFileIcon } from '../ui/EnhancedFileIcon';
 
 interface FileTab {
   file: {
@@ -153,10 +154,14 @@ export const FileTabBar: React.FC<FileTabBarProps> = ({
 
               {/* File Icon with animation */}
               <div className={`
-                flex-shrink-0 mr-3 text-base transition-all duration-200
+                flex-shrink-0 mr-3 transition-all duration-200
                 ${isActive ? 'scale-110' : 'group-hover:scale-105'}
               `}>
-                {getFileIcon(tab.file.name)}
+                <EnhancedFileIcon 
+                  fileName={tab.file.name}
+                  size={16}
+                  className="file-tab-icon"
+                />
               </div>
 
               {/* File Name with smooth text animation */}

@@ -6,7 +6,6 @@ import { GettingStartedSection } from './ui/GettingStartedSection';
 import { ResourceMonitoring } from './ui/ResourceMonitoring';
 import { WELCOME_ACTIONS, GETTING_STARTED_STEPS } from '../constants/welcomeData';
 
-
 interface WelcomeScreenProps {
   onOpenProject: () => void;
 }
@@ -14,13 +13,15 @@ interface WelcomeScreenProps {
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenProject }) => {
   const handleAction = (action: string) => {
     console.log(`Action: ${action}`);
-    // Implement specific actions here
+    
+    // Simple action handling - just like the original
     if (action === 'Open Project') {
       onOpenProject();
+    } else {
+      // Future: Implement other actions
+      console.log('Action not implemented yet:', action);
     }
   };
-
-
 
   return (
     <div className="h-full text-white relative overflow-y-auto" style={{ backgroundColor: '#262626' }}>
@@ -73,7 +74,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenProject }) =
           </div>
         </div>
         
-        {/* Professional Action Grid */}
+        {/* Professional Action Grid - 6 Cards in 3 Columns */}
         <div className="flex-1 flex items-start justify-center">
           <div className="w-full max-w-7xl 2xl:max-w-8xl">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 lg:gap-8 mb-8 md:mb-12 lg:mb-16">

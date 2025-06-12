@@ -1,659 +1,538 @@
-// Syntari AI IDE - Enterprise File Explorer Component
-// Advanced file tree with performance optimization, accessibility, and business intelligence
+// Syntari AI IDE - Unified File Explorer
+// Smart component that chooses between regular and virtualized rendering
 
-import React, { 
-  useState, 
-  useCallback, 
-  useMemo, 
-  useRef, 
-  useEffect,
-  memo
-} from 'react';
-import type { ProjectContext, FileInfo } from '../../types';
-import { FileIcon } from '../ui/FileIcon';
-import { useShortcut } from '../../hooks/useKeyboardShortcuts';
-import { announceShortcut } from '../../utils/keyboardUtils';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { FixedSizeList as List } from 'react-window';
+import type { FileNode } from '../../types/fileSystem';
+import { fileSystemService } from '../../services/fileSystemService';
+import { AlertCircle, Search, X, ChevronRight, ChevronDown } from 'lucide-react';
 import { useFileExplorerWatcher } from '../../hooks/useFileSystemWatcher';
+import { EnhancedFileIcon } from '../ui/EnhancedFileIcon';
 
 // ================================
-// ENHANCED TYPES & INTERFACES
+// TYPES & INTERFACES
 // ================================
-
-interface FileTreeNode {
-  file: FileInfo;
-  children: FileTreeNode[];
-  isExpanded: boolean;
-  depth: number;
-  id: string;
-  parentId?: string;
-}
 
 interface FileExplorerProps {
-  project: ProjectContext;
-  selectedFile?: string;
-  onFileSelect: (file: FileInfo) => void;
-  onFileContextMenu?: (file: FileInfo, event: React.MouseEvent) => void;
-  onFolderExpand?: (folderPath: string, isExpanded: boolean) => void;
+  rootPath: string;
+  selectedPath?: string;
+  onFileSelect: (node: FileNode) => void;
+  onDirectoryToggle?: (path: string, expanded: boolean) => void;
+  height?: number;
   className?: string;
-  enableVirtualScrolling?: boolean;
-  maxVisibleItems?: number;
+  forceVirtualization?: boolean; // Override automatic detection
 }
 
-interface FileExplorerMetrics {
-  totalFiles: number;
-  totalFolders: number;
-  expandedFolders: number;
-  selectedFile: string | null;
-  lastInteraction: number;
-  viewportItems: number;
-  renderTime: number;
-  memoryUsage: number;
-}
-
-interface VirtualScrollConfig {
-  itemHeight: number;
-  overscan: number;
-  containerHeight: number;
+interface ListItemData {
+  nodes: readonly FileNode[];
+  selectedPath?: string;
+  expandedPaths: Set<string>;
+  onFileClick: (node: FileNode) => Promise<void>;
+  onDirectoryToggle: (path: string, expanded: boolean) => Promise<void>;
+  onScrollToItem?: (index: number) => void;
 }
 
 // ================================
-// PERFORMANCE MONITORING MANAGER
+// HELPER FUNCTIONS
 // ================================
 
-class FileExplorerPerformanceManager {
-  private metrics: FileExplorerMetrics = {
-    totalFiles: 0,
-    totalFolders: 0,
-    expandedFolders: 0,
-    selectedFile: null,
-    lastInteraction: Date.now(),
-    viewportItems: 0,
-    renderTime: 0,
-    memoryUsage: 0
+const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+};
+
+// Build flat list for virtualization with proper depth tracking
+const buildFlatList = (
+  nodes: readonly FileNode[], 
+  expandedPaths: Set<string>,
+  loadedChildren: Map<string, FileNode[]>
+): readonly FileNode[] => {
+  const result: FileNode[] = [];
+  
+  const processNode = (node: FileNode, depth: number = 0) => {
+    const nodeWithDepth = { ...node, depth };
+    result.push(nodeWithDepth);
+    
+    if (node.isDirectory && expandedPaths.has(node.path)) {
+      const children = loadedChildren.get(node.path) || [];
+      children.forEach(child => processNode(child, depth + 1));
+    }
   };
-
-  private renderStartTime: number = 0;
-  private readonly PERFORMANCE_THRESHOLD = 16; // 60fps target
-
-  startRender(): void {
-    this.renderStartTime = performance.now();
-  }
-
-  endRender(): void {
-    const renderTime = performance.now() - this.renderStartTime;
-    this.metrics.renderTime = renderTime;
-    
-    if (renderTime > this.PERFORMANCE_THRESHOLD) {
-      console.warn(`🐌 FileExplorer render exceeded target (${renderTime.toFixed(2)}ms > ${this.PERFORMANCE_THRESHOLD}ms)`);
-    }
-  }
-
-  updateMetrics(update: Partial<FileExplorerMetrics>): void {
-    this.metrics = { ...this.metrics, ...update, lastInteraction: Date.now() };
-  }
-
-  getMetrics(): FileExplorerMetrics {
-    return { ...this.metrics };
-  }
-
-  logBusinessImpact(action: string, context: any): void {
-    console.log(`📊 FileExplorer Business Impact: ${action}`, {
-      timestamp: new Date().toISOString(),
-      action,
-      context,
-      metrics: this.getMetrics()
-    });
-  }
-}
-
-// ================================
-// VIRTUAL SCROLLING UTILITIES
-// ================================
-
-interface VirtualScrollData {
-  startIndex: number;
-  endIndex: number;
-  visibleItems: FileTreeNode[];
-  totalHeight: number;
-  offsetY: number;
-  handleScroll?: (event: React.UIEvent<HTMLDivElement>) => void;
-}
-
-const useVirtualScroll = (
-  items: FileTreeNode[],
-  config: VirtualScrollConfig,
-  enabled: boolean = true
-): VirtualScrollData => {
-  const [scrollTop, setScrollTop] = useState(0);
-
-  const virtualData = useMemo(() => {
-    if (!enabled || items.length === 0) {
-      return {
-        startIndex: 0,
-        endIndex: items.length,
-        visibleItems: items,
-        totalHeight: items.length * config.itemHeight,
-        offsetY: 0
-      };
-    }
-
-    const { itemHeight, overscan, containerHeight } = config;
-    const visibleCount = Math.ceil(containerHeight / itemHeight);
-    const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan);
-    const endIndex = Math.min(items.length, startIndex + visibleCount + overscan * 2);
-    
-    return {
-      startIndex,
-      endIndex,
-      visibleItems: items.slice(startIndex, endIndex),
-      totalHeight: items.length * itemHeight,
-      offsetY: startIndex * itemHeight
-    };
-  }, [items, config, scrollTop, enabled]);
-
-  const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
-    setScrollTop(event.currentTarget.scrollTop);
-  }, []);
-
-  return { ...virtualData, handleScroll: enabled ? handleScroll : undefined };
+  
+  nodes.forEach(node => processNode(node));
+  return result;
 };
 
 // ================================
-// ENHANCED FILE TREE BUILDER
+// FILE ITEM COMPONENTS
 // ================================
 
-const buildEnhancedFileTree = (
-  files: readonly FileInfo[], 
-  rootPath: string,
-  expandedFolders: Set<string>
-): { flatTree: FileTreeNode[], metrics: { files: number, folders: number } } => {
-  const tree: FileTreeNode[] = [];
-  const nodeMap = new Map<string, FileTreeNode>();
-  let fileCount = 0;
-  let folderCount = 0;
+// Virtualized item component
+const VirtualizedFileItem: React.FC<{
+  index: number;
+  style: React.CSSProperties;
+  data: ListItemData;
+}> = ({ index, style, data }) => {
+  const { 
+    nodes, selectedPath, expandedPaths, onFileClick, onDirectoryToggle,
+    onScrollToItem
+  } = data;
+  const node = nodes[index];
   
-  const normalizedRootPath = rootPath.replace(/\/$/, '');
+  if (!node) return null;
   
-  // Sort files: directories first, then alphabetically
-  const sortedFiles = [...files].sort((a, b) => {
-    const aIsDir = a.language === 'directory';
-    const bIsDir = b.language === 'directory';
-    
-    if (aIsDir && !bIsDir) return -1;
-    if (!aIsDir && bIsDir) return 1;
-    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
-  });
-  
-  const filteredFiles = sortedFiles.filter(file => file.path !== normalizedRootPath);
-  
-  // Create nodes
-  for (const file of filteredFiles) {
-    const isDirectory = file.language === 'directory';
-    const depth = (file.path.split('/').length - normalizedRootPath.split('/').length) - 1;
-    
-    const node: FileTreeNode = {
-      file,
-      children: [],
-      isExpanded: isDirectory ? expandedFolders.has(file.path) : false,
-      depth: Math.max(0, depth),
-      id: file.path,
-      parentId: file.path.substring(0, file.path.lastIndexOf('/'))
-    };
-    
-    nodeMap.set(file.path, node);
-    
-    if (isDirectory) {
-      folderCount++;
-    } else {
-      fileCount++;
-    }
-  }
-  
-  // Build hierarchy
-  for (const file of filteredFiles) {
-    const node = nodeMap.get(file.path)!;
-    const parentPath = file.path.substring(0, file.path.lastIndexOf('/'));
-    
-    if (parentPath === normalizedRootPath) {
-      tree.push(node);
-    } else {
-      const parent = nodeMap.get(parentPath);
-      if (parent) {
-        parent.children.push(node);
-      } else if (!parentPath.startsWith(normalizedRootPath)) {
-        tree.push(node);
-      }
-    }
-  }
-  
-  // Flatten tree for virtual scrolling
-  const flatTree: FileTreeNode[] = [];
-  
-  const flatten = (nodes: FileTreeNode[]) => {
-    for (const node of nodes) {
-      flatTree.push(node);
-      if (node.isExpanded && node.children.length > 0) {
-        flatten(node.children);
-      }
-    }
-  };
-  
-  flatten(tree);
-  
-  return { 
-    flatTree, 
-    metrics: { files: fileCount, folders: folderCount }
-  };
+  return (
+    <div style={style}>
+      <FileItemContent
+        node={node}
+        selectedPath={selectedPath}
+        expandedPaths={expandedPaths}
+        onFileClick={onFileClick}
+        onDirectoryToggle={onDirectoryToggle}
+        onScrollToItem={onScrollToItem}
+        index={index}
+      />
+    </div>
+  );
 };
 
-// ================================
-// MEMOIZED FILE TREE ITEM
-// ================================
-
-const FileTreeItem = memo<{
-  node: FileTreeNode;
-  selectedFile?: string;
-  onFileSelect: (file: FileInfo) => void;
-  onToggleExpand: (path: string) => void;
-  onContextMenu?: (file: FileInfo, event: React.MouseEvent) => void;
-  style?: React.CSSProperties;
-}>(({ node, selectedFile, onFileSelect, onToggleExpand, onContextMenu, style }) => {
-  const { file, depth, children, isExpanded } = node;
-  const isDirectory = file.language === 'directory';
-  const isSelected = selectedFile === file.path;
-  const hasChildren = children.length > 0;
+// Shared file item content
+const FileItemContent: React.FC<{
+  node: FileNode;
+  selectedPath?: string;
+  expandedPaths: Set<string>;
+  onFileClick: (node: FileNode) => Promise<void>;
+  onDirectoryToggle: (path: string, expanded: boolean) => Promise<void>;
+  onScrollToItem?: (index: number) => void;
+  index?: number;
+}> = ({ 
+  node, selectedPath, expandedPaths, onFileClick, onDirectoryToggle,
+  onScrollToItem, index 
+}) => {
+  const isSelected = selectedPath === node.path;
+  const isExpanded = expandedPaths.has(node.path);
+  const hasChildren = node.isDirectory && node.hasChildren;
   
-  const handleClick = useCallback(() => {
-    if (isDirectory) {
-      onToggleExpand(file.path);
+  const handleClick = useCallback(async () => {
+    if (node.isDirectory) {
+      await onDirectoryToggle(node.path, !isExpanded);
+      // Smart scrolling for virtualized lists
+      if (!isExpanded && onScrollToItem && index !== undefined) {
+        setTimeout(() => onScrollToItem(index), 100);
+      }
     } else {
-      onFileSelect(file);
+      await onFileClick(node);
     }
-  }, [isDirectory, file, onToggleExpand, onFileSelect]);
-
-  const handleContextMenu = useCallback((event: React.MouseEvent) => {
-    event.preventDefault();
-    onContextMenu?.(file, event);
-  }, [file, onContextMenu]);
-
-  const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
-    switch (event.key) {
-      case 'Enter':
-      case ' ':
-        event.preventDefault();
-        handleClick();
-        break;
-      case 'ArrowRight':
-        if (isDirectory && !isExpanded) {
-          event.preventDefault();
-          onToggleExpand(file.path);
-        }
-        break;
-      case 'ArrowLeft':
-        if (isDirectory && isExpanded) {
-          event.preventDefault();
-          onToggleExpand(file.path);
-        }
-        break;
-    }
-  }, [isDirectory, isExpanded, handleClick, onToggleExpand, file.path]);
+  }, [node, isExpanded, onFileClick, onDirectoryToggle, onScrollToItem, index]);
   
   return (
     <div
       className={`
-        flex items-center px-2 py-1 cursor-pointer transition-colors group
-        hover:bg-vscode-list-hover
-        ${isSelected ? 'bg-vscode-list-active text-vscode-list-active-fg' : 'text-vscode-fg'}
-        ${isDirectory ? 'font-medium' : ''}
+        group flex items-center cursor-pointer select-none
+        transition-all duration-150 ease-out
+        hover:bg-gray-800/60
+        ${isSelected 
+          ? 'bg-blue-600/90 text-white' 
+          : 'text-gray-300'
+        }
+        ${node.isDirectory ? 'font-medium' : 'font-normal'}
       `}
-      style={{
-        ...style,
-        paddingLeft: `${8 + depth * 16}px`,
-        minHeight: '22px'
-      }}
       onClick={handleClick}
-      onContextMenu={handleContextMenu}
-      onKeyDown={handleKeyDown}
-      tabIndex={0}
-      role={isDirectory ? 'treeitem' : 'option'}
-      aria-expanded={isDirectory ? isExpanded : undefined}
-      aria-selected={isSelected}
-      aria-label={`${isDirectory ? 'Folder' : 'File'}: ${file.name}`}
+      title={node.path}
     >
-      {/* Chevron for directories */}
-      {isDirectory && (
-        <span 
-          className={`
-            text-xs mr-1 transition-transform duration-150 text-vscode-fg-muted
-            ${isExpanded ? 'rotate-90' : ''}
-          `}
-          style={{ width: '12px', textAlign: 'center' }}
-        >
-          {hasChildren ? '▶' : ''}
+      <div 
+        className="flex items-center w-full py-1 px-2"
+        style={{ 
+          paddingLeft: `${8 + (node.depth || 0) * 16}px`
+        }}
+      >
+        {/* Chevron for directories */}
+        {node.isDirectory ? (
+          <div className="w-4 h-4 mr-1 flex items-center justify-center">
+            {hasChildren ? (
+              isExpanded ? (
+                <ChevronDown size={12} className="text-gray-400" />
+              ) : (
+                <ChevronRight size={12} className="text-gray-400" />
+              )
+            ) : (
+              <div className="w-3 h-3" />
+            )}
+          </div>
+        ) : (
+          <div className="w-4 h-4 mr-1" />
+        )}
+        
+        {/* File/Directory Icon */}
+        <div className="mr-2 flex-shrink-0">
+          <EnhancedFileIcon 
+            fileName={node.name}
+            isDirectory={node.isDirectory}
+            isOpen={isExpanded}
+            size={16}
+            className="opacity-90"
+          />
+        </div>
+        
+        {/* File Name */}
+        <span className="flex-1 truncate text-sm leading-tight">
+          {node.name}
         </span>
-      )}
-      
-      {/* File/Folder Icon */}
-      <FileIcon 
-        fileName={file.name}
-        isDirectory={isDirectory}
-        isOpen={isExpanded}
-        size={16}
-        className="mr-2 flex-shrink-0"
-      />
-      
-      {/* File Name */}
-      <span className="flex-1 truncate text-sm">
-        {file.name}
-      </span>
-      
-      {/* File Size (for files only) */}
-      {!isDirectory && file.size > 0 && (
-        <span className="text-xs text-vscode-fg-muted ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
-          {file.size < 1024 
-            ? `${file.size}B` 
-            : file.size < 1024 * 1024 
-              ? `${(file.size / 1024).toFixed(1)}KB`
-              : `${(file.size / (1024 * 1024)).toFixed(1)}MB`
-          }
-        </span>
-      )}
+        
+        {/* File Size */}
+        {!node.isDirectory && node.size !== undefined && (
+          <span className="text-xs text-gray-500 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            {formatFileSize(node.size)}
+          </span>
+        )}
+      </div>
     </div>
   );
-});
+};
 
-FileTreeItem.displayName = 'FileTreeItem';
+// Regular tree component for small lists
+const FileTree: React.FC<{
+  nodes: readonly FileNode[];
+  selectedPath?: string;
+  expandedPaths: Set<string>;
+  loadedChildren: Map<string, FileNode[]>;
+  onFileClick: (node: FileNode) => Promise<void>;
+  onDirectoryToggle: (path: string, expanded: boolean) => Promise<void>;
+  depth?: number;
+}> = ({
+  nodes, selectedPath, expandedPaths, loadedChildren,
+  onFileClick, onDirectoryToggle, depth = 0
+}) => {
+  return (
+    <div>
+      {nodes.map((node) => (
+        <div key={node.path}>
+          <FileItemContent
+            node={{ ...node, depth }}
+            selectedPath={selectedPath}
+            expandedPaths={expandedPaths}
+            onFileClick={onFileClick}
+            onDirectoryToggle={onDirectoryToggle}
+          />
+          
+          {/* Render children if expanded */}
+          {node.isDirectory && expandedPaths.has(node.path) && (
+            <FileTree
+              nodes={loadedChildren.get(node.path) || []}
+              selectedPath={selectedPath}
+              expandedPaths={expandedPaths}
+              loadedChildren={loadedChildren}
+              onFileClick={onFileClick}
+              onDirectoryToggle={onDirectoryToggle}
+              depth={depth + 1}
+            />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// Error notification component
+const ErrorNotification: React.FC<{ 
+  error: string; 
+  onDismiss: () => void; 
+}> = ({ error, onDismiss }) => (
+  <div className="mx-2 my-1 p-2 bg-red-900/50 border border-red-700/50 rounded text-sm text-red-200 flex items-center justify-between">
+    <div className="flex items-center">
+      <AlertCircle size={16} className="mr-2 flex-shrink-0" />
+      <span>{error}</span>
+    </div>
+    <button
+      onClick={onDismiss}
+      className="ml-2 text-red-400 hover:text-red-200"
+    >
+      <X size={14} />
+    </button>
+  </div>
+);
 
 // ================================
-// ENHANCED FILE EXPLORER COMPONENT
+// MAIN UNIFIED COMPONENT
 // ================================
 
 export const FileExplorer: React.FC<FileExplorerProps> = ({
-  project,
-  selectedFile,
+  rootPath,
+  selectedPath,
   onFileSelect,
-  onFileContextMenu,
-  onFolderExpand,
-  className,
-  enableVirtualScrolling = true,
-  maxVisibleItems = 1000
+  onDirectoryToggle,
+  height = 400,
+  className = '',
+  forceVirtualization = false
 }) => {
-  // ================================
-  // STATE MANAGEMENT
-  // ================================
+  // State management
+  const [rootNodes, setRootNodes] = useState<readonly FileNode[]>([]);
+  const [loadedChildren, setLoadedChildren] = useState<Map<string, FileNode[]>>(new Map());
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isSearchMode, setIsSearchMode] = useState<boolean>(false);
   
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
-    new Set([project.rootPath])
-  );
-  const [focusedItemIndex, setFocusedItemIndex] = useState<number>(-1);
+  // Refs
+  const listRef = useRef<List>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   
-  // ================================
-  // REFS & PERFORMANCE
-  // ================================
-  
-  const containerRef = useRef<HTMLDivElement>(null);
-  const performanceManagerRef = useRef(new FileExplorerPerformanceManager());
-  
-  // Live file system watcher for automatic updates
-  const fileWatcher = useFileExplorerWatcher(project.rootPath, useCallback(() => {
-    console.log('🔄 File system change detected in FileExplorer, triggering refresh...');
-    // Force re-computation of file tree by updating a dependency
-    setExpandedFolders(prev => new Set(prev)); // Trigger refresh without changing state
-  }, []));
-  
-  // ================================
-  // KEYBOARD NAVIGATION
-  // ================================
-  
-  const handleKeyboardNavigation = useCallback((direction: 'up' | 'down' | 'expand' | 'collapse') => {
-    const flatTree = buildEnhancedFileTree(project.openFiles, project.rootPath, expandedFolders).flatTree;
+  // Load root items
+  const loadRootItems = useCallback(async (path?: string, preserveState = true, silent = false) => {
+    const targetPath = path || rootPath;
     
-    switch (direction) {
-      case 'up':
-        setFocusedItemIndex(prev => Math.max(0, prev - 1));
-        announceShortcut('Navigate Up', 'Moved up in file explorer');
-        break;
-      case 'down':
-        setFocusedItemIndex(prev => Math.min(flatTree.length - 1, prev + 1));
-        announceShortcut('Navigate Down', 'Moved down in file explorer');
-        break;
-      case 'expand':
-        if (focusedItemIndex >= 0 && focusedItemIndex < flatTree.length) {
-          const node = flatTree[focusedItemIndex];
-          if (node.file.language === 'directory' && !node.isExpanded) {
-            toggleFolder(node.file.path);
-            announceShortcut('Folder Expanded', `Expanded folder ${node.file.name}`);
-          }
-        }
-        break;
-      case 'collapse':
-        if (focusedItemIndex >= 0 && focusedItemIndex < flatTree.length) {
-          const node = flatTree[focusedItemIndex];
-          if (node.file.language === 'directory' && node.isExpanded) {
-            toggleFolder(node.file.path);
-            announceShortcut('Folder Collapsed', `Collapsed folder ${node.file.name}`);
-          }
-        }
-        break;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = new AbortController();
+    
+    if (!silent && !preserveState) {
+      setIsInitialLoading(true);
     }
-  }, [project.openFiles, project.rootPath, expandedFolders, focusedItemIndex]);
-
-  // Enhanced keyboard navigation with business tracking
-  useShortcut('navigation', 'goToLine', () => handleKeyboardNavigation('up'));
-  useShortcut('navigation', 'goToSymbol', () => handleKeyboardNavigation('down'));
-  useShortcut('navigation', 'jumpToMatchingBracket', () => handleKeyboardNavigation('expand'));
-  useShortcut('navigation', 'toggleBookmark', () => handleKeyboardNavigation('collapse'));
-  
-  // ================================
-  // FOLDER TOGGLE LOGIC
-  // ================================
-  
-  const toggleFolder = useCallback((path: string) => {
-    const wasExpanded = expandedFolders.has(path);
+    setError(null);
     
-    setExpandedFolders(prev => {
+    try {
+      const rootItems = await fileSystemService.loadRootItems(targetPath, true);
+      setRootNodes(rootItems);
+      
+      if (!preserveState) {
+        setLoadedChildren(new Map());
+        setExpandedPaths(new Set());
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name !== 'AbortError') {
+        setError(`Failed to load files: ${err.message}`);
+      }
+    } finally {
+      if (!silent && !preserveState) {
+        setIsInitialLoading(false);
+      }
+    }
+  }, [rootPath]);
+  
+  // File system watcher
+  const fileWatcher = useFileExplorerWatcher(rootPath, useCallback(() => {
+    loadRootItems(undefined, true, true);
+  }, [loadRootItems]));
+  
+  // Build display list
+  const flatNodes = useMemo(() => 
+    buildFlatList(rootNodes, expandedPaths, loadedChildren), 
+    [rootNodes, expandedPaths, loadedChildren, fileWatcher.refreshTrigger]
+  );
+  
+  // Smart rendering decision
+  const shouldUseVirtualization = forceVirtualization || flatNodes.length > 100;
+  
+  // Directory toggle handler
+  const handleDirectoryToggle = useCallback(async (path: string, shouldExpand: boolean) => {
+    setExpandedPaths(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(path)) {
-        newSet.delete(path);
-      } else {
+      if (shouldExpand) {
         newSet.add(path);
+      } else {
+        newSet.delete(path);
+        // Collapse nested directories
+        Array.from(newSet).forEach(expandedPath => {
+          if (expandedPath.startsWith(path + '/')) {
+            newSet.delete(expandedPath);
+          }
+        });
       }
       return newSet;
     });
     
-    // Notify parent component
-    onFolderExpand?.(path, !wasExpanded);
+    // Load children if expanding
+    if (shouldExpand && !loadedChildren.has(path)) {
+      try {
+        const children = await fileSystemService.loadFolderContents(path, true);
+        setLoadedChildren(prev => new Map(prev).set(path, children));
+      } catch (err) {
+        setError(`Failed to load folder: ${err}`);
+      }
+    }
     
-    // Track business impact
-    performanceManagerRef.current.logBusinessImpact('folder_toggle', {
-      path,
-      expanded: !wasExpanded,
-      totalExpanded: expandedFolders.size
-    });
-  }, [expandedFolders, onFolderExpand]);
+    onDirectoryToggle?.(path, shouldExpand);
+  }, [loadedChildren, onDirectoryToggle]);
   
-  // ================================
-  // FILE TREE COMPUTATION
-  // ================================
+  // File click handler
+  const handleFileClick = useCallback(async (node: FileNode) => {
+    try {
+      setError(null);
+      onFileSelect?.(node);
+    } catch (err) {
+      setError(`Unable to open file: ${err}`);
+    }
+  }, [onFileSelect]);
   
-  const { flatTree, treeMetrics } = useMemo(() => {
-    performanceManagerRef.current.startRender();
-    
-    const result = buildEnhancedFileTree(project.openFiles, project.rootPath, expandedFolders);
-    
-    // Update performance metrics
-    performanceManagerRef.current.updateMetrics({
-      totalFiles: treeMetrics.files,
-      totalFolders: treeMetrics.folders,
-      expandedFolders: expandedFolders.size,
-      selectedFile,
-      viewportItems: Math.min(result.flatTree.length, maxVisibleItems)
-    });
-    
-    performanceManagerRef.current.endRender();
-    
-    return { flatTree: result.flatTree, treeMetrics: result.metrics };
-  }, [project.openFiles, project.rootPath, expandedFolders, selectedFile, maxVisibleItems, fileWatcher.refreshTrigger]);
+  // Scroll to item function (for virtualized lists)
+  const scrollToItem = useCallback((index: number) => {
+    if (listRef.current) {
+      listRef.current.scrollToItem(index, 'smart');
+    }
+  }, []);
   
-  // ================================
-  // VIRTUAL SCROLLING SETUP
-  // ================================
-  
-  const virtualScrollConfig: VirtualScrollConfig = {
-    itemHeight: 22,
-    overscan: 5,
-    containerHeight: 400 // Will be updated dynamically
+  // Search functionality
+  const filteredNodes = useMemo(() => {
+    if (!searchQuery.trim() || !isSearchMode) {
+      return shouldUseVirtualization ? flatNodes : rootNodes;
+    }
+    
+    const query = searchQuery.toLowerCase();
+    return flatNodes.filter(node => 
+      node.name.toLowerCase().includes(query)
+    );
+  }, [flatNodes, rootNodes, searchQuery, isSearchMode, shouldUseVirtualization]);
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    setIsSearchMode(value.trim().length > 0);
   };
 
-  const virtualScroll = useVirtualScroll(flatTree, virtualScrollConfig, enableVirtualScrolling);
+  const clearSearch = () => {
+    setSearchQuery('');
+    setIsSearchMode(false);
+  };
   
-  // ================================
-  // ENHANCED FILE SELECTION
-  // ================================
+  // Prepare data for virtualized list
+  const listItemData: ListItemData = useMemo(() => ({
+    nodes: shouldUseVirtualization ? filteredNodes : [],
+    selectedPath,
+    expandedPaths,
+    onFileClick: handleFileClick,
+    onDirectoryToggle: handleDirectoryToggle,
+    onScrollToItem: scrollToItem
+  }), [
+    shouldUseVirtualization, filteredNodes, selectedPath, expandedPaths, 
+    handleFileClick, handleDirectoryToggle, scrollToItem
+  ]);
   
-  const handleFileSelect = useCallback((file: FileInfo) => {
-    onFileSelect(file);
-    performanceManagerRef.current.logBusinessImpact('file_select', {
-      fileName: file.name,
-      fileType: file.extension,
-      fileSize: file.size
-    });
-  }, [onFileSelect]);
-
-  // ================================
-  // EFFECTS
-  // ================================
-  
-  // Update container height for virtual scrolling
+  // Initial load
   useEffect(() => {
-    const updateHeight = () => {
-      if (containerRef.current) {
-        const height = containerRef.current.clientHeight;
-        virtualScrollConfig.containerHeight = height;
+    loadRootItems(undefined, false);
+    return () => abortControllerRef.current?.abort();
+  }, [rootPath, loadRootItems]);
+  
+  // Scroll to selected item (virtualized lists only)
+  useEffect(() => {
+    if (selectedPath && shouldUseVirtualization && listRef.current) {
+      const index = filteredNodes.findIndex(node => node.path === selectedPath);
+      if (index !== -1) {
+        listRef.current.scrollToItem(index, 'smart');
       }
-    };
-    
-    updateHeight();
-    window.addEventListener('resize', updateHeight);
-    return () => window.removeEventListener('resize', updateHeight);
-  }, []);
-
+    }
+  }, [selectedPath, filteredNodes, shouldUseVirtualization]);
+  
   // ================================
   // RENDER
   // ================================
   
   return (
-    <div className={`file-explorer h-full flex flex-col ${className || ''}`}>
-      {/* Explorer Header */}
-      <div className="px-3 py-2 bg-vscode-sidebar border-b border-vscode-border">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-vscode-fg">
-            Explorer
-          </h2>
-          {/* Live file watcher status indicator */}
-          {fileWatcher.isWatching && (
-            <div className="flex items-center text-vscode-accent">
-              <div className="w-2 h-2 bg-green-400 rounded-full mr-1 animate-pulse"></div>
-              <span className="text-xs">Live</span>
-            </div>
+    <div className={`h-full flex flex-col bg-gray-900 text-gray-300 ${className}`}>
+      {/* Loading indicator */}
+      {isInitialLoading && (
+        <div className="h-0.5 bg-blue-500 animate-pulse" />
+      )}
+      
+      {/* Header */}
+      <div className="px-3 py-2 border-b border-gray-700/50 flex items-center justify-between text-xs font-medium text-gray-400 uppercase tracking-wide">
+        <span>Explorer {shouldUseVirtualization && '(Virtualized)'}</span>
+        {fileWatcher.isWatching && (
+          <div className="flex items-center text-green-400">
+            <div className="w-1.5 h-1.5 bg-current rounded-full mr-1" />
+            <span className="text-xs normal-case">Live</span>
+          </div>
+        )}
+      </div>
+
+      {/* Search */}
+      <div className="p-2 border-b border-gray-700/50">
+        <div className="relative">
+          <Search size={12} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-500" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            placeholder="Search files..."
+            className="w-full pl-7 pr-7 py-1 text-xs bg-gray-800 border border-gray-700 rounded text-gray-300 placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+          />
+          {searchQuery && (
+            <button
+              onClick={clearSearch}
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-300"
+            >
+              <X size={12} />
+            </button>
           )}
         </div>
-        <div className="text-xs text-vscode-fg-muted mt-1">
-          {treeMetrics.files} files, {treeMetrics.folders} folders
-          {fileWatcher.isWatching && ` • ${fileWatcher.eventCount} updates`}
-        </div>
       </div>
       
-      {/* Project Root Section */}
-      <div className="px-2 py-1 bg-vscode-sidebar border-b border-vscode-border">
-        <div 
-          className="flex items-center px-2 py-1 cursor-pointer hover:bg-vscode-list-hover rounded transition-colors"
-          onClick={() => toggleFolder(project.rootPath)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              toggleFolder(project.rootPath);
-            }
-          }}
-          tabIndex={0}
-          role="treeitem"
-          aria-expanded={expandedFolders.has(project.rootPath)}
-          aria-label={`Project root: ${project.rootPath.split('/').pop() || 'Project'}`}
-        >
-          <span className="text-xs mr-1 transition-transform duration-150 text-vscode-fg-muted">
-            {expandedFolders.has(project.rootPath) ? '▼' : '▶'}
-          </span>
-          <FileIcon 
-            fileName="project-root"
-            isDirectory={true}
-            isOpen={expandedFolders.has(project.rootPath)}
-            size={16}
-            className="mr-2"
-          />
-          <span className="font-semibold text-sm text-vscode-fg">
-            {project.rootPath.split('/').pop() || 'Project'}
-          </span>
-        </div>
-      </div>
+      {/* Error display */}
+      {error && <ErrorNotification error={error} onDismiss={() => setError(null)} />}
       
-      {/* File Tree with Virtual Scrolling */}
-      <div 
-        ref={containerRef}
-        className="flex-1 overflow-y-auto vscode-scrollbar"
-        onScroll={virtualScroll.handleScroll}
-        role="tree"
-        aria-label="File explorer tree"
-      >
-        {expandedFolders.has(project.rootPath) && (
-          <div style={{ height: virtualScroll.totalHeight, position: 'relative' }}>
-            <div 
-              style={{ 
-                transform: `translateY(${virtualScroll.offsetY}px)`,
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0
-              }}
+      {/* File list - Smart rendering */}
+      <div className="flex-1 overflow-hidden">
+        {filteredNodes.length > 0 ? (
+          shouldUseVirtualization || isSearchMode ? (
+            // Virtualized rendering for large lists or search results
+            <List
+              ref={listRef}
+              height={height - 80}
+              width="100%"
+              itemCount={filteredNodes.length}
+              itemSize={22}
+              itemData={listItemData}
+              overscanCount={10}
+              className="scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent"
             >
-              {virtualScroll.visibleItems.map((node, index) => (
-                <FileTreeItem
-                  key={node.id}
-                  node={node}
-                  selectedFile={selectedFile}
-                  onFileSelect={handleFileSelect}
-                  onToggleExpand={toggleFolder}
-                  onContextMenu={onFileContextMenu}
-                  style={{ 
-                    height: virtualScrollConfig.itemHeight,
-                    opacity: focusedItemIndex === virtualScroll.startIndex + index ? 0.8 : 1
-                  }}
-                />
-              ))}
+              {VirtualizedFileItem}
+            </List>
+          ) : (
+            // Regular tree rendering for small lists
+            <div 
+              className="overflow-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent"
+              style={{ height: height - 80 }}
+            >
+              <FileTree
+                nodes={rootNodes}
+                selectedPath={selectedPath}
+                expandedPaths={expandedPaths}
+                loadedChildren={loadedChildren}
+                onFileClick={handleFileClick}
+                onDirectoryToggle={handleDirectoryToggle}
+              />
             </div>
-            
-            {flatTree.length === 0 && (
-              <div className="text-center py-8 text-vscode-fg-muted">
-                <div className="text-sm">📁 No files found</div>
-                <div className="text-xs mt-1">
-                  This folder appears to be empty
-                </div>
+          )
+        ) : !isInitialLoading && (
+          <div className="flex items-center justify-center h-full text-gray-500">
+            <div className="text-center">
+              <div className="text-lg mb-2">
+                {isSearchMode ? '🔍' : '📁'}
               </div>
-            )}
+              <div className="text-sm">
+                {isSearchMode ? 'No search results' : 'No files found'}
+              </div>
+            </div>
           </div>
         )}
       </div>
       
-      {/* Performance & Stats Footer */}
-      <div className="px-3 py-2 bg-vscode-sidebar border-t border-vscode-border">
-        <div className="flex justify-between items-center text-xs text-vscode-fg-muted">
-          <span>
-            {project.openFiles.length} items • {project.projectType}
-          </span>
-          <span>
-            {enableVirtualScrolling ? `Virtual: ${virtualScroll.visibleItems.length}/${flatTree.length}` : `All: ${flatTree.length}`}
-          </span>
-        </div>
+      {/* Footer */}
+      <div className="px-3 py-1 border-t border-gray-700/50 text-xs text-gray-500 flex justify-between">
+        <span>
+          {isSearchMode ? 
+            `${filteredNodes.length} result${filteredNodes.length !== 1 ? 's' : ''}` :
+            `${filteredNodes.length} items`
+          }
+        </span>
+        {fileWatcher.isWatching && (
+          <span className="text-green-500">Live</span>
+        )}
       </div>
     </div>
   );
-}; 
+};
+
+export default FileExplorer; 

@@ -2,7 +2,7 @@
 // VS Code-style file browser with search and recent files
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { getFileIcon } from '../../../utils/editorUtils';
+import { EnhancedFileIcon } from '../../ui/EnhancedFileIcon';
 import { fileSystemService } from '../../../services/fileSystemService';
 import type { FileNode } from '../../../types/fileSystem';
 
@@ -343,7 +343,11 @@ export const OpenFileDialog: React.FC<OpenFileDialogProps> = ({
                         }
                       `}
                     >
-                      <span className="text-lg">{getFileIcon(filePath.split('.').pop() || '')}</span>
+                      <EnhancedFileIcon 
+                  fileName={filePath.split('/').pop() || filePath}
+                  size={20}
+                  className="file-icon"
+                />
                       <div className="flex-1 min-w-0">
                         <div className="text-sm text-vscode-fg truncate">{filePath.split('/').pop()}</div>
                         <div className="text-xs text-vscode-fg-muted truncate">{filePath}</div>
@@ -378,7 +382,12 @@ export const OpenFileDialog: React.FC<OpenFileDialogProps> = ({
                         `}
                       >
                         <span className="text-lg">
-                          {file.isDirectory ? '📁' : getFileIcon(file.name.split('.').pop() || '')}
+                          <EnhancedFileIcon 
+                    fileName={file.name}
+                    isDirectory={file.isDirectory}
+                    size={16}
+                    className="file-icon"
+                  />
                         </span>
                         <div className="flex-1 min-w-0">
                           <div className="text-sm text-vscode-fg truncate">{file.name}</div>

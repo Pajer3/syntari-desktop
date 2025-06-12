@@ -6,7 +6,7 @@ import { TabLayout, useTabManager, Tab } from '../TabLayout';
 import { useShortcut } from '../../hooks/useKeyboardShortcuts';
 import { announceShortcut } from '../../utils/keyboardUtils';
 import type { FileInfo } from '../../types';
-import { getFileIcon } from '../../utils/editorUtils';
+import { EnhancedFileIcon } from '../ui/EnhancedFileIcon';
 
 // ================================
 // ENHANCED TYPES & INTERFACES

@@ -4,7 +4,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type { FileNode } from '../types/fileSystem';
 import { fileSystemService } from '../services/fileSystemService';
-import { getFileIcon } from '../utils/editorUtils';
+import { EnhancedFileIcon } from './ui/EnhancedFileIcon';
 
 // ================================
 // TYPES
