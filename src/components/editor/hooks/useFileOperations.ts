@@ -14,6 +14,7 @@ interface UseFileOperationsProps {
   setRecentFilePaths: (paths: string[]) => void;
   onFileChange?: (file: FileInfo, content: string) => void;
   openFileInTab: (file: FileInfo, content: string) => void;
+  fileExplorerRefreshRef?: React.RefObject<() => void>;
 }
 
 export const useFileOperations = ({
@@ -24,6 +25,7 @@ export const useFileOperations = ({
   setRecentFilePaths,
   onFileChange,
   openFileInTab,
+  fileExplorerRefreshRef,
 }: UseFileOperationsProps) => {
   const { fileTabs, activeTabIndex } = editorState;
   const activeTab = activeTabIndex >= 0 ? fileTabs[activeTabIndex] : null;
@@ -309,7 +311,7 @@ export const useFileOperations = ({
       // Clear file system cache to ensure new file appears in explorer
       const { fileSystemService } = await import('../../../services/fileSystemService');
       fileSystemService.clearFolderCache(selectedPath);
-      fileSystemService.clearFolderCache(); // Clear all cache to be safe
+      fileSystemService.invalidateAllCaches(); // Clear all cache to be safe
       console.log('🗑️ Cleared all file system cache to force refresh');
       
       // Update the tab with new file info
@@ -325,25 +327,38 @@ export const useFileOperations = ({
           : tab
       );
       
-      // Get current editor state to access fileExplorerKey
-      const currentState = editorStateRef.current;
-      
       updateEditorState({ 
-        fileTabs: newTabs,
-        fileExplorerKey: currentState.fileExplorerKey + 1 // Force file explorer refresh
+        fileTabs: newTabs
       });
       updateDialogStates({ saveAs: false });
       
       console.log('✅ File saved as:', fullFilePath);
-      console.log('🔄 File explorer refresh triggered');
       
-      // Additional refresh after a delay to ensure filesystem sync
-      setTimeout(() => {
+      // Use ref-based refresh to preserve expanded folders
+      if (fileExplorerRefreshRef?.current) {
+        console.log('🔄 Triggering ref-based file explorer refresh');
+        fileExplorerRefreshRef.current();
+      } else {
+        console.log('🔄 ⚠️ fileExplorerRefreshRef not available, falling back to key-based refresh');
+        // Fallback to key-based refresh if ref not available
         const currentState = editorStateRef.current;
         updateEditorState({ 
           fileExplorerKey: currentState.fileExplorerKey + 1 
         });
-        console.log('🔄 Secondary file explorer refresh after 500ms');
+      }
+      
+      // Additional refresh after a delay to ensure filesystem sync
+      setTimeout(() => {
+        if (fileExplorerRefreshRef?.current) {
+          console.log('🔄 Secondary ref-based refresh after 500ms');
+          fileExplorerRefreshRef.current();
+        } else {
+          console.log('🔄 Secondary key-based refresh after 500ms');
+          const currentState = editorStateRef.current;
+          updateEditorState({ 
+            fileExplorerKey: currentState.fileExplorerKey + 1 
+          });
+        }
       }, 500);
       
     } catch (error) {

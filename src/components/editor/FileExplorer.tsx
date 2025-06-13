@@ -22,6 +22,13 @@ interface FileExplorerProps {
   className?: string;
   forceVirtualization?: boolean; // Override automatic detection
   draftFiles?: Array<{ path: string; name: string; isModified: boolean }>; // New prop for draft files
+  // VS Code-style toolbar actions
+  onNewFile?: () => void;
+  onNewFolder?: () => void;
+  onRefresh?: () => void;
+  onCollapseAll?: () => void;
+  // Ref for external refresh triggers
+  refreshRef?: React.RefObject<() => void>;
 }
 
 interface ListItemData {
@@ -299,8 +306,15 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   height = 400,
   className = '',
   forceVirtualization = false,
-  draftFiles = []
+  draftFiles = [],
+  onNewFile,
+  onNewFolder,
+  onRefresh,
+  onCollapseAll,
+  refreshRef
 }) => {
+  console.log('🔄 [DEBUG] FileExplorer component mounted/remounted with rootPath:', rootPath);
+  
   // State management
   const [rootNodes, setRootNodes] = useState<readonly FileNode[]>([]);
   const [loadedChildren, setLoadedChildren] = useState<Map<string, FileNode[]>>(new Map());
@@ -379,7 +393,9 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
       const rootItems = await fileSystemService.loadRootItems(targetPath, true);
       setRootNodes(rootItems);
       
-      if (!preserveState) {
+      // Only clear state if explicitly requested AND it's the initial load
+      // This preserves expanded folders during refresh operations
+      if (!preserveState && isInitialLoading) {
         setLoadedChildren(new Map());
         setExpandedPaths(new Set());
       }
@@ -483,6 +499,44 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     setSearchQuery('');
     setIsSearchMode(false);
   };
+
+  // Handle collapse all functionality
+  const handleCollapseAll = useCallback(() => {
+    setExpandedPaths(new Set());
+    setLoadedChildren(new Map());
+    onCollapseAll?.();
+  }, [onCollapseAll]);
+
+  // Expose refresh function through ref
+  React.useImperativeHandle(refreshRef, () => () => {
+    console.log('🔄 [DEBUG] External refresh triggered via ref');
+    fileSystemService.invalidateAllCaches();
+    
+    // Refresh root items
+    loadRootItems(undefined, true, true); // Preserve state, silent refresh
+    
+    // Also refresh all expanded directories to pick up new files
+    const refreshExpandedDirectories = async () => {
+      console.log('🔄 [DEBUG] Refreshing expanded directories:', Array.from(expandedPaths));
+      const newLoadedChildren = new Map(loadedChildren);
+      
+      for (const expandedPath of expandedPaths) {
+        try {
+          console.log('🔄 [DEBUG] Refreshing directory:', expandedPath);
+          const children = await fileSystemService.loadFolderContents(expandedPath, true);
+          newLoadedChildren.set(expandedPath, children);
+          console.log('🔄 [DEBUG] Refreshed directory contents:', expandedPath, children.length, 'items');
+        } catch (error) {
+          console.error('🔄 [DEBUG] Failed to refresh directory:', expandedPath, error);
+        }
+      }
+      
+      setLoadedChildren(newLoadedChildren);
+    };
+    
+    // Refresh expanded directories after a small delay to ensure root is loaded first
+    setTimeout(refreshExpandedDirectories, 100);
+  }, [loadRootItems, expandedPaths, loadedChildren]);
   
   // Prepare data for virtualized list
   const listItemData: ListItemData = useMemo(() => ({
@@ -502,6 +556,23 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     loadRootItems(undefined, false);
     return () => abortControllerRef.current?.abort();
   }, [rootPath, loadRootItems]);
+  
+  // Listen for external refresh triggers (like when files are created)
+  useEffect(() => {
+    console.log('🔄 [DEBUG] FileExplorer rootPath or key changed, reloading...', { rootPath });
+    if (rootPath) {
+      // Refresh but preserve expanded state to avoid collapsing folders
+      loadRootItems(undefined, true, false);
+    }
+  }, [rootPath, loadRootItems]);
+  
+  // Component cleanup on unmount
+  useEffect(() => {
+    return () => {
+      console.log('🔄 [DEBUG] FileExplorer component unmounting...');
+      abortControllerRef.current?.abort();
+    };
+  }, []);
   
   // Scroll to selected item (virtualized lists only)
   useEffect(() => {
@@ -526,13 +597,90 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
       
       {/* Header */}
       <div className="px-3 py-2 border-b border-gray-700/50 flex items-center justify-between text-xs font-medium text-gray-400 uppercase tracking-wide">
-        <span>Explorer {shouldUseVirtualization && '(Virtualized)'}</span>
-        {fileWatcher.isWatching && (
-          <div className="flex items-center text-green-400">
-            <div className="w-1.5 h-1.5 bg-current rounded-full mr-1" />
-            <span className="text-xs normal-case">Live</span>
-          </div>
-        )}
+        <div className="flex items-center space-x-2">
+          <span>Explorer {shouldUseVirtualization && '(Virtualized)'}</span>
+          {fileWatcher.isWatching && (
+            <div className="flex items-center text-green-400">
+              <div className="w-1.5 h-1.5 bg-current rounded-full mr-1" />
+              <span className="text-xs normal-case">Live</span>
+            </div>
+          )}
+        </div>
+        
+        {/* VS Code-style action icons */}
+        <div className="flex items-center space-x-0.5">
+          <button
+            onClick={() => onNewFile?.()}
+            className="
+              p-1.5 hover:bg-gray-700/60 rounded-sm
+              text-gray-400 hover:text-gray-100
+              transition-all duration-150
+              focus:outline-none focus:ring-1 focus:ring-blue-500/30
+            "
+            title="New File (Ctrl+N)"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M9.5 1.1l3.4 3.5.1.4v8l-.5.5H3.5l-.5-.5V2l.5-.5h5.5l.5.6zM3 2v11h10V5H9.5L9 4.5V2H3zm7 2h2l-2-2v2z"/>
+            </svg>
+          </button>
+          
+          <button
+            onClick={() => onNewFolder?.()}
+            className="
+              p-1.5 hover:bg-gray-700/60 rounded-sm
+              text-gray-400 hover:text-gray-100
+              transition-all duration-150
+              focus:outline-none focus:ring-1 focus:ring-blue-500/30
+            "
+            title="New Folder (Ctrl+Shift+N)"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M7.71 3h6.79l.5.5v8l-.5.5H2.5l-.5-.5v-10l.5-.5h4.5l.71.71zm-.21 1L6.79 3H2v10h12V4H7.5z"/>
+              <path d="M7 6h1v2h2v1H8v2H7V9H5V8h2V6z"/>
+            </svg>
+          </button>
+          
+          <button
+            onClick={() => {
+              console.log('🔄 Manual refresh triggered');
+              // Clear all caches first
+              fileSystemService.invalidateAllCaches();
+              // Refresh but preserve expanded folders for better UX
+              loadRootItems(undefined, true, false);
+              // Also call the external refresh callback if provided
+              onRefresh?.();
+            }}
+            className={`
+              p-1.5 hover:bg-gray-700/60 rounded-sm
+              text-gray-400 hover:text-gray-100
+              transition-all duration-150
+              focus:outline-none focus:ring-1 focus:ring-blue-500/30
+              ${isInitialLoading ? 'animate-spin' : ''}
+            `}
+            title="Refresh Explorer (F5)"
+            disabled={isInitialLoading}
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8.5 1A7.5 7.5 0 0 1 16 8.5a.5.5 0 0 1-1 0A6.5 6.5 0 0 0 8.5 2 6.39 6.39 0 0 0 2.6 4.4L.5 2.3A.5.5 0 0 1 1 1.5h3a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-.85.35L1.5 3.2A7.39 7.39 0 0 1 8.5 1zM1 8.5A6.5 6.5 0 0 0 8.5 15 6.39 6.39 0 0 0 14.4 12.6l2.1 2.1a.5.5 0 0 1-.35.85h-3a.5.5 0 0 1-.5-.5v-3a.5.5 0 0 1 .85-.35l2.15 2.15A7.39 7.39 0 0 1 8.5 16 7.5 7.5 0 0 1 1 8.5a.5.5 0 0 1 1 0z"/>
+            </svg>
+          </button>
+          
+          <button
+            onClick={handleCollapseAll}
+            className="
+              p-1.5 hover:bg-gray-700/60 rounded-sm
+              text-gray-400 hover:text-gray-100
+              transition-all duration-150
+              focus:outline-none focus:ring-1 focus:ring-blue-500/30
+            "
+            title="Collapse All Folders"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M3.5 2A1.5 1.5 0 0 0 2 3.5v9A1.5 1.5 0 0 0 3.5 14h9a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 12.5 2h-9zM3 3.5a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5v-9z"/>
+              <path d="M5.5 6a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1H6a.5.5 0 0 1-.5-.5zm0 2a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1H6a.5.5 0 0 1-.5-.5z"/>
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Search */}

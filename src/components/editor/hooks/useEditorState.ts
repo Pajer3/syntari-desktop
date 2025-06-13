@@ -34,6 +34,7 @@ export interface DialogStates {
   saveAs: boolean;
   openFile: boolean;
   newFile: boolean;
+  newFolder: boolean;
   templateManager: boolean;
   unsavedChanges: UnsavedDialog;
 }
@@ -72,6 +73,7 @@ export const useEditorState = (project: ProjectContext) => {
     saveAs: false,
     openFile: false,
     newFile: false,
+    newFolder: false,
     templateManager: false,
     unsavedChanges: { isOpen: false, tabIndex: -1, fileName: '' },
   }));

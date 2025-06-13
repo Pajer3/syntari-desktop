@@ -422,17 +422,38 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
     return Math.abs(hash).toString(36);
   }
 
-  // Clear folder cache when needed
-  clearFolderCache(folderPath?: string): void {
-    if (folderPath) {
-      // Clear specific folder and its children
-      const keysToDelete = Array.from(this.folderContentsCache.keys())
-        .filter(key => key.startsWith(folderPath));
-      keysToDelete.forEach(key => this.folderContentsCache.delete(key));
-    } else {
-      // Clear all
-      this.folderContentsCache.clear();
+  // Cache management methods
+  clearFolderCache(folderPath: string): void {
+    this.folderContentsCache.delete(folderPath);
+  }
+
+  /**
+   * Invalidate all caches - useful when major file system changes occur
+   */
+  invalidateAllCaches(): void {
+    this.folderContentsCache.clear();
+    this.cache.clear(); // Clear the main cache as well
+    this.lastRefreshTime = Date.now();
+    console.log('🗑️ All file system caches invalidated');
+  }
+
+  /**
+   * Invalidate cache for a specific path and its parent directories
+   */
+  invalidateCache(path: string): void {
+    // Clear the specific path
+    this.folderContentsCache.delete(path);
+    
+    // Clear parent directories up to root
+    let currentPath = path;
+    while (currentPath && currentPath !== '/') {
+      this.folderContentsCache.delete(currentPath);
+      const lastSlash = currentPath.lastIndexOf('/');
+      if (lastSlash === -1) break;
+      currentPath = currentPath.substring(0, lastSlash);
     }
+    
+    console.log(`🗑️ Cache invalidated for path: ${path} and its parents`);
   }
 
   // VS Code-style smart file reading with size guards
@@ -515,6 +536,26 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
     } catch (error) {
       console.error('❌ Failed to save file:', error);
       throw new Error(`Failed to save file: ${error}`);
+    }
+  }
+
+  // Directory creation
+  async createDirectory(dirPath: string): Promise<void> {
+    try {
+      console.log('📁 Creating directory:', dirPath);
+      
+      await invoke('create_directory', {
+        path: dirPath
+      });
+      
+      // Clear cache for parent directory to show the new folder
+      const parentPath = dirPath.substring(0, dirPath.lastIndexOf('/'));
+      this.clearFolderCache(parentPath);
+      
+      console.log('✅ Directory created successfully:', dirPath);
+    } catch (error) {
+      console.error('❌ Failed to create directory:', error);
+      throw new Error(`Failed to create directory: ${error}`);
     }
   }
 
@@ -610,50 +651,6 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
   // ================================
 
   /**
-   * Invalidate caches and force refresh - called when file system changes detected
-   */
-  private invalidateCache(affectedPath?: string): void {
-    const startTime = performance.now();
-    let invalidatedCount = 0;
-
-    // Reduce logging frequency to prevent console spam
-    // console.log('🔄 Invalidating file system cache', affectedPath ? `for: ${affectedPath}` : '(all)');
-
-    if (affectedPath) {
-      // Invalidate specific path and its children
-      const keysToDelete: string[] = [];
-      
-      for (const [key] of this.folderContentsCache) {
-        // Check if the cached path is the affected path or a child of it
-        if (key === affectedPath || key.startsWith(affectedPath + '/') || affectedPath.startsWith(key + '/')) {
-          keysToDelete.push(key);
-        }
-      }
-      
-      keysToDelete.forEach(key => {
-        this.folderContentsCache.delete(key);
-        invalidatedCount++;
-        // Only log specific deletions in debug mode
-        // console.log('🗑️ Invalidated cache for key:', key);
-      });
-    } else {
-      // Clear entire cache
-      invalidatedCount = this.folderContentsCache.size;
-      this.folderContentsCache.clear();
-      this.iconCache.clear();
-    }
-
-    const duration = performance.now() - startTime;
-    // Reduce completion logging
-    // console.log(`🔄 Cache invalidation complete: ${invalidatedCount} entries invalidated`);
-    
-    // Only log performance warnings if significant
-    if (duration > 10) {
-      console.warn(`⚠️ Cache invalidation took ${duration.toFixed(2)}ms for ${invalidatedCount} entries`);
-    }
-  }
-
-  /**
    * Handle file system events from live watcher
    */
   handleFileSystemEvent(eventType: 'created' | 'modified' | 'deleted', path: string, isDirectory: boolean): void {
@@ -662,19 +659,19 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
       console.log(`🔄 Handling file system event: ${eventType} - ${path} (${isDirectory ? 'directory' : 'file'})`);
     }
     
-    // Invalidate caches for both parent directory and root directory
-    const parentPath = path.substring(0, path.lastIndexOf('/'));
-    
-    // Invalidate parent directory cache
-    this.invalidateCache(parentPath);
-    
-    // Also invalidate the root directory cache if this is a root-level change
-    // This ensures root-level file/folder changes are properly reflected
-    if (parentPath && parentPath !== path) {
-      // Check if this is close to root level (only 1-2 levels deep)
-      const pathSegments = parentPath.split('/').filter(Boolean);
-      if (pathSegments.length <= 3) { // Adjust threshold as needed
-        // Find and invalidate any root cache entries for this general area
+    // For created/deleted events, invalidate more aggressively
+    if (eventType === 'created' || eventType === 'deleted') {
+      this.invalidateCache(path);
+      
+      // Also invalidate parent directory to show/hide the new/deleted item
+      const parentPath = path.substring(0, path.lastIndexOf('/'));
+      if (parentPath) {
+        this.invalidateCache(parentPath);
+      }
+    } else {
+      // For modified events, just invalidate the specific path
+      const parentPath = path.substring(0, path.lastIndexOf('/'));
+      if (parentPath) {
         this.invalidateCache(parentPath);
       }
     }

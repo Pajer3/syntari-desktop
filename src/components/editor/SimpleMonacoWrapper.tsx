@@ -1,7 +1,16 @@
 // Simple Monaco Editor Wrapper - Minimal implementation to avoid getFullModelRange errors
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Editor from '@monaco-editor/react';
-import { EditorFile } from '../../types/editor';
+import * as monaco from 'monaco-editor';
+// import { EditorFile } from '../../types/editor'; // Commented out since this import is missing
+import { useResizeObserver } from '../ui/hooks/useResizeObserver';
+
+// Local interface to replace missing EditorFile type
+interface EditorFile {
+  path: string;
+  name: string;
+  content?: string;
+}
 
 interface SimpleMonacoWrapperProps {
   selectedFile: EditorFile | null;

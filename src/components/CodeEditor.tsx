@@ -17,14 +17,20 @@ interface CodeEditorProps {
   onFileChange?: (file: FileInfo | null) => void;
   onRequestAI?: (context: any) => void;
   className?: string;
+  fileExplorerRefreshRef?: React.RefObject<() => void>;
 }
 
 export const CodeEditor: React.FC<CodeEditorProps> = ({
   project,
   onFileChange,
   onRequestAI,
-  className = ''
+  className = '',
+  fileExplorerRefreshRef
 }) => {
+  // Create a ref for FileExplorer refresh - use the passed ref or create a new one
+  const internalFileExplorerRefreshRef = useRef<() => void>(null);
+  const activeFileExplorerRefreshRef = fileExplorerRefreshRef || internalFileExplorerRefreshRef;
+
   // Refs for Monaco Editor integration
   const goToLineRef = useRef<((lineNumber: number, column?: number) => void) | null>(null);
   const getCurrentLineRef = useRef<(() => number) | null>(null);
@@ -84,7 +90,8 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     onFileChange: (file: FileInfo) => {
       onFileChange?.(file);
     },
-    openFileInTab
+    openFileInTab,
+    fileExplorerRefreshRef: activeFileExplorerRefreshRef
   });
 
   // Go to line helper functions for refs
@@ -368,6 +375,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         goToSymbolRef={goToSymbolRef}
         monacoEditorRef={monacoEditorRef}
         openFileInTab={openFileInTab}
+        fileExplorerRefreshRef={activeFileExplorerRefreshRef}
       />
       
       {/* Tab Context Menu */}

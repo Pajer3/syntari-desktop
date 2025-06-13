@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import type { ProjectContext } from '../../types';
 import type { FileNode } from '../../types/fileSystem';
 import type { FileTab, EditorState, DialogStates } from './hooks/useEditorState';
@@ -14,6 +14,7 @@ import { QuickOpen } from '../QuickOpen';
 import { SaveAsDialog } from './dialogs/SaveAsDialog';
 import { OpenFileDialog } from './dialogs/OpenFileDialog';
 import { NewFileDialog } from './dialogs/NewFileDialog';
+import { NewFolderDialog } from './dialogs/NewFolderDialog';
 import { TemplateManagerDialog } from './dialogs/TemplateManagerDialog';
 import { usePerformanceConfig } from './usePerformanceConfig';
 import { useFileSave } from './useFileSave';
@@ -80,6 +81,7 @@ interface EditorLayoutProps {
   openFindReplaceRef: React.RefObject<(() => void) | null>;
   goToSymbolRef: React.RefObject<(() => void) | null>;
   monacoEditorRef: React.RefObject<any>;
+  fileExplorerRefreshRef: React.RefObject<() => void>;
 }
 
 // Add template manager state to DialogStates interface extension
@@ -129,9 +131,13 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
   // goToSymbolRef,     // Unused
   monacoEditorRef,
   openFileInTab,
+  fileExplorerRefreshRef,
 }) => {
   const performanceConfig = usePerformanceConfig();
   const fileSaver = useFileSave();
+
+  // Use the passed ref directly - CodeEditor now manages the ref
+  const activeFileExplorerRefreshRef = fileExplorerRefreshRef;
   
   const {
     fileTabs,
@@ -151,8 +157,18 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
     saveAs: isSaveAsDialogOpen,
     openFile: isOpenFileDialogOpen,
     newFile: isNewFileDialogOpen,
+    newFolder: isNewFolderDialogOpen,
     unsavedChanges: unsavedDialog,
   } = dialogStates;
+
+  // Add debug logging for dialog states
+  console.log('📄 [DEBUG] Dialog states in EditorLayout:', {
+    isSaveAsDialogOpen,
+    isOpenFileDialogOpen,
+    isNewFileDialogOpen,
+    isNewFolderDialogOpen,
+    fullDialogStates: dialogStates
+  });
 
   // Extended dialog states with template manager
   const extendedDialogStates = dialogStates as ExtendedDialogStates;
@@ -193,6 +209,21 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
     console.log('📄 [DEBUG] Full path constructed:', fullPath);
     
     try {
+      // Import file system service
+      const { fileSystemService } = await import('../../services/fileSystemService');
+      
+      // Check if file already exists
+      console.log('📄 [DEBUG] Checking if file exists...');
+      const files = await fileSystemService.loadFolderContents(currentDirectory || safeProject.rootPath, false);
+      const fileExists = files.some(file => 
+        !file.isDirectory && 
+        file.name.toLowerCase() === fileName.toLowerCase()
+      );
+      
+      if (fileExists) {
+        throw new Error(`File '${fileName}' already exists. Please choose a different name.`);
+      }
+      
       // Create the file with content using the file saver directly
       console.log('📄 [DEBUG] Saving file to disk...');
       await fileSaver.saveFile(fullPath, content || '');
@@ -214,14 +245,21 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
       openFileInTab(fileInfo, content || '');
       console.log('📄 [DEBUG] openFileInTab called successfully');
       
-      // Ensure the file explorer is refreshed to show the new file
-      console.log('📄 [DEBUG] Refreshing file explorer...');
-      updateEditorState({ fileExplorerKey: editorState.fileExplorerKey + 1 });
+      // Clear file system cache for the directory to ensure new file shows up
+      fileSystemService.clearFolderCache(currentDirectory || safeProject.rootPath);
       
-      // Additional refresh with delay to ensure filesystem sync
+      // Clear all caches and trigger refresh via ref to preserve expanded state
+      console.log('📄 [DEBUG] Clearing caches and triggering ref-based refresh...');
+      fileSystemService.invalidateAllCaches();
+      
+      // Trigger immediate refresh via ref
+      activeFileExplorerRefreshRef.current?.();
+      
+      // Additional cache clear and refresh with delay to ensure filesystem sync
       setTimeout(() => {
-        console.log('📄 [DEBUG] Secondary refresh after 500ms...');
-        updateEditorState({ fileExplorerKey: editorState.fileExplorerKey + 2 });
+        console.log('📄 [DEBUG] Secondary cache clear and refresh after 500ms...');
+        fileSystemService.invalidateAllCaches();
+        activeFileExplorerRefreshRef.current?.();
       }, 500);
       
       console.log('📄 [DEBUG] Closing dialog...');
@@ -232,6 +270,69 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
       console.error('❌ Failed to create new file:', error);
       updateEditorState({ 
         currentError: error instanceof Error ? error : new Error('Failed to create file') 
+      });
+    }
+  };
+
+  // Enhanced create new folder handler
+  const handleEnhancedCreateNewFolder = async (folderName: string) => {
+    console.log('📁 [DEBUG] handleEnhancedCreateNewFolder called with:', { folderName, currentDirectory });
+    
+    // Construct the full folder path
+    const fullPath = currentDirectory ? `${currentDirectory}/${folderName}` : folderName;
+    console.log('📁 [DEBUG] Full folder path constructed:', fullPath);
+    
+    try {
+      // Import and use the file system service
+      const { fileSystemService } = await import('../../services/fileSystemService');
+      
+      // Check if folder already exists
+      console.log('📁 [DEBUG] Checking if folder exists...');
+      const items = await fileSystemService.loadFolderContents(currentDirectory || safeProject.rootPath, false);
+      const folderExists = items.some(item => 
+        item.isDirectory && 
+        item.name.toLowerCase() === folderName.toLowerCase()
+      );
+      
+      if (folderExists) {
+        throw new Error(`Folder '${folderName}' already exists. Please choose a different name.`);
+      }
+      
+      console.log('📁 [DEBUG] Creating folder...');
+      await fileSystemService.createDirectory(fullPath);
+      console.log('📁 [DEBUG] Folder created successfully');
+      
+      // Clear cache for both current directory and parent directory
+      fileSystemService.clearFolderCache(currentDirectory || safeProject.rootPath);
+      if (currentDirectory) {
+        const parentDir = currentDirectory.substring(0, currentDirectory.lastIndexOf('/'));
+        if (parentDir) {
+          fileSystemService.clearFolderCache(parentDir);
+        }
+      }
+      
+      // Clear all caches and trigger refresh via ref to preserve expanded state
+      console.log('📁 [DEBUG] Clearing caches and triggering ref-based refresh...');
+      fileSystemService.invalidateAllCaches();
+      
+      // Trigger immediate refresh via ref
+      activeFileExplorerRefreshRef.current?.();
+      
+      // Additional cache clear and refresh with delay to ensure filesystem sync
+      setTimeout(() => {
+        console.log('📁 [DEBUG] Secondary cache clear and refresh after 500ms...');
+        fileSystemService.invalidateAllCaches();
+        activeFileExplorerRefreshRef.current?.();
+      }, 500);
+      
+      console.log('📁 [DEBUG] Closing dialog...');
+      updateDialogStates({ newFolder: false });
+      console.log('✅ New folder created:', fullPath);
+      
+    } catch (error) {
+      console.error('❌ Failed to create new folder:', error);
+      updateEditorState({ 
+        currentError: error instanceof Error ? error : new Error('Failed to create folder') 
       });
     }
   };
@@ -291,11 +392,27 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
                       className="h-full transition-opacity duration-200"
                       selectedPath={activeTab?.file.path}
                       draftFiles={draftFiles}
+                      refreshRef={activeFileExplorerRefreshRef}
                       onDirectoryToggle={(path: string, expanded: boolean) => {
                         // Track the current directory when users navigate
                         if (expanded) {
                           updateEditorState({ currentDirectory: path });
                         }
+                      }}
+                      onNewFile={() => {
+                        console.log('📄 [DEBUG] New File button clicked in FileExplorer');
+                        updateDialogStates({ newFile: true });
+                        console.log('📄 [DEBUG] updateDialogStates called with newFile: true');
+                      }}
+                      onNewFolder={() => updateDialogStates({ newFolder: true })}
+                                              onRefresh={() => {
+                          // Use the ref-based refresh to preserve expanded state
+                          console.log('🔄 Manual refresh requested - using ref-based refresh');
+                          activeFileExplorerRefreshRef.current?.();
+                        }}
+                      onCollapseAll={() => {
+                        // This will be handled by the FileExplorer internally
+                        console.log('🗂️ Collapsing all folders');
                       }}
                     />
                   );
@@ -512,6 +629,17 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
             onCreateFile={handleEnhancedCreateNewFile}
             currentPath={currentDirectory}
             projectType={detectProjectType()}
+          />
+        </div>
+      )}
+
+      {isNewFolderDialogOpen && (
+        <div className="animate-fadeIn">
+          <NewFolderDialog
+            isOpen={isNewFolderDialogOpen}
+            onClose={() => updateDialogStates({ newFolder: false })}
+            onCreateFolder={handleEnhancedCreateNewFolder}
+            currentPath={currentDirectory}
           />
         </div>
       )}

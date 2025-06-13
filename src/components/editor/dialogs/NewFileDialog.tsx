@@ -98,15 +98,41 @@ export const NewFileDialog: React.FC<NewFileDialogProps> = ({
     }
   }, [isOpen, presetFileName, presetContent]);
 
-  // Real-time validation
+  // Real-time validation with file existence checking
   useEffect(() => {
-    if (fileName.trim()) {
-      const validation = validateFileName(fileName.trim());
-      setValidationError(validation?.message || null);
-    } else {
-      setValidationError('File name cannot be empty');
-    }
-  }, [fileName]);
+    const checkFileAndValidate = async () => {
+      if (fileName.trim()) {
+        const validation = validateFileName(fileName.trim());
+        
+        // Check if file already exists
+        if (!validation || validation.severity !== 'error') {
+          try {
+            const { fileSystemService } = await import('../../../services/fileSystemService');
+            const files = await fileSystemService.loadFolderContents(currentPath || '', false);
+            const fileExists = files.some(file => 
+              !file.isDirectory && 
+              file.name.toLowerCase() === fileName.trim().toLowerCase()
+            );
+            
+            if (fileExists) {
+              setValidationError(`File '${fileName}' already exists`);
+            } else {
+              setValidationError(validation?.message || null);
+            }
+          } catch (error) {
+            // If we can't check, just use the filename validation
+            setValidationError(validation?.message || null);
+          }
+        } else {
+          setValidationError(validation.message);
+        }
+      } else {
+        setValidationError('File name cannot be empty');
+      }
+    };
+
+    checkFileAndValidate();
+  }, [fileName, currentPath]);
 
   // Filter templates based on search and category
   const filteredTemplates = React.useMemo(() => {
