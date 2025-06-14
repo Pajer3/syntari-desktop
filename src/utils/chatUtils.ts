@@ -10,7 +10,7 @@ export function extractCodeSnippets(content: string): any[] {
     snippets.push({
       language: match[1] || 'text',
       code: match[2].trim(),
-      syntaxValid: true, // TODO: Implement syntax validation
+      syntaxValid: true, // Note: Syntax validation to be implemented
     });
   }
 

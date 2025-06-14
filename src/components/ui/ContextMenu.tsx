@@ -230,7 +230,7 @@ export const fileContextMenu = (filePath: string, isDirectory: boolean) => {
       id: 'open',
       label: isDirectory ? 'Open Folder' : 'Open File',
       icon: isDirectory ? '📂' : '📄',
-      action: () => console.log('Open:', filePath)
+      action: () => { /* File open action */ }
     },
     {
       id: 'separator1',
@@ -242,21 +242,21 @@ export const fileContextMenu = (filePath: string, isDirectory: boolean) => {
       label: 'Cut',
       icon: '✂️',
       shortcut: 'Ctrl+X',
-      action: () => console.log('Cut:', filePath)
+      action: () => { /* Cut file action */ }
     },
     {
       id: 'copy',
       label: 'Copy',
       icon: '📋',
       shortcut: 'Ctrl+C',
-      action: () => console.log('Copy:', filePath)
+      action: () => { /* Copy file action */ }
     },
     {
       id: 'paste',
       label: 'Paste',
       icon: '📄',
       shortcut: 'Ctrl+V',
-      action: () => console.log('Paste in:', filePath)
+      action: () => { /* Paste file action */ }
     },
     {
       id: 'separator2',
@@ -267,7 +267,7 @@ export const fileContextMenu = (filePath: string, isDirectory: boolean) => {
       label: 'Rename',
       icon: '✏️',
       shortcut: 'F2',
-      action: () => console.log('Rename:', filePath)
+      action: () => { /* Rename file action */ }
     },
     {
       id: 'delete',
@@ -275,7 +275,7 @@ export const fileContextMenu = (filePath: string, isDirectory: boolean) => {
       icon: '🗑️',
       shortcut: 'Delete',
       danger: true,
-      action: () => console.log('Delete:', filePath)
+      action: () => { /* Delete file action */ }
     },
     {
       id: 'separator3',
@@ -285,7 +285,7 @@ export const fileContextMenu = (filePath: string, isDirectory: boolean) => {
       id: 'properties',
       label: 'Properties',
       icon: '⚙️',
-      action: () => console.log('Properties:', filePath)
+      action: () => { /* Properties action */ }
     }
   ];
 
@@ -299,19 +299,19 @@ export const fileContextMenu = (filePath: string, isDirectory: boolean) => {
           id: 'textEditor',
           label: 'Text Editor',
           icon: '📝',
-          action: () => console.log('Open with text editor:', filePath)
+          action: () => { /* Open with text editor */ }
         },
         {
           id: 'codeEditor',
           label: 'Code Editor',
           icon: '💻',
-          action: () => console.log('Open with code editor:', filePath)
+          action: () => { /* Open with code editor */ }
         },
         {
           id: 'systemDefault',
           label: 'System Default',
           icon: '🖥️',
-          action: () => console.log('Open with system default:', filePath)
+          action: () => { /* Open with system default */ }
         }
       ]
     });
@@ -327,19 +327,19 @@ export const tabContextMenu = (tabIndex: number, isPinned: boolean) => {
       label: 'Close Tab',
       icon: '✕',
       shortcut: 'Ctrl+W',
-      action: () => console.log('Close tab:', tabIndex)
+      action: () => { /* Close tab */ }
     },
     {
       id: 'closeOthers',
       label: 'Close Others',
       icon: '📋',
-      action: () => console.log('Close other tabs:', tabIndex)
+      action: () => { /* Close other tabs */ }
     },
     {
       id: 'closeToRight',
       label: 'Close to Right',
       icon: '➡️',
-      action: () => console.log('Close tabs to right:', tabIndex)
+      action: () => { /* Close tabs to right */ }
     },
     {
       id: 'separator1',
@@ -349,7 +349,7 @@ export const tabContextMenu = (tabIndex: number, isPinned: boolean) => {
       id: 'pin',
       label: isPinned ? 'Unpin Tab' : 'Pin Tab',
       icon: '📌',
-      action: () => console.log('Toggle pin:', tabIndex)
+      action: () => { /* Toggle pin */ }
     },
     {
       id: 'separator2',
@@ -359,13 +359,13 @@ export const tabContextMenu = (tabIndex: number, isPinned: boolean) => {
       id: 'splitRight',
       label: 'Split Right',
       icon: '↔️',
-      action: () => console.log('Split right:', tabIndex)
+      action: () => { /* Split right */ }
     },
     {
       id: 'splitDown',
       label: 'Split Down',
       icon: '↕️',
-      action: () => console.log('Split down:', tabIndex)
+      action: () => { /* Split down */ }
     }
   ];
 };
@@ -378,7 +378,7 @@ export const editorContextMenu = (hasSelection: boolean) => {
       icon: '✂️',
       shortcut: 'Ctrl+X',
       disabled: !hasSelection,
-      action: () => console.log('Cut selection')
+      action: () => { /* Cut selection */ }
     },
     {
       id: 'copy',
@@ -386,14 +386,14 @@ export const editorContextMenu = (hasSelection: boolean) => {
       icon: '📋',
       shortcut: 'Ctrl+C',
       disabled: !hasSelection,
-      action: () => console.log('Copy selection')
+      action: () => { /* Copy selection */ }
     },
     {
       id: 'paste',
       label: 'Paste',
       icon: '📄',
       shortcut: 'Ctrl+V',
-      action: () => console.log('Paste')
+      action: () => { /* Paste */ }
     },
     {
       id: 'separator1',
@@ -404,7 +404,7 @@ export const editorContextMenu = (hasSelection: boolean) => {
       label: 'Select All',
       icon: '🔄',
       shortcut: 'Ctrl+A',
-      action: () => console.log('Select all')
+      action: () => { /* Select all */ }
     },
     {
       id: 'separator2',
@@ -415,14 +415,14 @@ export const editorContextMenu = (hasSelection: boolean) => {
       label: 'Find',
       icon: '🔍',
       shortcut: 'Ctrl+F',
-      action: () => console.log('Open find')
+      action: () => { /* Open find */ }
     },
     {
       id: 'replace',
       label: 'Replace',
       icon: '🔄',
       shortcut: 'Ctrl+H',
-      action: () => console.log('Open replace')
+      action: () => { /* Open replace */ }
     },
     {
       id: 'separator3',
@@ -433,14 +433,14 @@ export const editorContextMenu = (hasSelection: boolean) => {
       label: 'Format Document',
       icon: '✨',
       shortcut: 'Shift+Alt+F',
-      action: () => console.log('Format document')
+      action: () => { /* Format document */ }
     },
     {
       id: 'ai',
       label: 'Ask AI Assistant',
       icon: '🤖',
       shortcut: 'Ctrl+K',
-      action: () => console.log('Ask AI')
+      action: () => { /* Ask AI */ }
     }
   ];
 };

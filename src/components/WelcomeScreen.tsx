@@ -12,14 +12,10 @@ interface WelcomeScreenProps {
 
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenProject }) => {
   const handleAction = (action: string) => {
-    console.log(`Action: ${action}`);
-    
-    // Simple action handling - just like the original
     if (action === 'Open Project') {
       onOpenProject();
     } else {
       // Future: Implement other actions
-      console.log('Action not implemented yet:', action);
     }
   };
 

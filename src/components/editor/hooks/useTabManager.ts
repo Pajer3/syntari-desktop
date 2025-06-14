@@ -151,7 +151,7 @@ export const useTabManager = ({
         break;
       case 'reveal-explorer':
         console.log('Reveal in explorer:', tab.file.path);
-        // TODO: Implement reveal in file explorer
+        // Feature: Reveal in file explorer to be implemented
         break;
       case 'copy-path':
         navigator.clipboard.writeText(tab.file.path);

@@ -11,10 +11,6 @@ export { UnsavedChangesDialog } from './UnsavedChangesDialog';
 export { GoToLineDialog } from './GoToLineDialog';
 export { FileExplorerViewer } from './FileExplorerViewer';
 
-// Search components
-export { SearchPanel } from './search/SearchPanel';
-export { SearchProvider } from './search/SearchProvider';
-
 // Hooks
 export { useEditorState } from './hooks/useEditorState';
 export { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -30,6 +26,8 @@ export { ErrorNotification } from './ErrorNotification';
 export { EmptyEditorState } from './EmptyEditorState';
 
 // Search Components
+export { SearchPanel } from './search/SearchPanel';
+export { SearchProvider } from './search/SearchProvider';
 export { SearchResults } from './search/SearchResults';
 export { SearchResult } from './search/SearchResult';
 export { useProjectSearch } from './search/useProjectSearch'; 

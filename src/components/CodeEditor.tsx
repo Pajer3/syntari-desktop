@@ -3,7 +3,6 @@
 
 import React, { useRef, useCallback, useState, useEffect } from 'react';
 import type { ProjectContext, FileInfo } from '../types';
-// import type { FileNode } from '../types/fileSystem'; // Unused
 import { useEditorState } from './editor/hooks/useEditorState';
 import { useTabManager } from './editor/hooks/useTabManager';
 import { useFileOperations } from './editor/hooks/useFileOperations';
@@ -132,20 +131,18 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   }, [handleTabClose, editorState.activeTabIndex]);
 
   // Reopen recently closed tab function
-  const handleReopenRecentTab = useCallback(() => {
-    console.log('🔄 Reopen recently closed tab (not yet implemented)');
-    // TODO: Implement reopen recently closed tab functionality
-  }, []);
+      const handleReopenRecentTab = useCallback(() => {
+      // Feature: Reopen recently closed tab functionality to be implemented
+    }, []);
 
   // Shortcut handler functions
   const handleShowQuickOpen = useCallback(() => {
     updateEditorState({ showQuickOpen: true });
   }, [updateEditorState]);
 
-  const handleShowCommandPalette = useCallback(() => {
-    console.log('🎯 Command palette (not yet implemented)');
-    // TODO: Implement command palette
-  }, []);
+      const handleShowCommandPalette = useCallback(() => {
+      // Feature: Command palette integration to be implemented
+    }, []);
 
   const handleToggleSidebar = useCallback(() => {
     updateEditorState({ showSidebar: !editorState.showSidebar });
@@ -173,10 +170,9 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     }
   }, []);
 
-  const handleShowAIAssistant = useCallback(() => {
-    console.log('🤖 Ask AI assistant (not yet implemented)');
-    // TODO: Implement AI assistant dialog
-  }, []);
+      const handleShowAIAssistant = useCallback(() => {
+      // Feature: AI assistant dialog integration to be implemented
+    }, []);
 
   const handleOpenFile = useCallback(() => {
     updateDialogStates({ openFile: true });
@@ -184,7 +180,6 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
 
   // AI integration handler
   const handleAskAI = useCallback((context: any) => {
-    console.log('🤖 AI assistant requested with context:', context);
     onRequestAI?.(context);
   }, [onRequestAI]);
 
@@ -199,11 +194,9 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   useEffect(() => {
     const handleSyntariCommand = (event: CustomEvent) => {
       const { type } = event.detail;
-      console.log('🎯 Syntari command received:', type);
       
       switch (type) {
         case 'save-file':
-          console.log('🎯 Handling save-file command, calling handleSave');
           handleSave();
           break;
         case 'save-as':
@@ -225,7 +218,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           handleToggleSidebar();
           break;
         default:
-          console.log('🎯 Unhandled syntari:command:', type);
+          // Unhandled command
       }
     };
 

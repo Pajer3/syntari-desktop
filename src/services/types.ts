@@ -76,15 +76,7 @@ export interface CommandPaletteState {
   recentCommands: string[];
 }
 
-// AI Service Types
-export interface AIProvider {
-  id: string;
-  name: string;
-  model: string;
-  enabled: boolean;
-  costPerToken: number;
-  maxTokens: number;
-}
+// AI Service Types (using core AiProvider interface)
 
 export interface AIRequest {
   prompt: string;

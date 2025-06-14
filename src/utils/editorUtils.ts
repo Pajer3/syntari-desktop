@@ -1,11 +1,8 @@
 // Syntari AI IDE - Editor Utility Functions
 // Extracted from CodeEditor.tsx for better maintainability
 
-import { LANGUAGE_MAP } from '../constants/editorConfig';
-
-export const getLanguageFromExtension = (extension: string): string => {
-  return LANGUAGE_MAP[extension] || 'plaintext';
-};
+// Re-export language detection from the canonical language service
+export { getLanguageFromExtension } from '../services/languageService';
 
 // Simple emoji-based file icons for backward compatibility
 // This provides the old string-based API that existing components expect

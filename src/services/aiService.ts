@@ -3,14 +3,14 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import type { 
-  AIProvider, 
   AIRequest, 
-  AIResponse,
+  AIResponse, 
   ServiceError 
 } from './types';
+import type { AiProvider } from '../types/core';
 
 class AIService {
-  private providers: AIProvider[] = [];
+  private providers: AiProvider[] = [];
   private selectedProviderId: string | null = null;
   private costHistory: number[] = [];
   private readonly maxCostHistorySize = 100;
@@ -29,7 +29,7 @@ class AIService {
   /**
    * Load available AI providers from Tauri backend
    */
-  async loadProviders(): Promise<AIProvider[]> {
+  async loadProviders(): Promise<AiProvider[]> {
     try {
       const result = await invoke<{success: boolean; data?: any[]; error?: string}>('get_ai_providers');
       
@@ -243,7 +243,7 @@ Provide an explanation that covers:
   /**
    * Get available providers
    */
-  getProviders(): AIProvider[] {
+  getProviders(): AiProvider[] {
     return [...this.providers];
   }
 
@@ -259,7 +259,7 @@ Provide an explanation that covers:
   /**
    * Get selected provider
    */
-  getSelectedProvider(): AIProvider | null {
+  getSelectedProvider(): AiProvider | null {
     return this.selectedProviderId ? 
       this.providers.find(p => p.id === this.selectedProviderId) || null : 
       null;

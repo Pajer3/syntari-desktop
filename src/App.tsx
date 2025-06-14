@@ -7,9 +7,6 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { useAppViewModel } from './hooks/useAppViewModel';
 import { useChatViewModel } from './hooks/useChatViewModel';
 import { useGlobalKeyboardShortcuts, useShortcut } from './hooks/useKeyboardShortcuts';
-// DISABLED: Custom context menu
-// import { useContextMenu } from './hooks/useContextMenu';
-// import { ContextMenu, getDefaultContextMenuItems } from './components/ContextMenu';
 import { Header } from './components/Header';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { TabLayout, useTabManager, type Tab } from './components/TabLayout';
@@ -36,8 +33,6 @@ const App: React.FC = () => {
     appViewModel.viewModel.project,
     appViewModel.handleError
   );
-  // DISABLED: Custom context menu
-  // const contextMenu = useContextMenu();
   
   // ================================
   // GLOBAL KEYBOARD SHORTCUTS
@@ -340,12 +335,6 @@ const App: React.FC = () => {
   //   );
   // };
 
-  // DISABLED: Custom context menu handler
-  // const handleContextMenu = (e: React.MouseEvent) => {
-  //   e.preventDefault();
-  //   contextMenu.showContextMenu(e.clientX, e.clientY, 'mouse');
-  // };
-
   // ================================
   // KEYBOARD SHORTCUTS
   // ================================
@@ -369,33 +358,7 @@ const App: React.FC = () => {
     return false;
   }, [appViewModel.viewModel.currentView, tabManager]);
 
-  // Legacy keyboard handler (to be removed once all shortcuts are migrated)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey) {
-        switch (e.key) {
-          case 'o':
-            e.preventDefault();
-            handleOpenProject();
-            break;
-          case ',':
-            e.preventDefault();
-            handleSettings();
-            break;
-          case 'k':
-            e.preventDefault();
-            // Focus AI assistant if in tabbed view
-            if (appViewModel.viewModel.currentView === 'editor') {
-              tabManager.switchToTab('ai-assistant');
-            }
-            break;
-        }
-      }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleOpenProject, handleSettings, appViewModel.viewModel.currentView, tabManager]);
+
 
   // ================================
   // RENDER LOGIC
@@ -422,8 +385,7 @@ const App: React.FC = () => {
         transition-all duration-500 ease-out
         ${isAppLoaded ? 'opacity-100' : 'opacity-0'}
       `}
-      // DISABLED: Custom context menu
-      // onContextMenu={handleContextMenu}
+
     >
       {/* Cool startup animation overlay */}
       {showStartupAnimation && (
@@ -459,13 +421,13 @@ const App: React.FC = () => {
           onSettings={handleSettings}
           onTogglePerformanceMode={appViewModel.togglePerformanceMode}
           onOpenProject={handleOpenProject}
-          onNewFile={() => console.log('Create new file')}
-          onSaveFile={() => console.log('Save current file')}
-          onUndo={() => console.log('Undo last action')}
-          onRedo={() => console.log('Redo last action')}
-          onFind={() => console.log('Open find dialog')}
-          onCommandPalette={() => console.log('Open command palette')}
-          onHelp={() => console.log('Show help')}
+          onNewFile={() => { /* Create new file */ }}
+          onSaveFile={() => { /* Save current file */ }}
+          onUndo={() => { /* Undo last action */ }}
+          onRedo={() => { /* Redo last action */ }}
+          onFind={() => { /* Open find dialog */ }}
+          onCommandPalette={() => { /* Open command palette */ }}
+          onHelp={() => { /* Show help */ }}
         />
       </div>
       

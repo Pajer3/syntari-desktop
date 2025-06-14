@@ -548,11 +548,10 @@ export const TabLayout: React.FC<TabLayoutProps> = ({
         break;
       case 'pin':
         // Pin/unpin functionality would be implemented by parent
-        console.log('Pin/Unpin tab:', tabId);
         break;
       case 'duplicate':
         if (tab.filePath) {
-          console.log('Duplicate tab:', tab.filePath);
+          // Duplicate tab functionality
         }
         break;
       case 'split-horizontal':
@@ -574,7 +573,7 @@ export const TabLayout: React.FC<TabLayoutProps> = ({
         break;
       case 'reveal-explorer':
         if (tab.filePath) {
-          console.log('Reveal in explorer:', tab.filePath);
+          // Reveal in explorer functionality
         }
         break;
     }

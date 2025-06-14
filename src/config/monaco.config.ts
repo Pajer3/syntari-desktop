@@ -303,10 +303,8 @@ export const handleMonacoConfigurationComplete = (): void => {
 // UTILITY FUNCTIONS
 // ================================
 
-// Legacy compatibility - enhanced version
-export const getLanguageFromPath = (filePath: string): string => {
-  return languageService.getLanguageByFilename(filePath.split('/').pop() || '');
-};
+// Legacy compatibility - re-export from language service
+export { getLanguageFromPath } from '../services/languageService';
 
 // Get language display name
 export const getLanguageDisplayName = (languageId: string): string => {

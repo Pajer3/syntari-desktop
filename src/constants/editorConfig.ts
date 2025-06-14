@@ -181,7 +181,6 @@ export const EDITOR_OPTIONS = {
   renderControlCharacters: false,
   
   // Render indent guides (handled via guides.indentation)
-  // renderIndentGuides: true, // Deprecated - use guides.indentation instead
   
   // Render whitespace (performance optimized)
   renderWhitespace: 'selection' as const, // Only show when selecting
@@ -502,8 +501,6 @@ export const baseEditorOptions: editor.IStandaloneEditorConstructionOptions = {
   renderLineHighlight: 'line',
   renderWhitespace: 'selection',
   renderControlCharacters: false,
-  // renderIndentGuides: true, // Deprecated - use guides.indentation instead
-  // highlightActiveIndentGuide: true, // Deprecated - use guides.highlightActiveIndentation instead
   
   // Minimap (enabled by default)
   minimap: {
@@ -638,8 +635,6 @@ export const performanceEditorOptions: editor.IStandaloneEditorConstructionOptio
   renderLineHighlight: 'none',
   renderWhitespace: 'none',
   renderControlCharacters: false,
-  // renderIndentGuides: false, // Deprecated - use guides.indentation instead
-  // highlightActiveIndentGuide: false, // Deprecated - use guides.highlightActiveIndentation instead
   
   // Disable language features
   quickSuggestions: false,

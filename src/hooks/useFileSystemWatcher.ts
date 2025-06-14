@@ -36,27 +36,7 @@ interface FileSystemWatcherState {
   events: FileSystemEvent[];
 }
 
-// ================================
-// DEBOUNCE UTILITY
-// ================================
 
-// Currently unused but kept for future debouncing needs
-// function useDebounce<T extends (...args: any[]) => void>(
-//   callback: T,
-//   delay: number
-// ): T {
-//   const timeoutRef = useRef<number>();
-// 
-//   return useCallback(
-//     ((...args: Parameters<T>) => {
-//       if (timeoutRef.current) {
-//         clearTimeout(timeoutRef.current);
-//       }
-//       timeoutRef.current = window.setTimeout(() => callback(...args), delay);
-//     }) as T,
-//     [callback, delay]
-//   );
-// }
 
 // ================================
 // MAIN HOOK
@@ -71,8 +51,7 @@ export const useFileSystemWatcher = (
     onFileCreated,
     onFileModified,
     onFileDeleted,
-    onFileRenamed,
-    // debounceMs = 100  // Currently unused but kept for future use
+    onFileRenamed
   } = options;
 
   // State

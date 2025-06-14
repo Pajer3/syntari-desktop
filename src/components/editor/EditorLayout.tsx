@@ -123,12 +123,7 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
   handleOpenFile,
   getCurrentLine,
   getTotalLines,
-  // goToLineRef,       // Unused
-  // getCurrentLineRef, // Unused
-  // getTotalLinesRef,  // Unused
-  // openFindRef,       // Unused
-  // openFindReplaceRef, // Unused
-  // goToSymbolRef,     // Unused
+  
   monacoEditorRef,
   openFileInTab,
   fileExplorerRefreshRef,
