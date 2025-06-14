@@ -5,6 +5,7 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { FixedSizeList as List } from 'react-window';
 import type { FileNode } from '../../types/fileSystem';
 import { fileSystemService } from '../../services/fileSystemService';
+import { contextMenuService } from '../../services/contextMenuService';
 import { AlertCircle, Search, X, ChevronRight, ChevronDown } from 'lucide-react';
 import { useFileExplorerWatcher } from '../../hooks/useFileSystemWatcher';
 import { EnhancedFileIcon } from '../ui/EnhancedFileIcon';
@@ -624,55 +625,108 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   
   // File operations handlers
   const fileOperations = useMemo(() => ({
-    onOpen: (path: string) => {
+    onOpen: async (path: string) => {
       console.log('📂 Opening file:', path);
-      // Find the node and trigger file selection
-      const findNode = (nodes: readonly FileNode[]): FileNode | null => {
-        for (const node of nodes) {
-          if (node.path === path) return node;
+      try {
+        // Find the node and trigger file selection for directories, or open file directly
+        const findNode = (nodes: readonly FileNode[]): FileNode | null => {
+          for (const node of nodes) {
+            if (node.path === path) return node;
+            if (node.isDirectory) {
+              const children = loadedChildren.get(node.path) || [];
+              const found = findNode(children);
+              if (found) return found;
+            }
+          }
+          return null;
+        };
+        
+        const node = findNode(allRootNodes);
+        if (node) {
           if (node.isDirectory) {
-            const children = loadedChildren.get(node.path) || [];
-            const found = findNode(children);
-            if (found) return found;
+            await contextMenuService.openFolder(path);
+          } else {
+            await contextMenuService.openFile(path);
+            // Also trigger file selection in the editor
+            handleFileClick(node);
           }
         }
-        return null;
-      };
-      
-      const node = findNode(allRootNodes);
-      if (node && !node.isDirectory) {
-        handleFileClick(node);
+      } catch (error) {
+        console.error('Failed to open:', error);
       }
     },
-    onCut: (path: string) => {
+    onCut: async (path: string) => {
       console.log('✂️ Cut file:', path);
-      // TODO: Implement cut functionality
+      try {
+        await contextMenuService.cutFile(path);
+      } catch (error) {
+        console.error('Failed to cut file:', error);
+      }
     },
-    onCopy: (path: string) => {
+    onCopy: async (path: string) => {
       console.log('📋 Copy file:', path);
-      // TODO: Implement copy functionality
+      try {
+        await contextMenuService.copyFile(path);
+      } catch (error) {
+        console.error('Failed to copy file:', error);
+      }
     },
-    onPaste: (targetPath: string) => {
+    onPaste: async (targetPath: string) => {
       console.log('📄 Paste to:', targetPath);
-      // TODO: Implement paste functionality
+      try {
+        await contextMenuService.pasteFile(targetPath);
+        // Refresh file tree after paste
+        setTimeout(() => {
+          fileSystemService.invalidateAllCaches();
+          loadRootItems(undefined, true, false);
+        }, 100);
+      } catch (error) {
+        console.error('Failed to paste file:', error);
+      }
     },
-    onRename: (path: string) => {
+    onRename: async (path: string) => {
       console.log('✏️ Rename file:', path);
-      // TODO: Implement rename functionality
+      try {
+        await contextMenuService.renameFile(path);
+        // Refresh file tree after rename
+        setTimeout(() => {
+          fileSystemService.invalidateAllCaches();
+          loadRootItems(undefined, true, false);
+        }, 100);
+      } catch (error) {
+        console.error('Failed to rename file:', error);
+      }
     },
-    onDelete: (path: string) => {
+    onDelete: async (path: string) => {
       console.log('🗑️ Delete file:', path);
-      // TODO: Implement delete functionality
+      try {
+        await contextMenuService.deleteFile(path);
+        // Refresh file tree after delete
+        setTimeout(() => {
+          fileSystemService.invalidateAllCaches();
+          loadRootItems(undefined, true, false);
+        }, 100);
+      } catch (error) {
+        console.error('Failed to delete file:', error);
+      }
     },
-    onProperties: (path: string) => {
+    onProperties: async (path: string) => {
       console.log('⚙️ Show properties for:', path);
-      // TODO: Implement properties dialog
+      try {
+        await contextMenuService.showFileProperties(path);
+      } catch (error) {
+        console.error('Failed to show properties:', error);
+      }
     },
-    onOpenWith: (path: string, application: string) => {
+    onOpenWith: async (path: string, application: string) => {
       console.log('🔧 Open with', application, ':', path);
-      // TODO: Implement open with functionality
+      try {
+        await contextMenuService.openWith(path, application);
+      } catch (error) {
+        console.error('Failed to open with:', error);
+      }
     }
-  }), [allRootNodes, loadedChildren, handleFileClick]);
+  }), [allRootNodes, loadedChildren, handleFileClick, loadRootItems]);
 
   // Prepare data for virtualized list
   const listItemData: ListItemData = useMemo(() => ({

@@ -13,6 +13,9 @@ import {
   PERFORMANCE_THRESHOLDS
 } from '../../constants/editorConfig';
 import { registerCustomThemes, THEME_NAMES } from '../../constants/monacoThemes';
+import { useContextMenuHandler } from '../ui/ContextMenu';
+import { useContextMenuIntegration } from '../../hooks/useContextMenuIntegration';
+import { contextMenuService } from '../../services/contextMenuService';
 
 interface MonacoEditorWrapperProps {
   selectedFile: EditorFile | null;
@@ -116,6 +119,34 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
   const [editorCanRender, setEditorCanRender] = useState(false);
   // Add state to track when full features can be enabled
   const [featuresEnabled, setFeaturesEnabled] = useState(false);
+  // Context menu state
+  const [hasSelection, setHasSelection] = useState(false);
+
+  // Context menu integration
+  const { createEditorContextMenu } = useContextMenuIntegration();
+  const handleContextMenu = useContextMenuHandler();
+
+  // Check if text is selected in editor
+  const checkSelection = useCallback(() => {
+    if (editorRef.current) {
+      const selection = editorRef.current.getSelection();
+      const hasText = selection && !selection.isEmpty();
+      setHasSelection(!!hasText);
+      return !!hasText;
+    }
+    return false;
+  }, []);
+
+  // Handle editor context menu
+  const handleEditorContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const currentHasSelection = checkSelection();
+    const contextMenuItems = createEditorContextMenu(currentHasSelection);
+    
+    handleContextMenu(e, contextMenuItems);
+  }, [createEditorContextMenu, handleContextMenu, checkSelection]);
 
   // Generate stable key that only changes when file actually changes, not content
   const stableKey = useMemo(() => {
@@ -299,6 +330,9 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
         editorRef.current.dispose();
         editorRef.current = null;
         
+        // Clear editor reference from context menu service
+        contextMenuService.setEditorRef(null);
+        
         // console.log('✅ Monaco Editor disposed successfully');
       } catch (error) {
         console.error('❌ Error disposing Monaco Editor:', error);
@@ -349,6 +383,41 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
       // Register custom themes
       registerCustomThemes(monaco);
 
+      // Set up selection change listener for context menu
+      editor.onDidChangeCursorSelection(() => {
+        checkSelection();
+      });
+
+      // Register editor with context menu service
+      contextMenuService.setEditorRef(editor);
+
+      // Add keyboard shortcut for AI assistant (Ctrl+K)
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, () => {
+        contextMenuService.openAIAssistant();
+      });
+
+      // Set up context menu on the editor DOM element
+      const editorDomNode = editor.getDomNode();
+      if (editorDomNode) {
+        editorDomNode.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          const currentHasSelection = checkSelection();
+          const contextMenuItems = createEditorContextMenu(currentHasSelection);
+          
+          // Convert DOM event to React MouseEvent-like object
+          const reactEvent = {
+            clientX: e.clientX,
+            clientY: e.clientY,
+            preventDefault: () => e.preventDefault(),
+            stopPropagation: () => e.stopPropagation()
+          } as React.MouseEvent;
+          
+          handleContextMenu(reactEvent, contextMenuItems);
+        });
+      }
+
       // Wait for the model to be fully ready before enabling features  
       const waitForModel = () => {
         const model = editor.getModel();
@@ -385,7 +454,7 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
       setMonacoError(`Editor mount failed: ${error}`);
       isDisposedRef.current = false; // Allow retry
     }
-  }, []);
+  }, [checkSelection, createEditorContextMenu, handleContextMenu]);
 
   // Enhanced editor configuration with VSCode-based optimizations
   const editorOptions = useMemo(() => {
@@ -621,7 +690,7 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
   }
 
   return (
-    <div className="monaco-editor-container h-full">
+    <div className="monaco-editor-container h-full" onContextMenu={handleEditorContextMenu}>
       {/* Performance mode indicator */}
       {performanceConfig.performanceMode && (
         <div className="performance-mode-indicator">
