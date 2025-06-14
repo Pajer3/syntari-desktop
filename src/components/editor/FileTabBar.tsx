@@ -102,7 +102,6 @@ export const FileTabBar: React.FC<FileTabBarProps> = ({
       backdrop-blur-sm
       ${className}
     `}>
-      {/* Gradient overlay for modern look */}
       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.02] to-transparent pointer-events-none" />
       
       <div className="relative flex overflow-x-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-vscode-scrollbar/50 hover:scrollbar-thumb-vscode-scrollbar">
@@ -147,12 +146,9 @@ export const FileTabBar: React.FC<FileTabBarProps> = ({
                 transform: isActive ? 'translateY(-1px)' : undefined,
               }}
             >
-              {/* Active tab glow effect */}
               {isActive && (
                 <div className="absolute inset-0 bg-gradient-to-r from-vscode-accent/10 via-transparent to-vscode-accent/10 rounded-t-lg" />
               )}
-
-              {/* File Icon with animation */}
               <div className={`
                 flex-shrink-0 mr-3 transition-all duration-200
                 ${isActive ? 'scale-110' : 'group-hover:scale-105'}
@@ -164,7 +160,6 @@ export const FileTabBar: React.FC<FileTabBarProps> = ({
                 />
               </div>
 
-              {/* File Name with smooth text animation */}
               <span className={`
                 flex-1 truncate text-sm font-medium transition-all duration-200
                 ${isActive ? 'font-semibold' : 'group-hover:font-medium'}
@@ -172,7 +167,6 @@ export const FileTabBar: React.FC<FileTabBarProps> = ({
                 {tab.file.name}
               </span>
 
-              {/* Modified Indicator with pulse animation */}
               {tab.isModified && (
                 <div className={`
                   flex-shrink-0 w-2 h-2 rounded-full ml-2
@@ -181,7 +175,6 @@ export const FileTabBar: React.FC<FileTabBarProps> = ({
                 `} />
               )}
 
-              {/* Pin Indicator with glow */}
               {tab.isPinned && (
                 <div className={`
                   flex-shrink-0 ml-2 text-xs transition-all duration-200
@@ -191,7 +184,6 @@ export const FileTabBar: React.FC<FileTabBarProps> = ({
                 </div>
               )}
 
-              {/* Close Button with cool hover effect */}
               <button
                 onClick={(e) => handleTabCloseClick(e, index)}
                 className={`
@@ -214,12 +206,10 @@ export const FileTabBar: React.FC<FileTabBarProps> = ({
                 </svg>
               </button>
 
-              {/* Drag indicator with glow */}
               {isDraggedOver && (
                 <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-vscode-accent to-vscode-accent/50 shadow-lg shadow-vscode-accent/50 animate-pulse" />
               )}
 
-              {/* Hover indicator */}
               {isHovered && !isActive && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-vscode-accent/50 to-transparent" />
               )}
@@ -228,7 +218,6 @@ export const FileTabBar: React.FC<FileTabBarProps> = ({
         })}
       </div>
 
-      {/* Stylish file counter with glass morphism */}
       <div className="flex-shrink-0 flex items-center">
         {tabs.length > 0 && (
           <div className={`
@@ -246,7 +235,6 @@ export const FileTabBar: React.FC<FileTabBarProps> = ({
         )}
       </div>
 
-      {/* Subtle gradient overlay at edges for premium look */}
       <div className="absolute left-0 top-0 bottom-0 w-4 bg-gradient-to-r from-vscode-sidebar to-transparent pointer-events-none" />
       <div className="absolute right-0 top-0 bottom-0 w-4 bg-gradient-to-l from-vscode-sidebar to-transparent pointer-events-none" />
     </div>

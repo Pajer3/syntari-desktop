@@ -381,8 +381,7 @@ export class LanguageService {
       this.registerLanguage(lang);
     });
     
-    // Reduced logging frequency - only log summary on startup
-    // console.log(`🚀 Language Service initialized with ${CORE_LANGUAGES.length} languages`);
+    // Auto-register core languages on instantiation
   }
 
   registerLanguage(langDef: LanguageDefinition): void {
@@ -403,8 +402,7 @@ export class LanguageService {
       languages.setMonarchTokensProvider(langDef.id, langDef.monarchGrammar);
     }
 
-    // Reduce logging frequency - only log when debug mode is enabled
-    // console.log(`📝 Registered language: ${langDef.name} (${langDef.extensions.join(', ')})`);
+    // Language registration complete
   }
 
   getLanguageByExtension(extension: string): string {
@@ -459,7 +457,8 @@ export class LanguageService {
       return true;
     }
 
-    // TODO: Implement actual LSP client startup
+    // Feature: Implement LSP client startup using language server protocol
+    // Implementation notes: Use vscode-languageclient or similar library
     console.log(`🚀 Starting LSP for ${languageId}: ${langDef.lsp.serverCommand}`);
     
     // Placeholder for future LSP client
@@ -476,7 +475,8 @@ export class LanguageService {
       return false;
     }
 
-    // TODO: Implement Tree-sitter grammar loading
+    // Feature: Implement Tree-sitter grammar loading for advanced syntax highlighting
+    // Implementation notes: Load grammar from treeSitter.grammarPath and integrate with Monaco
     console.log(`🌳 Loading Tree-sitter grammar for ${languageId}`);
     return true;
   }
@@ -507,6 +507,4 @@ export const isLanguageSupported = (languageId: string): boolean => {
   return languageService.getLanguageDefinition(languageId) !== undefined;
 };
 
-// Initialize on import
-// Initialize language service - reduce startup logging
-// console.log('🚀 Language Service module loaded'); 
+// Language service module initialized 

@@ -1,7 +1,6 @@
 // Syntari AI IDE - Icon System Integration Test
 // Quick verification that our comprehensive SVG system is working
 
-import React from 'react';
 import { EnhancedFileIcon } from '../ui/EnhancedFileIcon';
 
 const TEST_FILES = [

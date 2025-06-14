@@ -5,7 +5,8 @@ import { invoke } from '@tauri-apps/api/core';
 import type { 
   Command, 
   CommandCategory, 
-  ServiceError 
+  ServiceError,
+  GitCommandResult
 } from './types';
 
 class CommandService {
@@ -69,7 +70,6 @@ class CommandService {
       keybinding: 'Ctrl+S',
       icon: '💾',
       action: async () => {
-        console.log('🎯 Command service save triggered!');
         const event = new CustomEvent('syntari:command', { 
           detail: { type: 'save-file' } 
         });
@@ -566,6 +566,73 @@ class CommandService {
    */
   clearRecentCommands(): void {
     this.recentCommands = [];
+  }
+
+  async executeGitCommand(command: string, args: string[] = []): Promise<GitCommandResult> {
+    try {
+      switch (command) {
+        case 'status':
+          const status = await invoke('git_get_status');
+          return {
+            success: true,
+            output: status || 'No changes detected',
+            command: `git ${command}`,
+          };
+
+        case 'add':
+          // TODO: Implement git add command
+          return {
+            success: false,
+            output: 'Git add not implemented yet',
+            command: `git ${command} ${args.join(' ')}`,
+          };
+
+        case 'commit':
+          // TODO: Implement git commit command
+          return {
+            success: false,
+            output: 'Git commit not implemented yet',
+            command: `git ${command} ${args.join(' ')}`,
+          };
+
+        case 'push':
+          // TODO: Implement git push command
+          return {
+            success: false,
+            output: 'Git push not implemented yet',
+            command: `git ${command} ${args.join(' ')}`,
+          };
+
+        case 'pull':
+          // TODO: Implement git pull command
+          return {
+            success: false,
+            output: 'Git pull not implemented yet',
+            command: `git ${command} ${args.join(' ')}`,
+          };
+
+        case 'branch':
+          // TODO: Implement git branch command using backend git_get_branches
+          return {
+            success: false,
+            output: 'Git branch not implemented yet',
+            command: `git ${command} ${args.join(' ')}`,
+          };
+
+        default:
+          return {
+            success: false,
+            output: `Unknown git command: ${command}`,
+            command: `git ${command} ${args.join(' ')}`,
+          };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        output: error instanceof Error ? error.message : 'Git command failed',
+        command: `git ${command} ${args.join(' ')}`,
+      };
+    }
   }
 
   private handleError(code: string, message: string, originalError?: any): ServiceError {

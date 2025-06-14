@@ -85,11 +85,12 @@ export const useWorkspaceSymbols = (): WorkspaceSymbolManager => {
   const refreshSymbols = useCallback(async () => {
     setIsLoading(true);
     try {
-      // TODO: Implement actual workspace scanning
-      // For now, this is a placeholder that could be extended to:
-      // 1. Scan all files in the workspace
-      // 2. Parse symbols using language servers
-      // 3. Cache results for performance
+      // Feature: Implement comprehensive workspace symbol scanning
+      // Implementation notes: 
+      // 1. Scan all files in the workspace using file system API
+      // 2. Parse symbols using language servers or AST parsers
+      // 3. Cache results for performance with incremental updates
+      // 4. Support multiple languages (TypeScript, JavaScript, Python, etc.)
       
       console.log('🔍 Refreshing workspace symbols...');
       

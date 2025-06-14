@@ -18,8 +18,11 @@ class SearchService {
    */
   async initialize(): Promise<void> {
     try {
-      // Test connection to Tauri backend
-      await invoke('check_folder_permissions', { folderPath: '.' });
+      // Test connection to Tauri backend using correct parameter name
+      const result = await invoke<any>('check_folder_permissions', { path: '.' });
+      if (!result.success) {
+        throw new Error(result.error || 'Permission check failed');
+      }
     } catch (error) {
       console.warn('Search service initialization failed, using fallback mode:', error);
     }
@@ -306,6 +309,29 @@ class SearchService {
     } catch (error) {
       console.error('Failed to estimate result count:', error);
       return 0;
+    }
+  }
+
+  /**
+   * Validate search parameters before executing search
+   */
+  async validateSearchParams(query: string, options: SearchOptions): Promise<void> {
+    if (!query || query.trim().length === 0) {
+      throw this.handleError('INVALID_QUERY', 'Search query cannot be empty');
+    }
+
+    if (query.length > 1000) {
+      throw this.handleError('QUERY_TOO_LONG', 'Search query is too long (max 1000 characters)');
+    }
+
+    // Check folder permissions using proper backend parameter name
+    try {
+      const result = await invoke<any>('check_folder_permissions', { path: '.' });
+      if (!result.success) {
+        throw new Error(result.error || 'Permission check failed');
+      }
+    } catch (error) {
+      throw this.handleError('PERMISSION_DENIED', 'Cannot access search directory', error);
     }
   }
 

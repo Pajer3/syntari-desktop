@@ -1,7 +1,6 @@
 // Syntari AI IDE - Professional Empty Editor State Component
 // VSCode-inspired welcome state when no file is open
 
-import React from 'react';
 import type { ProjectContext } from '../../types';
 
 interface EmptyEditorStateProps {

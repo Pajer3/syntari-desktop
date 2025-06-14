@@ -201,7 +201,15 @@ class ProjectService {
    */
   async readFile(filePath: string): Promise<string> {
     try {
-      return await invoke<string>('read_file', { path: filePath });
+      // Use backend's smart file reader that returns TauriResult<FileReadResult>
+      const result = await invoke<any>('read_file_smart', { path: filePath });
+      
+      // Handle TauriResult pattern from backend
+      if (result.success && result.data) {
+        return result.data.content || '';
+      } else {
+        throw new Error(result.error || 'Failed to read file');
+      }
     } catch (error) {
       throw this.handleError('READ_FILE_FAILED', `Failed to read file ${filePath}`, error);
     }
@@ -266,8 +274,9 @@ class ProjectService {
    */
   async fileExists(filePath: string): Promise<boolean> {
     try {
-      await invoke('read_file', { path: filePath });
-      return true;
+      const result = await invoke<any>('read_file_smart', { path: filePath });
+      // Handle TauriResult pattern - if successful, file exists
+      return result.success === true;
     } catch {
       return false;
     }

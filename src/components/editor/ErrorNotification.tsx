@@ -1,8 +1,6 @@
 // Syntari AI IDE - Error Notification Component
 // Extracted from CodeEditor.tsx for better maintainability
 
-import React from 'react';
-
 interface ErrorNotificationProps {
   error: string | null;
   onDismiss: () => void;

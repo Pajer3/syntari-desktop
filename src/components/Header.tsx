@@ -487,7 +487,6 @@ export const Header: React.FC<HeaderProps> = ({
     >
       {/* Left Section - Logo and Interactive Menu */}
       <div className="flex items-center space-x-6" data-tauri-drag-region>
-        {/* Logo */}
         <div className="flex items-center space-x-3" data-tauri-drag-region>
           <img 
             src="/logo.png" 
@@ -508,7 +507,6 @@ export const Header: React.FC<HeaderProps> = ({
           />
         </div>
 
-        {/* Interactive Menu Bar */}
         <nav className="flex items-center space-x-1 text-sm">
           {dropdownMenus.map((menu) => (
             <div key={menu.id} className="relative">
@@ -525,16 +523,14 @@ export const Header: React.FC<HeaderProps> = ({
           ))}
         </nav>
         
-        {/* Render all dropdowns */}
         {dropdownMenus.map(menu => renderDropdown(menu))}
       </div>
 
       {/* Center Section - Search Bar */}
       <div className="flex-1 flex justify-center px-4">
-        {/* Draggable area left of search */}
         <div className="flex-1" data-tauri-drag-region></div>
         
-        {/* Non-draggable search container - VSCode inspired approach */}
+        {/* Non-draggable search container */}
         <div 
           className="relative max-w-md w-full" 
           onMouseDown={(e) => e.stopPropagation()}
@@ -551,12 +547,9 @@ export const Header: React.FC<HeaderProps> = ({
             type="text"
             value={searchValue}
             onChange={(e) => {
-              // Reduce input event logging to prevent console spam
-              // console.log('🔍 onChange fired:', e.target.value);
               setSearchValue(e.target.value);
             }}
             onKeyDown={(e) => {
-              // console.log('🔍 onKeyDown fired:', e.key, e.code);
               // Handle common keys directly to ensure they work
               if (e.key === 'Backspace' && searchValue.length > 0) {
                 e.preventDefault();
@@ -568,28 +561,23 @@ export const Header: React.FC<HeaderProps> = ({
               }
             }}
             onInput={(e) => {
-              // console.log('🔍 onInput fired:', (e.target as HTMLInputElement).value);
               const target = e.target as HTMLInputElement;
               setSearchValue(target.value);
             }}
             onFocus={(e) => {
-              // console.log('🔍 onFocus fired');
               e.stopPropagation();
               setIsSearchFocused(true);
               setActiveDropdown(null);
             }}
             onBlur={(e) => {
-              // console.log('🔍 onBlur fired');
               e.stopPropagation();
               setTimeout(() => setIsSearchFocused(false), 200);
             }}
             onMouseDown={(e) => {
-              // console.log('🔍 onMouseDown fired');
               e.stopPropagation();
               e.currentTarget.focus();
             }}
             onClick={(e) => {
-              // console.log('🔍 onClick fired');
               e.stopPropagation();
               e.currentTarget.focus();
             }}
@@ -621,15 +609,12 @@ export const Header: React.FC<HeaderProps> = ({
           {renderSearchResults()}
         </div>
         
-        {/* Draggable area right of search */}
         <div className="flex-1" data-tauri-drag-region></div>
       </div>
 
       {/* Right Section - Status and Window Controls */}
       <div className="flex items-center space-x-4">
-        {/* Status Indicators */}
         <div className="flex items-center space-x-3">
-          {/* Performance Mode Toggle */}
           <div className="flex items-center space-x-2 px-3 py-1.5 bg-gray-600/40 border border-gray-500/30 rounded-md">
             <span className="text-xs text-gray-200">Performance</span>
             <button
@@ -654,7 +639,6 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
-          {/* AI Status */}
           <div 
             className="flex items-center space-x-2 px-3 py-1.5 bg-gray-600/40 border border-gray-500/30 rounded-md cursor-pointer hover:bg-gray-600/60 transition-colors"
             onClick={() => console.log('Show AI status details')}
@@ -677,7 +661,6 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Window Controls */}
         <div className="flex items-center space-x-1">
-          {/* Minimize */}
           <button
             onClick={handleMinimize}
             className="w-8 h-8 flex items-center justify-center hover:bg-gray-700/50 transition-colors rounded"
@@ -688,7 +671,6 @@ export const Header: React.FC<HeaderProps> = ({
             </svg>
           </button>
 
-          {/* Maximize/Restore */}
           <button
             onClick={handleMaximize}
             className="w-8 h-8 flex items-center justify-center hover:bg-gray-700/50 transition-colors rounded"
@@ -706,7 +688,6 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </button>
 
-          {/* Close */}
           <button
             onClick={handleClose}
             className="w-8 h-8 flex items-center justify-center hover:bg-red-600 transition-colors rounded"

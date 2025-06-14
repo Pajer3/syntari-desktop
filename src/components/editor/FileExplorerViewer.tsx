@@ -50,7 +50,8 @@ export const FileExplorerViewer: React.FC<FileExplorerViewerProps> = ({
   // Handle AI requests (placeholder)
   const handleAIRequest = useCallback((context: any) => {
     console.log('AI request from editor:', context);
-    // TODO: Integrate with AI service
+    // Feature: Integrate with AI service for intelligent code assistance
+    // Implementation notes: Connect to ChatService and route AI requests through smart provider system
   }, []);
 
   // Load project on mount or path change

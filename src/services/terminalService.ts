@@ -16,14 +16,22 @@ class TerminalService {
   private activeSessionId: string | null = null;
 
   /**
-   * Initialize the terminal service
+   * Initialize terminal service and check backend connectivity
    */
   async initialize(): Promise<void> {
     try {
-      // Test connection to Tauri backend
-      await invoke('get_terminal_info');
+      // Test backend connection and get terminal info
+      const result = await invoke<any>('get_terminal_info');
+      
+      // Handle TauriResult pattern from backend
+      if (result.success && result.data) {
+        console.log('Terminal service initialized:', result.data);
+      } else {
+        console.warn('Terminal info not available:', result.error);
+      }
     } catch (error) {
-      console.warn('Terminal service initialization failed, using fallback mode:', error);
+      console.error('Failed to initialize terminal service:', error);
+      throw this.handleError('TERMINAL_INIT_FAILED', 'Failed to initialize terminal service', error);
     }
   }
 
@@ -56,66 +64,43 @@ class TerminalService {
   }
 
   /**
-   * Execute a command in the specified session
+   * Execute a command with improved error handling
    */
-  async executeCommand(sessionId: string, command: string): Promise<TerminalOutput> {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
-      throw this.handleError('SESSION_NOT_FOUND', `Session ${sessionId} not found`);
-    }
-
+  async executeCommand(command: string, args: string[] = [], options: ExecuteOptions = {}): Promise<CommandResult> {
     try {
-      // Add command to history
-      const commandOutput: TerminalOutput = {
-        id: this.generateOutputId(),
-        type: 'command',
-        content: command,
-        timestamp: new Date(),
-      };
-      session.history.push(commandOutput);
-
-      // Execute command via Tauri
-      const result = await invoke<CommandResult>('execute_shell_command', {
+      const result = await invoke<any>('execute_shell_command', {
         command,
-        workingDirectory: session.workingDirectory,
+        args,
+        workingDirectory: options.workingDirectory || this.currentDirectory,
+        timeout: options.timeout || 30000,
       });
-
-      // Add result to history
-      const resultOutput: TerminalOutput = {
-        id: this.generateOutputId(),
-        type: result.exit_code === 0 ? 'output' : 'error',
-        content: result.output,
-        timestamp: new Date(),
-        exitCode: result.exit_code,
-      };
-      session.history.push(resultOutput);
-
-      // Update session working directory if it was a cd command
-      if (command.trim().startsWith('cd ')) {
-        try {
-          const newDir = await invoke<string>('change_directory', {
-            path: command.trim().substring(3).trim(),
-          });
-          session.workingDirectory = newDir;
-        } catch (error) {
-          // cd command failed, but we already have the error in resultOutput
-        }
-      }
-
-      this.sessions.set(sessionId, session);
-      return resultOutput;
-    } catch (error) {
-      const errorOutput: TerminalOutput = {
-        id: this.generateOutputId(),
-        type: 'error',
-        content: `Error executing command: ${error}`,
-        timestamp: new Date(),
-        exitCode: -1,
-      };
-      session.history.push(errorOutput);
-      this.sessions.set(sessionId, session);
       
-      return errorOutput;
+      // Handle TauriResult pattern
+      if (result.success && result.data) {
+        return {
+          success: true,
+          output: result.data.output || '',
+          error: result.data.error || '',
+          exitCode: result.data.exit_code || 0,
+          command: `${command} ${args.join(' ')}`.trim(),
+        };
+      } else {
+        return {
+          success: false,
+          output: '',
+          error: result.error || 'Command failed',
+          exitCode: 1,
+          command: `${command} ${args.join(' ')}`.trim(),
+        };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        output: '',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        exitCode: 1,
+        command: `${command} ${args.join(' ')}`.trim(),
+      };
     }
   }
 
@@ -177,13 +162,23 @@ class TerminalService {
   }
 
   /**
-   * Kill a running process
+   * Kill a process with proper error handling
    */
-  async killProcess(pid: number): Promise<void> {
+  async killProcess(pid: number): Promise<boolean> {
     try {
-      await invoke('kill_process', { pid });
+      const result = await invoke<any>('kill_process', { pid });
+      
+      // Handle TauriResult pattern
+      if (result.success) {
+        console.log(`Process ${pid} terminated successfully`);
+        return true;
+      } else {
+        console.error(`Failed to kill process ${pid}:`, result.error);
+        return false;
+      }
     } catch (error) {
-      throw this.handleError('KILL_PROCESS_FAILED', 'Failed to kill process', error);
+      console.error(`Error killing process ${pid}:`, error);
+      return false;
     }
   }
 

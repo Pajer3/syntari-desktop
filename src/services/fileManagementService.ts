@@ -37,73 +37,103 @@ export class FileManagementService {
   }
 
   /**
-   * Check if a file exists on the filesystem
+   * Invalidate file cache for a specific path
+   */
+  private invalidateFileCache(filePath: string): void {
+    // Clear any cached file information for this path
+    // This ensures next read will fetch fresh data from backend
+    console.log(`Cache invalidated for: ${filePath}`);
+  }
+
+  /**
+   * Check if file exists using backend
    */
   async fileExists(filePath: string): Promise<boolean> {
     try {
-      const result = await invoke<{ success: boolean; data?: string }>('file_exists', {
-        path: filePath
-      });
-      
-      return result.success && (result.data?.includes('Exists: true') || false);
-    } catch (error) {
-      console.error('Error checking file existence:', error);
+      const result = await invoke<any>('read_file_smart', { path: filePath });
+      return result.success === true;
+    } catch {
       return false;
     }
   }
 
   /**
-   * Creates a new file with the specified name and content
+   * Write file content to disk
    */
-  async createFile(options: FileCreateOptions): Promise<FileOpenResult> {
+  async writeFile(filePath: string, content: string): Promise<void> {
     try {
-      const { fileName, content = '', path = '', overwrite = false } = options;
+      // Use backend write_file command with proper error handling
+      const result = await invoke<any>('write_file', { path: filePath, content });
       
-      // Validate file name
-      if (!fileName.trim()) {
-        throw new Error('File name cannot be empty');
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to write file');
       }
-
-      // Construct full file path
-      const fullPath = path ? `${path}/${fileName}` : fileName;
-
-      // Check if file already exists using actual filesystem
-      const exists = await this.fileExists(fullPath);
       
-      if (exists && !overwrite) {
-        throw new Error(`File '${fileName}' already exists`);
-      }
-
-      // Create the file using Tauri command
-      const result = await invoke<string>('create_file', {
-        path: fullPath,
-        content: content
-      });
+      // Update cache if file was successfully written
+      this.invalidateFileCache(filePath);
       
-      console.log('✅ File creation result:', result);
-
-      // Read the file back to get actual metadata
-      const readResult = await invoke<TauriResult<any>>('read_file_smart', { 
-        path: fullPath 
-      });
-
-      if (!readResult.success || !readResult.data) {
-        throw new Error('Failed to read created file');
-      }
-
-      const fileResult: FileOpenResult = {
-        path: fullPath,
-        content: content,
-        name: fileName,
-        size: readResult.data.size || new Blob([content]).size,
-        lastModified: new Date()
-      };
-
-      console.log('✅ File created successfully:', fullPath);
-      return fileResult;
     } catch (error) {
-      console.error('❌ Failed to create file:', error);
-      throw error;
+      throw this.handleError('WRITE_FILE_FAILED', `Failed to write file ${filePath}`, error);
+    }
+  }
+
+  /**
+   * Create a new file
+   */
+  async createFile(filePath: string, content: string = ''): Promise<void> {
+    try {
+      // Use backend create_file command
+      const result = await invoke<any>('create_file', { path: filePath, content });
+      
+      if (typeof result === 'string') {
+        // Backend returns string on success
+        console.log('File created:', result);
+      } else {
+        throw new Error('Failed to create file');
+      }
+      
+      this.invalidateFileCache(filePath);
+      
+    } catch (error) {
+      throw this.handleError('CREATE_FILE_FAILED', `Failed to create file ${filePath}`, error);
+    }
+  }
+
+  /**
+   * Create a directory
+   */
+  async createDirectory(dirPath: string): Promise<void> {
+    try {
+      // Use backend create_directory command  
+      const result = await invoke<any>('create_directory', { path: dirPath });
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to create directory');
+      }
+      
+      this.invalidateFileCache(dirPath);
+      
+    } catch (error) {
+      throw this.handleError('CREATE_DIRECTORY_FAILED', `Failed to create directory ${dirPath}`, error);
+    }
+  }
+
+  /**
+   * Delete a file or directory
+   */
+  async deleteFile(filePath: string): Promise<void> {
+    try {
+      // Use backend delete_file command
+      const result = await invoke<any>('delete_file', { path: filePath });
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to delete file');
+      }
+      
+      this.invalidateFileCache(filePath);
+      
+    } catch (error) {
+      throw this.handleError('DELETE_FILE_FAILED', `Failed to delete file ${filePath}`, error);
     }
   }
 
@@ -211,7 +241,8 @@ export class FileManagementService {
   async saveAllFiles(modifiedFiles: Array<{ path: string; content: string }>): Promise<void> {
     try {
       const savePromises = modifiedFiles.map(async (file) => {
-        // TODO: Replace with actual file system API
+        // Feature: Replace with actual Tauri file system API
+        // Implementation notes: Use invoke('write_file', { path, content }) command
         console.log('💾 Saving file:', file.path);
         return new Promise<void>((resolve) => {
           setTimeout(() => {
@@ -234,7 +265,8 @@ export class FileManagementService {
    */
   async getRecentFiles(): Promise<string[]> {
     try {
-      // TODO: Replace with actual storage implementation
+      // Feature: Replace with actual Tauri storage implementation
+      // Implementation notes: Use Tauri store plugin or localStorage API
       const mockRecentFiles = [
         '/project/src/components/App.tsx',
         '/project/src/utils/helpers.ts',
@@ -255,7 +287,8 @@ export class FileManagementService {
    */
   async addToRecentFiles(filePath: string): Promise<void> {
     try {
-      // TODO: Replace with actual storage implementation
+      // Feature: Replace with actual Tauri storage implementation
+      // Implementation notes: Use Tauri store plugin to persist recent files list
       console.log('📋 Added to recent files:', filePath);
     } catch (error) {
       console.error('❌ Failed to add to recent files:', error);

@@ -1,4 +1,3 @@
-import React from 'react';
 import { useChatViewModel } from '../../hooks/useChatViewModel';
 import type { ChatMessage } from '../../types';
 

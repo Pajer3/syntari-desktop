@@ -299,20 +299,17 @@ export const LARGE_FILE_EDITOR_OPTIONS = {
 // This maintains compatibility while centralizing language management
 import { languageService } from '../services/languageService';
 
-export const LANGUAGE_MAP: Record<string, string> = {};
-
-// Initialize language map from language service
-export const initializeLanguageMap = () => {
+// Language map initialized from language service
+export const LANGUAGE_MAP: Record<string, string> = (() => {
+  const map: Record<string, string> = {};
   const supportedLanguages = languageService.getAllLanguages();
   supportedLanguages.forEach(lang => {
     lang.extensions.forEach(ext => {
-      LANGUAGE_MAP[ext] = lang.id;
+      map[ext] = lang.id;
     });
   });
-};
-
-// Initialize on import
-initializeLanguageMap();
+  return map;
+})();
 
 // Professional file icons that match VSCode
 export const FILE_ICONS: Record<string, string> = {

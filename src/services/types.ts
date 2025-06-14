@@ -129,4 +129,53 @@ export interface SystemInfo {
   family: string;
   executable: string;
   args: string[];
+}
+
+// Git command result type
+export interface GitCommandResult {
+  success: boolean;
+  output: string;
+  command: string;
+}
+
+// Terminal execution options
+export interface ExecuteOptions {
+  workingDirectory?: string;
+  timeout?: number;
+  env?: Record<string, string>;
+}
+
+// Backend compatibility types
+export interface TauriResult<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
+
+// Backend AI Provider type (to match Rust backend)
+export interface BackendAiProvider {
+  id: string;
+  name: string;
+  model_type: string;
+  is_available: boolean;
+  api_endpoint?: string;
+  requires_auth: boolean;
+}
+
+// Backend project context type
+export interface BackendProjectContext {
+  root_path: string;
+  project_type: string;
+  open_files: Array<{
+    path: string;
+    name: string;
+    extension: string;
+    size: number;
+    last_modified: number;
+    content: string;
+    language: string;
+  }>;
+  dependencies: any[];
+  git_branch?: string;
+  active_framework?: string;
 } 

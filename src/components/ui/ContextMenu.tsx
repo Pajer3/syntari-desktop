@@ -230,7 +230,7 @@ export const fileContextMenu = (filePath: string, isDirectory: boolean) => {
       id: 'open',
       label: isDirectory ? 'Open Folder' : 'Open File',
       icon: isDirectory ? '📂' : '📄',
-      action: () => { /* File open action */ }
+      action: () => { /* TODO: Implement file/folder open handler */ }
     },
     {
       id: 'separator1',
@@ -242,21 +242,21 @@ export const fileContextMenu = (filePath: string, isDirectory: boolean) => {
       label: 'Cut',
       icon: '✂️',
       shortcut: 'Ctrl+X',
-      action: () => { /* Cut file action */ }
+      action: () => { /* TODO: Implement file cut handler */ }
     },
     {
       id: 'copy',
       label: 'Copy',
       icon: '📋',
       shortcut: 'Ctrl+C',
-      action: () => { /* Copy file action */ }
+      action: () => { /* TODO: Implement file copy handler */ }
     },
     {
       id: 'paste',
       label: 'Paste',
       icon: '📄',
       shortcut: 'Ctrl+V',
-      action: () => { /* Paste file action */ }
+      action: () => { /* TODO: Implement file paste handler */ }
     },
     {
       id: 'separator2',
@@ -267,7 +267,7 @@ export const fileContextMenu = (filePath: string, isDirectory: boolean) => {
       label: 'Rename',
       icon: '✏️',
       shortcut: 'F2',
-      action: () => { /* Rename file action */ }
+      action: () => { /* TODO: Implement file rename handler */ }
     },
     {
       id: 'delete',
@@ -275,7 +275,7 @@ export const fileContextMenu = (filePath: string, isDirectory: boolean) => {
       icon: '🗑️',
       shortcut: 'Delete',
       danger: true,
-      action: () => { /* Delete file action */ }
+      action: () => { /* TODO: Implement file delete handler */ }
     },
     {
       id: 'separator3',
@@ -285,7 +285,7 @@ export const fileContextMenu = (filePath: string, isDirectory: boolean) => {
       id: 'properties',
       label: 'Properties',
       icon: '⚙️',
-      action: () => { /* Properties action */ }
+      action: () => { /* TODO: Implement file properties dialog */ }
     }
   ];
 
@@ -299,19 +299,19 @@ export const fileContextMenu = (filePath: string, isDirectory: boolean) => {
           id: 'textEditor',
           label: 'Text Editor',
           icon: '📝',
-          action: () => { /* Open with text editor */ }
+          action: () => { /* TODO: Open with text editor */ }
         },
         {
           id: 'codeEditor',
           label: 'Code Editor',
           icon: '💻',
-          action: () => { /* Open with code editor */ }
+          action: () => { /* TODO: Open with code editor */ }
         },
         {
           id: 'systemDefault',
           label: 'System Default',
           icon: '🖥️',
-          action: () => { /* Open with system default */ }
+          action: () => { /* TODO: Open with system default */ }
         }
       ]
     });
@@ -327,19 +327,19 @@ export const tabContextMenu = (tabIndex: number, isPinned: boolean) => {
       label: 'Close Tab',
       icon: '✕',
       shortcut: 'Ctrl+W',
-      action: () => { /* Close tab */ }
+      action: () => { /* TODO: Implement close tab */ }
     },
     {
       id: 'closeOthers',
       label: 'Close Others',
       icon: '📋',
-      action: () => { /* Close other tabs */ }
+      action: () => { /* TODO: Implement close other tabs */ }
     },
     {
       id: 'closeToRight',
       label: 'Close to Right',
       icon: '➡️',
-      action: () => { /* Close tabs to right */ }
+      action: () => { /* TODO: Implement close tabs to right */ }
     },
     {
       id: 'separator1',
@@ -349,7 +349,7 @@ export const tabContextMenu = (tabIndex: number, isPinned: boolean) => {
       id: 'pin',
       label: isPinned ? 'Unpin Tab' : 'Pin Tab',
       icon: '📌',
-      action: () => { /* Toggle pin */ }
+      action: () => { /* TODO: Implement toggle pin */ }
     },
     {
       id: 'separator2',
@@ -359,13 +359,13 @@ export const tabContextMenu = (tabIndex: number, isPinned: boolean) => {
       id: 'splitRight',
       label: 'Split Right',
       icon: '↔️',
-      action: () => { /* Split right */ }
+      action: () => { /* TODO: Implement split right */ }
     },
     {
       id: 'splitDown',
       label: 'Split Down',
       icon: '↕️',
-      action: () => { /* Split down */ }
+      action: () => { /* TODO: Implement split down */ }
     }
   ];
 };
@@ -378,7 +378,7 @@ export const editorContextMenu = (hasSelection: boolean) => {
       icon: '✂️',
       shortcut: 'Ctrl+X',
       disabled: !hasSelection,
-      action: () => { /* Cut selection */ }
+      action: () => { /* TODO: Implement cut selection */ }
     },
     {
       id: 'copy',
@@ -386,14 +386,14 @@ export const editorContextMenu = (hasSelection: boolean) => {
       icon: '📋',
       shortcut: 'Ctrl+C',
       disabled: !hasSelection,
-      action: () => { /* Copy selection */ }
+      action: () => { /* TODO: Implement copy selection */ }
     },
     {
       id: 'paste',
       label: 'Paste',
       icon: '📄',
       shortcut: 'Ctrl+V',
-      action: () => { /* Paste */ }
+      action: () => { /* TODO: Implement paste */ }
     },
     {
       id: 'separator1',
@@ -404,7 +404,7 @@ export const editorContextMenu = (hasSelection: boolean) => {
       label: 'Select All',
       icon: '🔄',
       shortcut: 'Ctrl+A',
-      action: () => { /* Select all */ }
+      action: () => { /* TODO: Implement select all */ }
     },
     {
       id: 'separator2',
@@ -415,14 +415,14 @@ export const editorContextMenu = (hasSelection: boolean) => {
       label: 'Find',
       icon: '🔍',
       shortcut: 'Ctrl+F',
-      action: () => { /* Open find */ }
+      action: () => { /* TODO: Implement open find */ }
     },
     {
       id: 'replace',
       label: 'Replace',
       icon: '🔄',
       shortcut: 'Ctrl+H',
-      action: () => { /* Open replace */ }
+      action: () => { /* TODO: Implement open replace */ }
     },
     {
       id: 'separator3',
@@ -433,14 +433,14 @@ export const editorContextMenu = (hasSelection: boolean) => {
       label: 'Format Document',
       icon: '✨',
       shortcut: 'Shift+Alt+F',
-      action: () => { /* Format document */ }
+      action: () => { /* TODO: Implement format document */ }
     },
     {
       id: 'ai',
       label: 'Ask AI Assistant',
       icon: '🤖',
       shortcut: 'Ctrl+K',
-      action: () => { /* Ask AI */ }
+      action: () => { /* TODO: Implement AI assistant */ }
     }
   ];
 };

@@ -78,8 +78,6 @@ const App: React.FC = () => {
   
   const handleOpenProject = useCallback(async () => {
     try {
-      console.log('🔍 Opening system folder picker...');
-      
       // Use Tauri's native folder dialog
       const selectedPath = await open({
         directory: true,
@@ -89,16 +87,11 @@ const App: React.FC = () => {
       });
       
       if (selectedPath && typeof selectedPath === 'string') {
-        console.log('📁 Selected folder:', selectedPath);
-        
         // Store the selected path and show permission dialog
         setPendingProjectPath(selectedPath);
         setShowPermissionDialog(true);
-      } else if (selectedPath === null) {
-        console.log('📁 Folder selection cancelled by user');
-      } else {
-        console.log('📁 Invalid path returned from dialog:', selectedPath);
       }
+      // User cancelled or invalid path - no action needed
     } catch (error) {
       console.error('Error opening project folder:', error);
       
@@ -124,9 +117,6 @@ const App: React.FC = () => {
   }, []);
   
   const createProjectTabs = useCallback(async (project: any) => {
-    console.log('🏗️ Creating project tabs for:', project.rootPath);
-    console.log('📁 Project data:', project);
-    
     try {
       // Clear existing tabs
       tabManager.tabs.forEach(tab => tabManager.removeTab(tab.id));
@@ -145,12 +135,10 @@ const App: React.FC = () => {
             project={project}
             onFileChange={(file: FileInfo | null) => {
               if (file) {
-                console.log(`File changed: ${file.name}`);
                 setCurrentFile(file);
               }
             }}
             onRequestAI={(context: any) => {
-              console.log('🤖 AI request from editor:', context);
               // Switch to AI Assistant tab and prefill with context
               tabManager.switchToTab('ai-assistant');
             }}
@@ -182,11 +170,6 @@ const App: React.FC = () => {
       // Switch app to tabbed view
       appViewModel.setCurrentView('editor');
       
-      console.log('✅ Project tabs created successfully');
-      console.log('📊 Active tabs:', tabManager.tabs.map(t => ({ id: t.id, title: t.title })));
-      console.log('📌 Active tab:', tabManager.activeTabId);
-      console.log('🖥️ Current view:', appViewModel.viewModel.currentView);
-      
       return true;
     } catch (error) {
       console.error('❌ Failed to create project tabs:', error);
@@ -211,14 +194,10 @@ const App: React.FC = () => {
     if (!pendingProjectPath) return;
     
     try {
-      console.log('🔒 Checking folder permissions for:', pendingProjectPath);
-      
       // Check if we have permissions to access this folder
       const permissionCheck = await invoke<any>('check_folder_permissions', {
         path: pendingProjectPath,
       });
-      
-      console.log('🔒 Permission check result:', permissionCheck);
       
       if (!permissionCheck.success || !permissionCheck.data) {
         // Show user-friendly permission error
@@ -234,14 +213,10 @@ const App: React.FC = () => {
         return;
       }
       
-      console.log('✅ Folder permissions verified, opening project...');
-      
       // Call the backend directly to get project data
       const projectResult = await invoke<any>('open_project', {
         path: pendingProjectPath,
       });
-      
-      console.log('📁 Backend project result:', projectResult);
       
       if (!projectResult.success || !projectResult.data) {
         throw new Error(projectResult.error || 'Failed to load project data');
@@ -266,15 +241,11 @@ const App: React.FC = () => {
         lastAnalyzed: Date.now(),
       };
       
-      console.log('🏗️ Creating tabs for project:', project.rootPath);
-      
       // Create project tabs immediately with the project data we have
       await createProjectTabs(project);
       
       // Also update the view model state (this might be async)
       appViewModel.openProject(pendingProjectPath);
-      
-      console.log('✅ Project opened successfully with tabs created');
       
       setShowPermissionDialog(false);
       setPendingProjectPath(null);
@@ -312,7 +283,6 @@ const App: React.FC = () => {
   }, [pendingProjectPath, appViewModel, createProjectTabs]);
   
   const handlePermissionCancel = useCallback(() => {
-    console.log('📁 User cancelled permission request');
     setShowPermissionDialog(false);
     setPendingProjectPath(null);
   }, []);
@@ -421,13 +391,13 @@ const App: React.FC = () => {
           onSettings={handleSettings}
           onTogglePerformanceMode={appViewModel.togglePerformanceMode}
           onOpenProject={handleOpenProject}
-          onNewFile={() => { /* Create new file */ }}
-          onSaveFile={() => { /* Save current file */ }}
-          onUndo={() => { /* Undo last action */ }}
-          onRedo={() => { /* Redo last action */ }}
-          onFind={() => { /* Open find dialog */ }}
-          onCommandPalette={() => { /* Open command palette */ }}
-          onHelp={() => { /* Show help */ }}
+          onNewFile={() => { /* TODO: Implement new file handler */ }}
+          onSaveFile={() => { /* TODO: Implement save file handler */ }}
+          onUndo={() => { /* TODO: Implement undo handler */ }}
+          onRedo={() => { /* TODO: Implement redo handler */ }}
+          onFind={() => { /* TODO: Implement find dialog handler */ }}
+          onCommandPalette={() => { /* TODO: Implement command palette handler */ }}
+          onHelp={() => { /* TODO: Implement help dialog handler */ }}
         />
       </div>
       

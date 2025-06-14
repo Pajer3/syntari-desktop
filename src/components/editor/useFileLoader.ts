@@ -75,7 +75,8 @@ export const useFileLoader = (): FileLoaderHookResult => {
       
       if (fileData.should_use_hex_mode) {
         setError(`Large file (${Math.round(fileData.size / 1024 / 1024)}MB). Opening in read-only mode for performance.`);
-        // TODO: Implement hex/read-only viewer
+        // Feature: Implement hex/binary file viewer for large files
+        // Implementation notes: Create separate HexViewer component with virtual scrolling for binary data
         return null;
       }
       

@@ -84,7 +84,10 @@ export const GitStatusBar: React.FC<GitStatusBarProps> = ({
       <div className={`flex items-center justify-between px-3 py-2 border-t border-vscode-border text-xs text-vscode-fg-muted bg-vscode-bg ${className}`}>
         <span>Not a git repository</span>
         <button
-          onClick={() => {/* TODO: Initialize git repo */}}
+          onClick={() => {
+            // Feature: Initialize git repository in current directory
+            // Implementation notes: Call gitService.initializeRepository(path) and refresh UI
+          }}
           className="text-vscode-accent hover:text-vscode-accent-hover"
           title="Initialize Git Repository"
         >

@@ -1,13 +1,12 @@
 // Syntari AI IDE - Monaco Editor Wrapper Component
 // Enhanced for better performance and smoother UI experience
 
-import { useCallback, useRef, useEffect, useMemo, useState, forwardRef, useImperativeHandle } from 'react';
+import React, { useCallback, useRef, useEffect, useMemo, useState, forwardRef, useImperativeHandle } from 'react';
 import Editor from '@monaco-editor/react';
 import { getLanguageFromExtension } from '../../services/languageService';
 import { useMonacoAIAssistant } from './hooks/useMonacoAIAssistant';
 import type { PerformanceConfig } from './usePerformanceConfig';
 import type { EditorFile } from './useFileCache';
-import React from 'react';
 import { 
   shouldUsePerformanceMode, 
   getEditorOptions, 
@@ -144,15 +143,7 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
     };
   }, [performanceMode, fontSize, minimap, readOnly, theme]);
 
-  // Simplified logging for debugging (only when needed)
-  if (process.env.NODE_ENV === 'development') {
-    // console.log('✅ Rendering Monaco with stable content:', {
-    //   fileLength: stableContent.length,
-    //   hasFile: !!selectedFile,
-    //   readOnly,
-    //   performanceMode
-    // });
-  }
+  // Development mode check for debugging
 
   // Only allow editor to render when we have a stable state
   useEffect(() => {
@@ -176,11 +167,6 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
 
     // Small delay for stability, but not content-dependent
     const renderTimeout = setTimeout(() => {
-      // Reduce console logging to prevent spam
-      // console.log('✅ Rendering Monaco with stable content:', { 
-      //   file: selectedFile.name, 
-      //   contentLength: stableContent.length
-      // });
       setEditorCanRender(true);
     }, 50);
 

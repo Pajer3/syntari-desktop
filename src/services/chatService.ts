@@ -484,12 +484,14 @@ export class ChatService {
   // ================================
 
   getProviderStats(): Record<string, { usage: number; cost: number; avgLatency: number }> {
-    // This would be implemented with real usage tracking
+    // TODO: Implement usage tracking with backend integration
+    // Would track: request counts, total costs, average latencies per provider
     return {};
   }
 
   getCostBreakdown(): Record<string, number> {
-    // This would return actual cost breakdown by provider
+    // TODO: Implement cost analysis with backend data
+    // Would return: total costs by provider for budgeting
     return {};
   }
 } 
