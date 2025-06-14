@@ -282,6 +282,9 @@ export const useFileSystemWatcher = (
       if (unlistenRef.current) {
         unlistenRef.current();
       }
+      if (batchTimeoutRef.current) {
+        clearTimeout(batchTimeoutRef.current);
+      }
     };
   }, []);
 

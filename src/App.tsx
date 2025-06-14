@@ -364,11 +364,15 @@ const App: React.FC = () => {
   // RENDER LOGIC
   // ================================
   
+  console.log('🔍 App render - isLoading:', appViewModel.viewModel.isLoading, 'currentView:', appViewModel.viewModel.currentView, 'error:', !!appViewModel.viewModel.error);
+  
   if (appViewModel.viewModel.isLoading) {
+    console.log('📺 Showing LoadingScreen because isLoading is true');
     return <LoadingScreen />;
   }
   
   if (appViewModel.viewModel.error) {
+    console.log('📺 Showing ErrorScreen because error exists:', appViewModel.viewModel.error);
     return (
       <ErrorScreen 
         error={appViewModel.viewModel.error} 
@@ -376,6 +380,8 @@ const App: React.FC = () => {
       />
     );
   }
+
+  console.log('📺 Showing main app content');
 
   return (
     <div 

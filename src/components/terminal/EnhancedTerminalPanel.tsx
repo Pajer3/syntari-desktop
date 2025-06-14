@@ -73,7 +73,8 @@ export const EnhancedTerminalPanel: React.FC<EnhancedTerminalPanelProps> = ({
   // Auto-scroll to bottom when new output arrives
   useEffect(() => {
     if (terminalRef.current) {
-      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+      const terminal = terminalRef.current;
+      terminal.scrollTop = terminal.scrollHeight;
     }
   }, [sessions, activeSessionId]);
 

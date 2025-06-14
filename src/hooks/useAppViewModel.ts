@@ -131,6 +131,7 @@ export const useAppViewModel = (): UseAppViewModelReturn => {
   const initializeRef = useRef<boolean>(false);
   const errorCountRef = useRef<number>(0);
   const performanceStartTimeRef = useRef<number>(0);
+  const mountedRef = useRef<boolean>(true);
   
   // ================================
   // COMPUTED PROPERTIES
@@ -368,6 +369,7 @@ export const useAppViewModel = (): UseAppViewModelReturn => {
         currentView: 'welcome',
       }));
       
+      console.log('✅ Loading state set to false, should exit LoadingScreen now');
       updatePerformanceMetrics();
       
       // Success logging
@@ -400,6 +402,13 @@ export const useAppViewModel = (): UseAppViewModelReturn => {
       updatePerformanceMetrics();
     }
   }, [performanceMode, aiProviders.length, updatePerformanceMetrics, handleErrorInternal, convertBackendProvider]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   
   const setCurrentView = useCallback((view: AppViewModel['currentView']): void => {
     performanceStartTimeRef.current = performance.now();
