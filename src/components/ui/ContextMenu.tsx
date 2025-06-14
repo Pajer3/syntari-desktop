@@ -223,18 +223,30 @@ export const ContextMenuProvider: React.FC<ContextMenuProviderProps> = ({ childr
   );
 };
 
-// Pre-built context menu configurations
-export const fileContextMenu = (filePath: string, isDirectory: boolean) => {
+// Pre-built context menu configurations with real functionality
+export const fileContextMenu = (
+  filePath: string, 
+  isDirectory: boolean,
+  callbacks?: {
+    onOpen?: (path: string) => void;
+    onCut?: (path: string) => void;
+    onCopy?: (path: string) => void;
+    onPaste?: (targetPath: string) => void;
+    onRename?: (path: string) => void;
+    onDelete?: (path: string) => void;
+    onProperties?: (path: string) => void;
+    onOpenWith?: (path: string, application: string) => void;
+  }
+) => {
   const baseItems: ContextMenuItem[] = [
     {
       id: 'open',
       label: isDirectory ? 'Open Folder' : 'Open File',
       icon: isDirectory ? '📂' : '📄',
-      action: () => { /* TODO: Implement file/folder open handler */ }
+      action: () => callbacks?.onOpen?.(filePath)
     },
     {
       id: 'separator1',
-      label: '',
       separator: true
     },
     {
@@ -242,21 +254,21 @@ export const fileContextMenu = (filePath: string, isDirectory: boolean) => {
       label: 'Cut',
       icon: '✂️',
       shortcut: 'Ctrl+X',
-      action: () => { /* TODO: Implement file cut handler */ }
+      action: () => callbacks?.onCut?.(filePath)
     },
     {
       id: 'copy',
       label: 'Copy',
       icon: '📋',
       shortcut: 'Ctrl+C',
-      action: () => { /* TODO: Implement file copy handler */ }
+      action: () => callbacks?.onCopy?.(filePath)
     },
     {
       id: 'paste',
       label: 'Paste',
       icon: '📄',
       shortcut: 'Ctrl+V',
-      action: () => { /* TODO: Implement file paste handler */ }
+      action: () => callbacks?.onPaste?.(filePath)
     },
     {
       id: 'separator2',
@@ -267,7 +279,7 @@ export const fileContextMenu = (filePath: string, isDirectory: boolean) => {
       label: 'Rename',
       icon: '✏️',
       shortcut: 'F2',
-      action: () => { /* TODO: Implement file rename handler */ }
+      action: () => callbacks?.onRename?.(filePath)
     },
     {
       id: 'delete',
@@ -275,7 +287,7 @@ export const fileContextMenu = (filePath: string, isDirectory: boolean) => {
       icon: '🗑️',
       shortcut: 'Delete',
       danger: true,
-      action: () => { /* TODO: Implement file delete handler */ }
+      action: () => callbacks?.onDelete?.(filePath)
     },
     {
       id: 'separator3',
@@ -285,12 +297,12 @@ export const fileContextMenu = (filePath: string, isDirectory: boolean) => {
       id: 'properties',
       label: 'Properties',
       icon: '⚙️',
-      action: () => { /* TODO: Implement file properties dialog */ }
+      action: () => callbacks?.onProperties?.(filePath)
     }
   ];
 
   if (!isDirectory) {
-    baseItems.splice(3, 0, {
+    baseItems.splice(1, 0, {
       id: 'openWith',
       label: 'Open With',
       icon: '🔧',
@@ -299,19 +311,19 @@ export const fileContextMenu = (filePath: string, isDirectory: boolean) => {
           id: 'textEditor',
           label: 'Text Editor',
           icon: '📝',
-          action: () => { /* TODO: Open with text editor */ }
+          action: () => callbacks?.onOpenWith?.(filePath, 'text')
         },
         {
           id: 'codeEditor',
           label: 'Code Editor',
           icon: '💻',
-          action: () => { /* TODO: Open with code editor */ }
+          action: () => callbacks?.onOpenWith?.(filePath, 'code')
         },
         {
           id: 'systemDefault',
           label: 'System Default',
           icon: '🖥️',
-          action: () => { /* TODO: Open with system default */ }
+          action: () => callbacks?.onOpenWith?.(filePath, 'system')
         }
       ]
     });
@@ -320,26 +332,37 @@ export const fileContextMenu = (filePath: string, isDirectory: boolean) => {
   return baseItems;
 };
 
-export const tabContextMenu = (tabIndex: number, isPinned: boolean) => {
+export const tabContextMenu = (
+  tabIndex: number, 
+  isPinned: boolean,
+  callbacks?: {
+    onClose?: (tabIndex: number) => void;
+    onCloseOthers?: (tabIndex: number) => void;
+    onCloseToRight?: (tabIndex: number) => void;
+    onTogglePin?: (tabIndex: number) => void;
+    onSplitRight?: (tabIndex: number) => void;
+    onSplitDown?: (tabIndex: number) => void;
+  }
+) => {
   return [
     {
       id: 'close',
       label: 'Close Tab',
       icon: '✕',
       shortcut: 'Ctrl+W',
-      action: () => { /* TODO: Implement close tab */ }
+      action: () => callbacks?.onClose?.(tabIndex)
     },
     {
       id: 'closeOthers',
       label: 'Close Others',
       icon: '📋',
-      action: () => { /* TODO: Implement close other tabs */ }
+      action: () => callbacks?.onCloseOthers?.(tabIndex)
     },
     {
       id: 'closeToRight',
       label: 'Close to Right',
       icon: '➡️',
-      action: () => { /* TODO: Implement close tabs to right */ }
+      action: () => callbacks?.onCloseToRight?.(tabIndex)
     },
     {
       id: 'separator1',
@@ -349,7 +372,7 @@ export const tabContextMenu = (tabIndex: number, isPinned: boolean) => {
       id: 'pin',
       label: isPinned ? 'Unpin Tab' : 'Pin Tab',
       icon: '📌',
-      action: () => { /* TODO: Implement toggle pin */ }
+      action: () => callbacks?.onTogglePin?.(tabIndex)
     },
     {
       id: 'separator2',
@@ -359,18 +382,30 @@ export const tabContextMenu = (tabIndex: number, isPinned: boolean) => {
       id: 'splitRight',
       label: 'Split Right',
       icon: '↔️',
-      action: () => { /* TODO: Implement split right */ }
+      action: () => callbacks?.onSplitRight?.(tabIndex)
     },
     {
       id: 'splitDown',
       label: 'Split Down',
       icon: '↕️',
-      action: () => { /* TODO: Implement split down */ }
+      action: () => callbacks?.onSplitDown?.(tabIndex)
     }
   ];
 };
 
-export const editorContextMenu = (hasSelection: boolean) => {
+export const editorContextMenu = (
+  hasSelection: boolean,
+  callbacks?: {
+    onCut?: () => void;
+    onCopy?: () => void;
+    onPaste?: () => void;
+    onSelectAll?: () => void;
+    onFind?: () => void;
+    onReplace?: () => void;
+    onFormat?: () => void;
+    onAIAssistant?: () => void;
+  }
+) => {
   return [
     {
       id: 'cut',
@@ -378,7 +413,7 @@ export const editorContextMenu = (hasSelection: boolean) => {
       icon: '✂️',
       shortcut: 'Ctrl+X',
       disabled: !hasSelection,
-      action: () => { /* TODO: Implement cut selection */ }
+      action: () => callbacks?.onCut?.()
     },
     {
       id: 'copy',
@@ -386,14 +421,14 @@ export const editorContextMenu = (hasSelection: boolean) => {
       icon: '📋',
       shortcut: 'Ctrl+C',
       disabled: !hasSelection,
-      action: () => { /* TODO: Implement copy selection */ }
+      action: () => callbacks?.onCopy?.()
     },
     {
       id: 'paste',
       label: 'Paste',
       icon: '📄',
       shortcut: 'Ctrl+V',
-      action: () => { /* TODO: Implement paste */ }
+      action: () => callbacks?.onPaste?.()
     },
     {
       id: 'separator1',
@@ -404,7 +439,7 @@ export const editorContextMenu = (hasSelection: boolean) => {
       label: 'Select All',
       icon: '🔄',
       shortcut: 'Ctrl+A',
-      action: () => { /* TODO: Implement select all */ }
+      action: () => callbacks?.onSelectAll?.()
     },
     {
       id: 'separator2',
@@ -415,14 +450,14 @@ export const editorContextMenu = (hasSelection: boolean) => {
       label: 'Find',
       icon: '🔍',
       shortcut: 'Ctrl+F',
-      action: () => { /* TODO: Implement open find */ }
+      action: () => callbacks?.onFind?.()
     },
     {
       id: 'replace',
       label: 'Replace',
       icon: '🔄',
       shortcut: 'Ctrl+H',
-      action: () => { /* TODO: Implement open replace */ }
+      action: () => callbacks?.onReplace?.()
     },
     {
       id: 'separator3',
@@ -433,14 +468,14 @@ export const editorContextMenu = (hasSelection: boolean) => {
       label: 'Format Document',
       icon: '✨',
       shortcut: 'Shift+Alt+F',
-      action: () => { /* TODO: Implement format document */ }
+      action: () => callbacks?.onFormat?.()
     },
     {
       id: 'ai',
       label: 'Ask AI Assistant',
       icon: '🤖',
       shortcut: 'Ctrl+K',
-      action: () => { /* TODO: Implement AI assistant */ }
+      action: () => callbacks?.onAIAssistant?.()
     }
   ];
 };

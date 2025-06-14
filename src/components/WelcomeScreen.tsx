@@ -4,6 +4,7 @@ import { RecentProjectsList } from './ui/RecentProjectsList';
 import { RecentFilesList } from './ui/RecentFilesList';
 import { GettingStartedSection } from './ui/GettingStartedSection';
 import { ResourceMonitoring } from './ui/ResourceMonitoring';
+import { useContextMenu } from './ui/ContextMenu';
 import { WELCOME_ACTIONS, GETTING_STARTED_STEPS } from '../constants/welcomeData';
 
 interface WelcomeScreenProps {
@@ -11,6 +12,8 @@ interface WelcomeScreenProps {
 }
 
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenProject }) => {
+  const { showMenu } = useContextMenu();
+
   const handleAction = (action: string) => {
     if (action === 'Open Project') {
       onOpenProject();
@@ -19,8 +22,53 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onOpenProject }) =
     }
   };
 
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    
+    const contextMenuItems = [
+      {
+        id: 'open-project',
+        label: 'Open Project',
+        icon: '📂',
+        action: () => onOpenProject()
+      },
+      {
+        id: 'separator1',
+        separator: true
+      },
+      {
+        id: 'settings',
+        label: 'Settings',
+        icon: '⚙️',
+        action: () => console.log('Settings clicked')
+      },
+      {
+        id: 'help',
+        label: 'Help',
+        icon: '❓',
+        action: () => console.log('Help clicked')
+      },
+      {
+        id: 'separator2',
+        separator: true
+      },
+      {
+        id: 'about',
+        label: 'About Syntari',
+        icon: '💡',
+        action: () => console.log('About clicked')
+      }
+    ];
+
+    showMenu(contextMenuItems, { x: e.clientX, y: e.clientY });
+  };
+
   return (
-    <div className="h-full text-white relative overflow-y-auto" style={{ backgroundColor: '#262626' }}>
+    <div 
+      className="h-full text-white relative overflow-y-auto" 
+      style={{ backgroundColor: '#262626' }}
+      onContextMenu={handleContextMenu}
+    >
       {/* Professional Background Pattern */}
       <div className="absolute inset-0 opacity-5">
         <div className="absolute inset-0 bg-gradient-to-br from-slate-800/30 via-transparent to-slate-700/20"></div>

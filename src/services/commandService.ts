@@ -572,52 +572,88 @@ class CommandService {
     try {
       switch (command) {
         case 'status':
-          const status = await invoke('git_get_status');
+          const status = await invoke<any>('git_get_status');
           return {
             success: true,
-            output: status || 'No changes detected',
+            output: status ? String(status) : 'No changes detected',
             command: `git ${command}`,
           };
 
         case 'add':
-          // TODO: Implement git add command
+          const addResult = await invoke<any>('git_add_files', { 
+            files: args.length > 0 ? args : ['.'] 
+          });
           return {
-            success: false,
-            output: 'Git add not implemented yet',
+            success: addResult.success || false,
+            output: addResult.success ? 
+              `Added ${args.length > 0 ? args.join(', ') : 'all files'} to staging` : 
+              addResult.error || 'Failed to add files',
             command: `git ${command} ${args.join(' ')}`,
           };
 
         case 'commit':
-          // TODO: Implement git commit command
+          const message = args.join(' ') || 'Quick commit';
+          const commitResult = await invoke<any>('git_commit', { 
+            message: message 
+          });
           return {
-            success: false,
-            output: 'Git commit not implemented yet',
+            success: commitResult.success || false,
+            output: commitResult.success ? 
+              `Committed with message: "${message}"` : 
+              commitResult.error || 'Failed to commit',
             command: `git ${command} ${args.join(' ')}`,
           };
 
         case 'push':
-          // TODO: Implement git push command
+          const pushResult = await invoke<any>('git_push', { 
+            remote: args[0] || 'origin',
+            branch: args[1] || 'main'
+          });
           return {
-            success: false,
-            output: 'Git push not implemented yet',
+            success: pushResult.success || false,
+            output: pushResult.success ? 
+              `Pushed to ${args[0] || 'origin'} ${args[1] || 'main'}` : 
+              pushResult.error || 'Failed to push',
             command: `git ${command} ${args.join(' ')}`,
           };
 
         case 'pull':
-          // TODO: Implement git pull command
+          const pullResult = await invoke<any>('git_pull', { 
+            remote: args[0] || 'origin',
+            branch: args[1] || 'main'
+          });
           return {
-            success: false,
-            output: 'Git pull not implemented yet',
+            success: pullResult.success || false,
+            output: pullResult.success ? 
+              `Pulled from ${args[0] || 'origin'} ${args[1] || 'main'}` : 
+              pullResult.error || 'Failed to pull',
             command: `git ${command} ${args.join(' ')}`,
           };
 
         case 'branch':
-          // TODO: Implement git branch command using backend git_get_branches
-          return {
-            success: false,
-            output: 'Git branch not implemented yet',
-            command: `git ${command} ${args.join(' ')}`,
-          };
+          if (args.length === 0) {
+            // List branches
+            const branchesResult = await invoke<any>('git_get_branches');
+            return {
+              success: branchesResult.success || false,
+              output: branchesResult.success ? 
+                Array.isArray(branchesResult.data) ? branchesResult.data.join('\n') : String(branchesResult.data) :
+                branchesResult.error || 'Failed to get branches',
+              command: `git ${command}`,
+            };
+          } else {
+            // Create or switch to branch
+            const newBranchResult = await invoke<any>('git_create_branch', { 
+              name: args[0] 
+            });
+            return {
+              success: newBranchResult.success || false,
+              output: newBranchResult.success ? 
+                `Created/switched to branch: ${args[0]}` : 
+                newBranchResult.error || 'Failed to create/switch branch',
+              command: `git ${command} ${args.join(' ')}`,
+            };
+          }
 
         default:
           return {

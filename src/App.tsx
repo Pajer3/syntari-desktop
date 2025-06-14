@@ -15,6 +15,8 @@ import { ProjectAIAssistant } from './components/ProjectAIAssistant';
 import { LoadingScreen, ErrorScreen, PermissionRequestDialog } from './components/ui';
 import { ChatView } from './components/chat';
 import { SettingsView } from './components/layout';
+import { EnhancedTerminalPanel } from './components/terminal/EnhancedTerminalPanel';
+
 import type { FileInfo } from './types';
 import './App.css';
 import { configureMonaco } from './config/monaco.config';
@@ -53,6 +55,27 @@ const App: React.FC = () => {
   // Cool UI state for animations
   const [isAppLoaded, setIsAppLoaded] = useState(false);
   const [showStartupAnimation, setShowStartupAnimation] = useState(true);
+
+  // ================================
+  // TERMINAL STATE
+  // ================================
+  
+  const [showTerminal, setShowTerminal] = useState(false);
+  const [terminalHeight] = useState(300);
+
+  // ================================
+  // HANDLER FUNCTIONS (declare before use)
+  // ================================
+
+  const handleSettings = () => {
+    appViewModel.setCurrentView('settings');
+  };
+
+  const toggleTerminal = useCallback(() => {
+    setShowTerminal(prev => !prev);
+  }, []);
+
+
 
   // ================================
   // STARTUP ANIMATION
@@ -138,10 +161,7 @@ const App: React.FC = () => {
                 setCurrentFile(file);
               }
             }}
-            onRequestAI={(context: any) => {
-              // Switch to AI Assistant tab and prefill with context
-              tabManager.switchToTab('ai-assistant');
-            }}
+            onRequestAI={handleAIRequest}
           />
         ),
       };
@@ -188,7 +208,18 @@ const App: React.FC = () => {
       
       return false;
     }
-  }, [tabManager, appViewModel, currentFile]);
+  }, [tabManager, appViewModel, currentFile, handleOpenProject, handleSettings]);
+
+  // Handle AI requests from components
+  const handleAIRequest = useCallback((context: any) => {
+    if (appViewModel.viewModel.currentView === 'editor') {
+      // Switch to AI chat tab
+      tabManager.switchToTab('ai-assistant');
+    } 
+    // Log context for potential future use
+    console.log('AI request context:', context);
+    return false;
+  }, [tabManager, appViewModel.viewModel.currentView]);
 
   const handlePermissionConfirm = useCallback(async () => {
     if (!pendingProjectPath) return;
@@ -287,10 +318,6 @@ const App: React.FC = () => {
     setPendingProjectPath(null);
   }, []);
 
-  const handleSettings = () => {
-    appViewModel.setCurrentView('settings');
-  };
-
   // ================================
   // CONTEXT MENU HANDLERS
   // ================================
@@ -328,7 +355,10 @@ const App: React.FC = () => {
     return false;
   }, [appViewModel.viewModel.currentView, tabManager]);
 
-
+  useShortcut('views', 'toggleTerminal', () => {
+    toggleTerminal();
+    return true;
+  }, [toggleTerminal]);
 
   // ================================
   // RENDER LOGIC
@@ -391,13 +421,39 @@ const App: React.FC = () => {
           onSettings={handleSettings}
           onTogglePerformanceMode={appViewModel.togglePerformanceMode}
           onOpenProject={handleOpenProject}
-          onNewFile={() => { /* TODO: Implement new file handler */ }}
-          onSaveFile={() => { /* TODO: Implement save file handler */ }}
-          onUndo={() => { /* TODO: Implement undo handler */ }}
-          onRedo={() => { /* TODO: Implement redo handler */ }}
-          onFind={() => { /* TODO: Implement find dialog handler */ }}
-          onCommandPalette={() => { /* TODO: Implement command palette handler */ }}
-          onHelp={() => { /* TODO: Implement help dialog handler */ }}
+          onNewFile={() => {
+            // Open new file dialog
+            window.dispatchEvent(new CustomEvent('open-new-file-dialog'));
+          }}
+          onSaveFile={() => {
+            // Save current active file
+            const activeTab = tabManager.tabs.find(tab => tab.id === tabManager.activeTabId);
+            if (activeTab && activeTab.filePath) {
+              window.dispatchEvent(new CustomEvent('save-file', {
+                detail: { filePath: activeTab.filePath }
+              }));
+            }
+          }}
+          onUndo={() => {
+            // Trigger undo in active editor
+            window.dispatchEvent(new CustomEvent('editor-undo'));
+          }}
+          onRedo={() => {
+            // Trigger redo in active editor
+            window.dispatchEvent(new CustomEvent('editor-redo'));
+          }}
+          onFind={() => {
+            // Open find dialog in active editor
+            window.dispatchEvent(new CustomEvent('editor-find'));
+          }}
+          onCommandPalette={() => {
+            // Open command palette
+            window.dispatchEvent(new CustomEvent('open-command-palette'));
+          }}
+          onHelp={() => {
+            // Open help dialog
+            window.dispatchEvent(new CustomEvent('open-help-dialog'));
+          }}
         />
       </div>
       
@@ -482,6 +538,17 @@ const App: React.FC = () => {
           }
         })()}
       </div>
+
+      {/* Enhanced Terminal Panel */}
+      {appViewModel.viewModel.project && (
+        <EnhancedTerminalPanel
+          projectPath={appViewModel.viewModel.project.rootPath}
+          isVisible={showTerminal}
+          onToggleVisibility={toggleTerminal}
+          height={terminalHeight}
+          onAIRequest={handleAIRequest}
+        />
+      )}
 
       {/* Context Menu */}
       {/* DISABLED: Custom context menu */}

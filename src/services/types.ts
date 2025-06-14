@@ -20,8 +20,11 @@ export interface TerminalOutput {
 }
 
 export interface CommandResult {
+  success: boolean;
   output: string;
-  exit_code: number;
+  error: string;
+  exitCode: number;
+  command: string;
 }
 
 export interface TerminalInfo {

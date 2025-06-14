@@ -8,6 +8,7 @@ import { fileSystemService } from '../../services/fileSystemService';
 import { AlertCircle, Search, X, ChevronRight, ChevronDown } from 'lucide-react';
 import { useFileExplorerWatcher } from '../../hooks/useFileSystemWatcher';
 import { EnhancedFileIcon } from '../ui/EnhancedFileIcon';
+import { useContextMenu, fileContextMenu } from '../ui/ContextMenu';
 
 // ================================
 // TYPES & INTERFACES
@@ -38,6 +39,16 @@ interface ListItemData {
   onFileClick: (node: FileNode) => Promise<void>;
   onDirectoryToggle: (path: string, expanded: boolean) => Promise<void>;
   onScrollToItem?: (index: number) => void;
+  onFileOperations?: {
+    onOpen?: (path: string) => void;
+    onCut?: (path: string) => void;
+    onCopy?: (path: string) => void;
+    onPaste?: (targetPath: string) => void;
+    onRename?: (path: string) => void;
+    onDelete?: (path: string) => void;
+    onProperties?: (path: string) => void;
+    onOpenWith?: (path: string, application: string) => void;
+  };
 }
 
 // ================================
@@ -86,7 +97,7 @@ const VirtualizedFileItem: React.FC<{
 }> = ({ index, style, data }) => {
   const { 
     nodes, selectedPath, expandedPaths, onFileClick, onDirectoryToggle,
-    onScrollToItem
+    onScrollToItem, onFileOperations
   } = data;
   const node = nodes[index];
   
@@ -102,6 +113,7 @@ const VirtualizedFileItem: React.FC<{
         onDirectoryToggle={onDirectoryToggle}
         onScrollToItem={onScrollToItem}
         index={index}
+        onFileOperations={onFileOperations}
       />
     </div>
   );
@@ -116,10 +128,21 @@ const FileItemContent: React.FC<{
   onDirectoryToggle: (path: string, expanded: boolean) => Promise<void>;
   onScrollToItem?: (index: number) => void;
   index?: number;
+  onFileOperations?: {
+    onOpen?: (path: string) => void;
+    onCut?: (path: string) => void;
+    onCopy?: (path: string) => void;
+    onPaste?: (targetPath: string) => void;
+    onRename?: (path: string) => void;
+    onDelete?: (path: string) => void;
+    onProperties?: (path: string) => void;
+    onOpenWith?: (path: string, application: string) => void;
+  };
 }> = ({ 
   node, selectedPath, expandedPaths, onFileClick, onDirectoryToggle,
-  onScrollToItem, index 
+  onScrollToItem, index, onFileOperations 
 }) => {
+  const { showMenu } = useContextMenu();
   const isSelected = selectedPath === node.path;
   const isExpanded = expandedPaths.has(node.path);
   const hasChildren = node.isDirectory && node.hasChildren;
@@ -140,6 +163,54 @@ const FileItemContent: React.FC<{
       await onFileClick(node);
     }
   }, [node, isExpanded, onFileClick, onDirectoryToggle, onScrollToItem, index, isSeparator]);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    if (isSeparator) return; // Don't show context menu for separators
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const contextMenuItems = fileContextMenu(
+      node.path,
+      node.isDirectory,
+      {
+        onOpen: (path) => {
+          console.log('Open:', path);
+          onFileOperations?.onOpen?.(path);
+        },
+        onCut: (path) => {
+          console.log('Cut:', path);
+          onFileOperations?.onCut?.(path);
+        },
+        onCopy: (path) => {
+          console.log('Copy:', path);
+          onFileOperations?.onCopy?.(path);
+        },
+        onPaste: (targetPath) => {
+          console.log('Paste to:', targetPath);
+          onFileOperations?.onPaste?.(targetPath);
+        },
+        onRename: (path) => {
+          console.log('Rename:', path);
+          onFileOperations?.onRename?.(path);
+        },
+        onDelete: (path) => {
+          console.log('Delete:', path);
+          onFileOperations?.onDelete?.(path);
+        },
+        onProperties: (path) => {
+          console.log('Properties:', path);
+          onFileOperations?.onProperties?.(path);
+        },
+        onOpenWith: (path, application) => {
+          console.log('Open with:', application, path);
+          onFileOperations?.onOpenWith?.(path, application);
+        }
+      }
+    );
+    
+    showMenu(contextMenuItems, { x: e.clientX, y: e.clientY });
+  }, [node, isSeparator, onFileOperations, showMenu]);
   
   // Handle separator display
   if (isSeparator) {
@@ -170,6 +241,7 @@ const FileItemContent: React.FC<{
         ${isDraft ? 'italic' : ''}
       `}
       onClick={handleClick}
+      onContextMenu={handleContextMenu}
       title={isDraft ? `${node.path} (unsaved)` : node.path}
     >
       <div 
@@ -241,9 +313,19 @@ const FileTree: React.FC<{
   onFileClick: (node: FileNode) => Promise<void>;
   onDirectoryToggle: (path: string, expanded: boolean) => Promise<void>;
   depth?: number;
+  onFileOperations?: {
+    onOpen?: (path: string) => void;
+    onCut?: (path: string) => void;
+    onCopy?: (path: string) => void;
+    onPaste?: (targetPath: string) => void;
+    onRename?: (path: string) => void;
+    onDelete?: (path: string) => void;
+    onProperties?: (path: string) => void;
+    onOpenWith?: (path: string, application: string) => void;
+  };
 }> = ({
   nodes, selectedPath, expandedPaths, loadedChildren,
-  onFileClick, onDirectoryToggle, depth = 0
+  onFileClick, onDirectoryToggle, depth = 0, onFileOperations
 }) => {
   return (
     <div>
@@ -255,6 +337,7 @@ const FileTree: React.FC<{
             expandedPaths={expandedPaths}
             onFileClick={onFileClick}
             onDirectoryToggle={onDirectoryToggle}
+            onFileOperations={onFileOperations}
           />
           
           {/* Render children if expanded */}
@@ -267,6 +350,7 @@ const FileTree: React.FC<{
               onFileClick={onFileClick}
               onDirectoryToggle={onDirectoryToggle}
               depth={depth + 1}
+              onFileOperations={onFileOperations}
             />
           )}
         </div>
@@ -538,6 +622,58 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     setTimeout(refreshExpandedDirectories, 100);
   }, [loadRootItems, expandedPaths, loadedChildren]);
   
+  // File operations handlers
+  const fileOperations = useMemo(() => ({
+    onOpen: (path: string) => {
+      console.log('📂 Opening file:', path);
+      // Find the node and trigger file selection
+      const findNode = (nodes: readonly FileNode[]): FileNode | null => {
+        for (const node of nodes) {
+          if (node.path === path) return node;
+          if (node.isDirectory) {
+            const children = loadedChildren.get(node.path) || [];
+            const found = findNode(children);
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+      
+      const node = findNode(allRootNodes);
+      if (node && !node.isDirectory) {
+        handleFileClick(node);
+      }
+    },
+    onCut: (path: string) => {
+      console.log('✂️ Cut file:', path);
+      // TODO: Implement cut functionality
+    },
+    onCopy: (path: string) => {
+      console.log('📋 Copy file:', path);
+      // TODO: Implement copy functionality
+    },
+    onPaste: (targetPath: string) => {
+      console.log('📄 Paste to:', targetPath);
+      // TODO: Implement paste functionality
+    },
+    onRename: (path: string) => {
+      console.log('✏️ Rename file:', path);
+      // TODO: Implement rename functionality
+    },
+    onDelete: (path: string) => {
+      console.log('🗑️ Delete file:', path);
+      // TODO: Implement delete functionality
+    },
+    onProperties: (path: string) => {
+      console.log('⚙️ Show properties for:', path);
+      // TODO: Implement properties dialog
+    },
+    onOpenWith: (path: string, application: string) => {
+      console.log('🔧 Open with', application, ':', path);
+      // TODO: Implement open with functionality
+    }
+  }), [allRootNodes, loadedChildren, handleFileClick]);
+
   // Prepare data for virtualized list
   const listItemData: ListItemData = useMemo(() => ({
     nodes: shouldUseVirtualization ? filteredNodes : [],
@@ -545,10 +681,11 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     expandedPaths,
     onFileClick: handleFileClick,
     onDirectoryToggle: handleDirectoryToggle,
-    onScrollToItem: scrollToItem
+    onScrollToItem: scrollToItem,
+    onFileOperations: fileOperations
   }), [
     shouldUseVirtualization, filteredNodes, selectedPath, expandedPaths, 
-    handleFileClick, handleDirectoryToggle, scrollToItem
+    handleFileClick, handleDirectoryToggle, scrollToItem, fileOperations
   ]);
   
   // Initial load
@@ -738,6 +875,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                 loadedChildren={loadedChildren}
                 onFileClick={handleFileClick}
                 onDirectoryToggle={handleDirectoryToggle}
+                onFileOperations={fileOperations}
               />
             </div>
           )

@@ -8,12 +8,16 @@ import type {
   CommandResult, 
   TerminalInfo,
   SystemInfo,
-  ServiceError 
+  ServiceError
 } from './types';
 
-class TerminalService {
+export class TerminalService {
   private sessions: Map<string, TerminalSession> = new Map();
   private activeSessionId: string | null = null;
+
+  constructor() {
+    this.sessions = new Map();
+  }
 
   /**
    * Initialize terminal service and check backend connectivity
@@ -23,11 +27,11 @@ class TerminalService {
       // Test backend connection and get terminal info
       const result = await invoke<any>('get_terminal_info');
       
-      // Handle TauriResult pattern from backend
-      if (result.success && result.data) {
-        console.log('Terminal service initialized:', result.data);
+      // Backend returns TerminalInfo directly, not wrapped in TauriResult
+      if (result && result.shell) {
+        console.log('Terminal service initialized:', result);
       } else {
-        console.warn('Terminal info not available:', result.error);
+        console.warn('Terminal info not available');
       }
     } catch (error) {
       console.error('Failed to initialize terminal service:', error);
@@ -38,14 +42,24 @@ class TerminalService {
   /**
    * Create a new terminal session
    */
-  async createSession(name?: string): Promise<TerminalSession> {
+  async createSession(name?: string, workingDirectory?: string): Promise<TerminalSession> {
     try {
-      const terminalInfo = await invoke<TerminalInfo>('get_terminal_info');
+      let terminalWorkingDir = workingDirectory || '/';
+      
+      // Try to get terminal info from backend, but don't fail if it's not available
+      try {
+        const terminalInfo = await invoke<any>('get_terminal_info');
+        if (terminalInfo && terminalInfo.working_directory) {
+          terminalWorkingDir = terminalInfo.working_directory;
+        }
+      } catch (error) {
+        console.warn('Could not get terminal info from backend, using default directory');
+      }
       
       const session: TerminalSession = {
         id: this.generateSessionId(),
         name: name || `Terminal ${this.sessions.size + 1}`,
-        workingDirectory: terminalInfo.working_directory,
+        workingDirectory: terminalWorkingDir,
         history: [],
         isActive: false,
       };
@@ -66,40 +80,88 @@ class TerminalService {
   /**
    * Execute a command with improved error handling
    */
-  async executeCommand(command: string, args: string[] = [], options: ExecuteOptions = {}): Promise<CommandResult> {
+  async executeCommand(sessionId: string, command: string): Promise<CommandResult> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw this.handleError('SESSION_NOT_FOUND', `Session ${sessionId} not found`);
+    }
+
     try {
+      // Add command to history
+      const commandOutput: TerminalOutput = {
+        id: this.generateOutputId(),
+        type: 'command',
+        content: command,
+        timestamp: new Date(),
+      };
+      session.history.push(commandOutput);
+
+      // Execute command via Tauri - fix parameter names and response handling
       const result = await invoke<any>('execute_shell_command', {
         command,
-        args,
-        workingDirectory: options.workingDirectory || this.currentDirectory,
-        timeout: options.timeout || 30000,
+        working_directory: session.workingDirectory,  // Fixed: use snake_case
       });
-      
-      // Handle TauriResult pattern
-      if (result.success && result.data) {
-        return {
-          success: true,
-          output: result.data.output || '',
-          error: result.data.error || '',
-          exitCode: result.data.exit_code || 0,
-          command: `${command} ${args.join(' ')}`.trim(),
+
+      // Backend returns CommandResult directly, not wrapped in TauriResult
+      let resultOutput: TerminalOutput;
+      if (result.exit_code === 0) {
+        resultOutput = {
+          id: this.generateOutputId(),
+          type: 'output',
+          content: result.output || '',
+          timestamp: new Date(),
+          exitCode: result.exit_code,
         };
       } else {
-        return {
-          success: false,
-          output: '',
-          error: result.error || 'Command failed',
-          exitCode: 1,
-          command: `${command} ${args.join(' ')}`.trim(),
+        resultOutput = {
+          id: this.generateOutputId(),
+          type: 'error',
+          content: result.output || 'Command failed',
+          timestamp: new Date(),
+          exitCode: result.exit_code,
         };
       }
+      
+      session.history.push(resultOutput);
+
+      // Update session working directory if it was a cd command
+      if (command.trim().startsWith('cd ')) {
+        try {
+          const newDir = await invoke<string>('change_directory', {
+            path: command.trim().substring(3).trim(),
+          });
+          session.workingDirectory = newDir;
+        } catch (error) {
+          console.warn('Failed to update working directory:', error);
+        }
+      }
+
+      this.sessions.set(sessionId, session);
+      
+      return {
+        success: resultOutput.type !== 'error',
+        output: resultOutput.content,
+        error: resultOutput.type === 'error' ? resultOutput.content : '',
+        exitCode: resultOutput.exitCode || 0,
+        command: command,
+      };
     } catch (error) {
+      const errorOutput: TerminalOutput = {
+        id: this.generateOutputId(),
+        type: 'error',
+        content: `Error executing command: ${error}`,
+        timestamp: new Date(),
+        exitCode: -1,
+      };
+      session.history.push(errorOutput);
+      this.sessions.set(sessionId, session);
+      
       return {
         success: false,
         output: '',
-        error: error instanceof Error ? error.message : 'Unknown error',
-        exitCode: 1,
-        command: `${command} ${args.join(' ')}`.trim(),
+        error: errorOutput.content,
+        exitCode: -1,
+        command: command,
       };
     }
   }
@@ -166,18 +228,11 @@ class TerminalService {
    */
   async killProcess(pid: number): Promise<boolean> {
     try {
-      const result = await invoke<any>('kill_process', { pid });
-      
-      // Handle TauriResult pattern
-      if (result.success) {
-        console.log(`Process ${pid} terminated successfully`);
-        return true;
-      } else {
-        console.error(`Failed to kill process ${pid}:`, result.error);
-        return false;
-      }
+      await invoke<void>('kill_process', { pid });
+      console.log(`Process ${pid} terminated successfully`);
+      return true;
     } catch (error) {
-      console.error(`Error killing process ${pid}:`, error);
+      console.error(`Failed to kill process ${pid}:`, error);
       return false;
     }
   }
@@ -259,13 +314,17 @@ class TerminalService {
     return `output_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
+  /**
+   * Handle service errors with consistent format
+   */
   private handleError(code: string, message: string, originalError?: any): ServiceError {
     console.error(`[TerminalService] ${code}: ${message}`, originalError);
     return {
       code,
       message,
-      details: originalError,
-    };
+      timestamp: Date.now(),
+      context: { originalError },
+    } as ServiceError;
   }
 }
 

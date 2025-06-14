@@ -58,6 +58,14 @@ export class FileManagementService {
   }
 
   /**
+   * Handle service errors with consistent error format
+   */
+  private handleError(code: string, message: string, originalError?: any): Error {
+    console.error(`[FileManagementService] ${code}: ${message}`, originalError);
+    return new Error(`${code}: ${message}`);
+  }
+
+  /**
    * Write file content to disk
    */
   async writeFile(filePath: string, content: string): Promise<void> {
@@ -241,15 +249,24 @@ export class FileManagementService {
   async saveAllFiles(modifiedFiles: Array<{ path: string; content: string }>): Promise<void> {
     try {
       const savePromises = modifiedFiles.map(async (file) => {
-        // Feature: Replace with actual Tauri file system API
-        // Implementation notes: Use invoke('write_file', { path, content }) command
         console.log('💾 Saving file:', file.path);
-        return new Promise<void>((resolve) => {
-          setTimeout(() => {
-            console.log('✅ File saved:', file.path);
-            resolve();
-          }, 100); // Simulate save delay
+        
+        // Use real Tauri file system API
+        const result = await invoke<TauriResult<string>>('write_file', { 
+          path: file.path, 
+          content: file.content 
         });
+
+        if (!result.success) {
+          throw new Error(result.error || `Failed to save file: ${file.path}`);
+        }
+
+        console.log('✅ File saved:', file.path);
+        
+        // Add to recent files after successful save
+        await this.addToRecentFiles(file.path);
+        
+        return result;
       });
 
       await Promise.all(savePromises);
@@ -265,20 +282,25 @@ export class FileManagementService {
    */
   async getRecentFiles(): Promise<string[]> {
     try {
-      // Feature: Replace with actual Tauri storage implementation
-      // Implementation notes: Use Tauri store plugin or localStorage API
-      const mockRecentFiles = [
-        '/project/src/components/App.tsx',
-        '/project/src/utils/helpers.ts',
-        '/project/README.md',
-        '/project/package.json',
-        '/project/src/styles/globals.css'
-      ];
-
-      return mockRecentFiles;
+      // Use real Tauri storage implementation with store plugin
+      const result = await invoke<TauriResult<string[]>>('get_recent_files');
+      
+      if (result.success && result.data) {
+        return result.data;
+      }
+      
+      // Fallback to empty array if backend doesn't have recent files yet
+      console.warn('No recent files found in backend, starting with empty list');
+      return [];
     } catch (error) {
       console.error('❌ Failed to get recent files:', error);
-      return [];
+      // Try localStorage as fallback
+      try {
+        const stored = localStorage.getItem('syntari_recent_files');
+        return stored ? JSON.parse(stored) : [];
+      } catch (parseError) {
+        return [];
+      }
     }
   }
 
@@ -287,11 +309,37 @@ export class FileManagementService {
    */
   async addToRecentFiles(filePath: string): Promise<void> {
     try {
-      // Feature: Replace with actual Tauri storage implementation
-      // Implementation notes: Use Tauri store plugin to persist recent files list
+      // Use real Tauri storage implementation
+      const result = await invoke<TauriResult<void>>('add_recent_file', { 
+        path: filePath 
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to add file to recent list');
+      }
+
       console.log('📋 Added to recent files:', filePath);
+      
+      // Also update localStorage as backup
+      try {
+        const current = await this.getRecentFiles();
+        const updated = [filePath, ...current.filter(p => p !== filePath)].slice(0, 10);
+        localStorage.setItem('syntari_recent_files', JSON.stringify(updated));
+      } catch (localError) {
+        console.warn('Could not update localStorage backup:', localError);
+      }
     } catch (error) {
       console.error('❌ Failed to add to recent files:', error);
+      
+      // Fallback to localStorage only
+      try {
+        const current = JSON.parse(localStorage.getItem('syntari_recent_files') || '[]');
+        const updated = [filePath, ...current.filter((p: string) => p !== filePath)].slice(0, 10);
+        localStorage.setItem('syntari_recent_files', JSON.stringify(updated));
+        console.log('📋 Added to recent files (localStorage fallback):', filePath);
+      } catch (fallbackError) {
+        console.error('Even localStorage fallback failed:', fallbackError);
+      }
     }
   }
 
