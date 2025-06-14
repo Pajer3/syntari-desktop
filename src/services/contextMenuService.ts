@@ -303,8 +303,8 @@ export class ContextMenuService {
     try {
       console.log('🗑️ Starting delete operation for:', filePath);
       
-      // Show confirmation dialog
-      const confirmed = confirm(`Are you sure you want to delete: ${filePath.split('/').pop()}?`);
+      // Show custom confirmation dialog
+      const confirmed = await this.showDeleteConfirmDialog(filePath);
       if (!confirmed) {
         console.log('🚫 Delete operation cancelled by user');
         return;
@@ -335,6 +335,99 @@ export class ContextMenuService {
       
       throw error;
     }
+  }
+
+  private showDeleteConfirmDialog(filePath: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      const fileName = filePath.split('/').pop() || '';
+      
+      // Create overlay
+      const overlay = document.createElement('div');
+      overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+      `;
+
+      const dialog = document.createElement('div');
+      dialog.style.cssText = `
+        background: #2d2d30;
+        color: white;
+        padding: 20px;
+        border-radius: 6px;
+        min-width: 350px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      `;
+
+      dialog.innerHTML = `
+        <h3 style="margin: 0 0 15px 0; color: #f48771;">⚠️ Confirm Delete</h3>
+        <p style="margin: 0 0 20px 0; color: #cccccc; line-height: 1.4;">
+          Are you sure you want to delete <strong>"${fileName}"</strong>?
+          <br><br>
+          <span style="color: #f48771; font-size: 0.9em;">This action cannot be undone.</span>
+        </p>
+        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+          <button id="delete-cancel" style="padding: 8px 16px; background: #555; color: white; border: none; border-radius: 3px; cursor: pointer;">Cancel</button>
+          <button id="delete-confirm" style="padding: 8px 16px; background: #d73a49; color: white; border: none; border-radius: 3px; cursor: pointer;">Delete</button>
+        </div>
+      `;
+
+      overlay.appendChild(dialog);
+      document.body.appendChild(overlay);
+
+      const confirmButton = dialog.querySelector('#delete-confirm') as HTMLButtonElement;
+      const cancelButton = dialog.querySelector('#delete-cancel') as HTMLButtonElement;
+
+      // Focus the cancel button by default for safety
+      setTimeout(() => {
+        cancelButton.focus();
+      }, 10);
+
+      const cleanup = () => {
+        document.body.removeChild(overlay);
+      };
+
+      const handleConfirm = () => {
+        cleanup();
+        resolve(true);
+      };
+
+      const handleCancel = () => {
+        cleanup();
+        resolve(false);
+      };
+
+      // Event listeners
+      confirmButton.addEventListener('click', handleConfirm);
+      cancelButton.addEventListener('click', handleCancel);
+      
+      // Keyboard shortcuts
+      document.addEventListener('keydown', function keyHandler(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleConfirm();
+          document.removeEventListener('keydown', keyHandler);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          handleCancel();
+          document.removeEventListener('keydown', keyHandler);
+        }
+      });
+
+      // Click outside to cancel
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          handleCancel();
+        }
+      });
+    });
   }
 
   async showFileProperties(filePath: string): Promise<void> {
