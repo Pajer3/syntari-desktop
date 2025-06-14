@@ -125,6 +125,9 @@ export class ContextMenuService {
         console.log(`✅ Moved ${sourcePath} to ${destPath}`);
         alert(`✅ Moved "${fileName}" successfully`);
         this.clipboard = null; // Clear clipboard after cut
+        
+        // File system watcher will handle the refresh automatically
+        console.log('🔄 File system watcher will handle refresh automatically');
       } else {
         // Copy file
         const result = await invoke<any>('copy_file', {
@@ -140,9 +143,8 @@ export class ContextMenuService {
         alert(`✅ Copied "${fileName}" successfully`);
       }
 
-      // Refresh file tree
-      window.dispatchEvent(new CustomEvent('file-tree-refresh'));
-      console.log('🔄 File tree refresh event dispatched');
+      // File system watcher will handle the refresh automatically
+      console.log('🔄 File system watcher will handle refresh automatically');
 
     } catch (error) {
       console.error('❌ Paste operation failed:', error);
@@ -192,9 +194,8 @@ export class ContextMenuService {
       if (result.success) {
         console.log(`✅ Renamed: ${currentName} → ${newName}`);
         
-        // Refresh file tree
-        window.dispatchEvent(new CustomEvent('file-tree-refresh'));
-        console.log('🔄 File tree refresh event dispatched');
+        // File system watcher will handle the refresh automatically
+        console.log('🔄 File system watcher will handle refresh automatically');
       } else {
         throw new Error(result.error || 'Rename operation failed');
       }
@@ -322,10 +323,8 @@ export class ContextMenuService {
       // Backend returns a string on success, throws on error
       console.log(`✅ Deleted file: ${filePath}`);
       
-      // Refresh file tree
-      window.dispatchEvent(new CustomEvent('file-tree-refresh'));
-      
-      console.log('🔄 File tree refresh event dispatched');
+      // File system watcher will handle the refresh automatically
+      console.log('🔄 File system watcher will handle refresh automatically');
 
     } catch (error) {
       console.error('❌ Delete operation failed:', error);

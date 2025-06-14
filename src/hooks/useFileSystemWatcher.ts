@@ -1,9 +1,9 @@
 // Syntari AI IDE - Live File System Watcher Hook
 // React hook for live file explorer updates
 
-import { useEffect, useCallback, useRef, useState } from 'react';
-import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { fileSystemService } from '../services/fileSystemService';
 
 // ================================
@@ -30,6 +30,7 @@ interface UseFileSystemWatcherOptions {
 interface FileSystemWatcherState {
   isWatching: boolean;
   watchedPath: string | null;
+  watcherId: string | null;
   lastEvent: FileSystemEvent | null;
   eventCount: number;
   error: string | null;
@@ -46,49 +47,42 @@ export const useFileSystemWatcher = (
   watchPath?: string,
   options: UseFileSystemWatcherOptions = {}
 ) => {
-  const {
-    autoStart = true,
-    onFileCreated,
-    onFileModified,
-    onFileDeleted,
-    onFileRenamed
-  } = options;
-
-  // State
+  const { autoStart = true, debounceMs = 200, ...callbacks } = options;
+  
   const [state, setState] = useState<FileSystemWatcherState>({
     isWatching: false,
     watchedPath: null,
+    watcherId: null,
     lastEvent: null,
     eventCount: 0,
     error: null,
     events: []
   });
 
+  const unlistenRef = useRef<(() => void) | null>(null);
+  const pendingEventsRef = useRef<FileSystemEvent[]>([]);
+  const batchTimeoutRef = useRef<number>();
+
   // Refs for event handlers to avoid stale closures
   const handlersRef = useRef({
-    onFileCreated,
-    onFileModified,
-    onFileDeleted,
-    onFileRenamed
+    onFileCreated: callbacks.onFileCreated,
+    onFileModified: callbacks.onFileModified,
+    onFileDeleted: callbacks.onFileDeleted,
+    onFileRenamed: callbacks.onFileRenamed
   });
 
   // Update handlers ref when they change
   useEffect(() => {
     handlersRef.current = {
-      onFileCreated,
-      onFileModified,
-      onFileDeleted,
-      onFileRenamed
+      onFileCreated: callbacks.onFileCreated,
+      onFileModified: callbacks.onFileModified,
+      onFileDeleted: callbacks.onFileDeleted,
+      onFileRenamed: callbacks.onFileRenamed
     };
-  }, [onFileCreated, onFileModified, onFileDeleted, onFileRenamed]);
-
-  // Event listener reference
-  const unlistenRef = useRef<UnlistenFn | null>(null);
+  }, [callbacks.onFileCreated, callbacks.onFileModified, callbacks.onFileDeleted, callbacks.onFileRenamed]);
 
   // Event deduplication and batching
   const recentEventsRef = useRef<Map<string, number>>(new Map());
-  const batchTimeoutRef = useRef<number>();
-  const pendingEventsRef = useRef<FileSystemEvent[]>([]);
 
   // Cleanup recent events periodically
   useEffect(() => {
@@ -139,9 +133,9 @@ export const useFileSystemWatcher = (
 
     // Process unique events only
     eventGroups.forEach(event => {
-      // Only log important events to reduce noise
+      // Only log important events to reduce noise - just creation and deletion
       if (event.eventType === 'created' || event.eventType === 'deleted') {
-        console.log(`🔄 File system: ${event.eventType} - ${event.path}${event.isDirectory ? ' (directory)' : ''}`);
+        console.log(`📁 ${event.eventType}: ${event.path}${event.isDirectory ? ' (dir)' : ''}`);
       }
 
       setState(prevState => ({
@@ -195,46 +189,47 @@ export const useFileSystemWatcher = (
 
       // For file creation/deletion, process immediately for better UX
       if (eventData.eventType === 'created' || eventData.eventType === 'deleted') {
-        batchTimeoutRef.current = window.setTimeout(processBatchedEvents, 50); // 50ms for immediate operations
+        batchTimeoutRef.current = window.setTimeout(processBatchedEvents, 50);
       } else {
-        batchTimeoutRef.current = window.setTimeout(processBatchedEvents, 200); // 200ms for modifications
+        // For modifications, use longer debounce to reduce noise
+        batchTimeoutRef.current = window.setTimeout(processBatchedEvents, debounceMs);
       }
 
     } catch (error) {
-      console.error('🚨 Error processing file system event:', error);
+      console.error('❌ Error processing file system event:', error);
     }
-  }, [isDuplicateEvent, processBatchedEvents]);
+  }, [isDuplicateEvent, processBatchedEvents, debounceMs]);
 
-  // Start watching a directory
+  // Start watching
   const startWatching = useCallback(async (path: string) => {
     try {
-      // Stop any existing watcher
-      if (unlistenRef.current) {
-        await unlistenRef.current();
-        unlistenRef.current = null;
+      // Stop existing watcher if any
+      if (state.isWatching) {
+        await stopWatching();
       }
 
       // Start backend watcher
-      await invoke('start_file_watcher', { path });
-
-      // Listen for file system events
+      const watcherId = await invoke<string>('start_file_watcher', { path });
+      
+      // Set up event listener
       const unlisten = await listen<FileSystemEvent>('file-system-change', eventListener);
-
       unlistenRef.current = unlisten;
 
       setState(prev => ({
         ...prev,
         isWatching: true,
         watchedPath: path,
+        watcherId: watcherId,
         error: null
       }));
 
     } catch (error) {
-      console.error('❌ Failed to start file system watcher:', error);
+      console.error('❌ [FRONTEND] Failed to start file system watcher:', error);
       setState(prev => ({
         ...prev,
         isWatching: false,
         watchedPath: null,
+        watcherId: null,
         error: error instanceof Error ? error.message : 'Failed to start watcher'
       }));
     }
@@ -243,8 +238,8 @@ export const useFileSystemWatcher = (
   // Stop watching
   const stopWatching = useCallback(async () => {
     try {
-      if (state.watchedPath) {
-        await invoke('stop_file_watcher', { path: state.watchedPath });
+      if (state.watcherId) {
+        await invoke('stop_file_watcher', { watcher_id: state.watcherId });
       }
 
       if (unlistenRef.current) {
@@ -256,6 +251,7 @@ export const useFileSystemWatcher = (
         ...prev,
         isWatching: false,
         watchedPath: null,
+        watcherId: null,
         error: null
       }));
 
@@ -266,7 +262,7 @@ export const useFileSystemWatcher = (
         error: error instanceof Error ? error.message : 'Failed to stop watcher'
       }));
     }
-  }, [state.watchedPath]);
+  }, [state.watcherId]);
 
   // Auto-start watcher when watchPath changes
   useEffect(() => {
@@ -310,7 +306,6 @@ export const useFileExplorerWatcher = (
   rootPath?: string,
   onRefreshNeeded?: () => void
 ) => {
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const refreshTimeoutRef = useRef<number>();
   const lastRefreshRef = useRef<number>(0);
 
@@ -318,8 +313,8 @@ export const useFileExplorerWatcher = (
   const debouncedRefresh = useCallback(() => {
     const now = Date.now();
     
-    // Don't refresh more than once every 1000ms (1 second) to be more conservative
-    if (now - lastRefreshRef.current < 1000) {
+    // Reduce debounce time to 300ms for more responsive updates
+    if (now - lastRefreshRef.current < 300) {
       // Clear existing timeout and set a new one
       if (refreshTimeoutRef.current) {
         clearTimeout(refreshTimeoutRef.current);
@@ -327,67 +322,49 @@ export const useFileExplorerWatcher = (
       
       refreshTimeoutRef.current = window.setTimeout(() => {
         lastRefreshRef.current = Date.now();
-        console.log('🔄 Debounced refresh executing after delay');
-        setRefreshTrigger(prev => prev + 1);
         onRefreshNeeded?.();
-      }, 1000);
-      console.log('🔄 Refresh request debounced, will execute in 1 second');
+      }, 300);
       return;
     }
     
     // Immediate refresh if enough time has passed
     lastRefreshRef.current = now;
-    console.log('🔄 Immediate refresh executing');
-    setRefreshTrigger(prev => prev + 1);
+    onRefreshNeeded?.();
+  }, [onRefreshNeeded]);
+
+  // Immediate refresh function for critical operations (no debounce)
+  const immediateRefresh = useCallback(() => {
+    lastRefreshRef.current = Date.now();
     onRefreshNeeded?.();
   }, [onRefreshNeeded]);
 
   const fileSystemWatcher = useFileSystemWatcher(rootPath, {
     autoStart: true,
-    debounceMs: 200, // Slightly higher debounce for explorer refreshes
+    debounceMs: 100, // Reduced debounce for faster response
     
     onFileCreated: useCallback((path: string, isDirectory: boolean) => {
-      // Only refresh for new directories or important files in the root area
-      if (isDirectory || path.split('/').length <= 3) {
-        console.log('🔄 Important file/directory created, triggering refresh:', path, isDirectory ? '(directory)' : '(file)');
-        debouncedRefresh();
-      } else {
-        console.log('📄 File created in subdirectory (no refresh needed):', path);
-      }
-    }, [debouncedRefresh]),
+      // Always refresh for new files/directories - users expect immediate feedback
+      immediateRefresh();
+    }, [immediateRefresh]),
     
     onFileModified: useCallback((path: string, isDirectory: boolean) => {
       // Skip Syntari internal files to prevent refresh loops
       if (path.includes('.syntari_permission_test') || path.includes('.syntari')) {
-        console.log('🔇 Skipping Syntari internal file:', path);
         return;
       }
       
-      // Only refresh for specific important changes that actually affect the visible tree structure
-      if (path.endsWith('.gitignore') || path.endsWith('package.json') || path.endsWith('Cargo.toml') || path.endsWith('.env')) {
-        console.log('🔄 Important config file modified, triggering refresh:', path);
-        debouncedRefresh();
-      } else if (isDirectory) {
-        // For directory modifications, be more selective - only refresh if it's a new directory or significant change
-        // Reduce logging to prevent console spam
-        // console.log('📁 Directory modified (ignoring unless significant):', path);
-        // Don't refresh on every directory modification as it's usually just filesystem metadata
-      } else {
-        // Skip refresh for regular file modifications that don't affect the tree structure
-        console.log('📝 File modified (no refresh needed):', path);
-      }
+      // Refresh for any modification that could affect the file tree structure
+      debouncedRefresh();
     }, [debouncedRefresh]),
     
     onFileDeleted: useCallback((path: string, isDirectory: boolean) => {
-      // Always refresh for deletions since they affect the visible tree
-      console.log('🔄 File deleted, triggering refresh:', path, isDirectory ? '(directory)' : '(file)');
-      debouncedRefresh();
-    }, [debouncedRefresh]),
+      // Always refresh immediately for deletions since they affect the visible tree
+      immediateRefresh();
+    }, [immediateRefresh]),
     
     onFileRenamed: useCallback((oldPath: string, newPath: string, isDirectory: boolean) => {
-      console.log('🔄 File renamed, triggering refresh:', oldPath, '->', newPath, isDirectory ? '(directory)' : '(file)');
-      debouncedRefresh();
-    }, [debouncedRefresh])
+      immediateRefresh();
+    }, [immediateRefresh])
   });
 
   // Cleanup timeout on unmount
@@ -401,7 +378,8 @@ export const useFileExplorerWatcher = (
 
   return {
     ...fileSystemWatcher,
-    refreshTrigger, // Can be used as dependency in useMemo/useEffect
+    debouncedRefresh,
+    immediateRefresh
   };
 };
 
@@ -411,9 +389,10 @@ export const useFileExplorerWatcher = (
 
 export const getFileSystemWatcherStats = async () => {
   try {
-    return await invoke('get_file_watcher_stats');
+    const stats = await invoke<any>('get_file_watcher_stats');
+    return stats;
   } catch (error) {
     console.error('Failed to get file watcher stats:', error);
-    return [];
+    return null;
   }
 }; 

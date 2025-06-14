@@ -398,29 +398,19 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   onCollapseAll,
   refreshRef
 }) => {
-  console.log('🔄 [DEBUG] FileExplorer component mounted/remounted with rootPath:', rootPath);
-  
-  // State management
-  const [rootNodes, setRootNodes] = useState<readonly FileNode[]>([]);
+  const { showMenu } = useContextMenu();
+  const [rootNodes, setRootNodes] = useState<FileNode[]>([]);
   const [loadedChildren, setLoadedChildren] = useState<Map<string, FileNode[]>>(new Map());
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [isSearchMode, setIsSearchMode] = useState<boolean>(false);
-  
-  // Refs
-  const listRef = useRef<List>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchMode, setIsSearchMode] = useState(false);
+  const listRef = useRef<FixedSizeList>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-  
-  // Create draft file nodes
+
+  // Process draft files into FileNode format
   const draftNodes = useMemo(() => {
-    console.log('📁 [DEBUG] FileExplorer processing draftFiles:', {
-      draftFiles,
-      draftFilesLength: draftFiles.length,
-      draftPaths: draftFiles.map(f => f.path)
-    });
-    
     return draftFiles
       .filter(draft => draft.path.startsWith('<unsaved>/')) // Only show truly unsaved files
       .map(draft => ({
@@ -438,12 +428,6 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
 
   // Combine draft files with regular files
   const allRootNodes = useMemo(() => {
-    console.log('📁 [DEBUG] FileExplorer allRootNodes:', {
-      draftNodesLength: draftNodes.length,
-      rootNodesLength: rootNodes.length,
-      allNodesLength: draftNodes.length + rootNodes.length + (draftNodes.length > 0 ? 1 : 0)
-    });
-    
     if (draftNodes.length === 0) return rootNodes;
     
     return [
@@ -495,15 +479,33 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     }
   }, [rootPath]);
   
-  // File system watcher
-  const fileWatcher = useFileExplorerWatcher(rootPath, useCallback(() => {
-    loadRootItems(undefined, true, true);
-  }, [loadRootItems]));
+  // File system watcher with comprehensive refresh
+  const fileWatcher = useFileExplorerWatcher(rootPath, useCallback(async () => {
+    // Force cache invalidation first
+    fileSystemService.invalidateAllCaches();
+    
+    // Refresh root items
+    await loadRootItems(undefined, true, true);
+    
+    // Also refresh all expanded directories to pick up changes
+    const newLoadedChildren = new Map(loadedChildren);
+    
+    for (const expandedPath of expandedPaths) {
+      try {
+        const children = await fileSystemService.loadFolderContents(expandedPath, true);
+        newLoadedChildren.set(expandedPath, children);
+      } catch (error) {
+        console.error('Failed to refresh directory:', expandedPath, error);
+      }
+    }
+    
+    setLoadedChildren(newLoadedChildren);
+  }, [loadRootItems, loadedChildren, expandedPaths]));
   
   // Build display list
   const flatNodes = useMemo(() => 
     buildFlatList(allRootNodes, expandedPaths, loadedChildren), 
-    [allRootNodes, expandedPaths, loadedChildren, fileWatcher.refreshTrigger]
+    [allRootNodes, expandedPaths, loadedChildren]
   );
   
   // Smart rendering decision
@@ -594,7 +596,6 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
 
   // Expose refresh function through ref
   React.useImperativeHandle(refreshRef, () => () => {
-    console.log('🔄 [DEBUG] External refresh triggered via ref');
     fileSystemService.invalidateAllCaches();
     
     // Refresh root items
@@ -602,26 +603,22 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     
     // Also refresh all expanded directories to pick up new files
     const refreshExpandedDirectories = async () => {
-      console.log('🔄 [DEBUG] Refreshing expanded directories:', Array.from(expandedPaths));
       const newLoadedChildren = new Map(loadedChildren);
       
       for (const expandedPath of expandedPaths) {
         try {
-          console.log('🔄 [DEBUG] Refreshing directory:', expandedPath);
           const children = await fileSystemService.loadFolderContents(expandedPath, true);
           newLoadedChildren.set(expandedPath, children);
-          console.log('🔄 [DEBUG] Refreshed directory contents:', expandedPath, children.length, 'items');
         } catch (error) {
-          console.error('🔄 [DEBUG] Failed to refresh directory:', expandedPath, error);
+          console.error('Failed to refresh directory:', expandedPath, error);
         }
       }
       
       setLoadedChildren(newLoadedChildren);
     };
     
-    // Refresh expanded directories after a small delay to ensure root is loaded first
-    setTimeout(refreshExpandedDirectories, 100);
-  }, [loadRootItems, expandedPaths, loadedChildren]);
+    refreshExpandedDirectories();
+  }, [loadRootItems, loadedChildren, expandedPaths]);
   
   // File operations handlers
   const fileOperations = useMemo(() => ({
@@ -675,11 +672,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
       console.log('📄 Paste to:', targetPath);
       try {
         await contextMenuService.pasteFile(targetPath);
-        // Refresh file tree after paste
-        setTimeout(() => {
-          fileSystemService.invalidateAllCaches();
-          loadRootItems(undefined, true, false);
-        }, 100);
+        // File system watcher will handle refresh automatically
       } catch (error) {
         console.error('Failed to paste file:', error);
       }
@@ -688,11 +681,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
       console.log('✏️ Rename file:', path);
       try {
         await contextMenuService.renameFile(path);
-        // Refresh file tree after rename
-        setTimeout(() => {
-          fileSystemService.invalidateAllCaches();
-          loadRootItems(undefined, true, false);
-        }, 100);
+        // File system watcher will handle refresh automatically
       } catch (error) {
         console.error('Failed to rename file:', error);
       }
@@ -701,11 +690,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
       console.log('🗑️ Delete file:', path);
       try {
         await contextMenuService.deleteFile(path);
-        // Refresh file tree after delete
-        setTimeout(() => {
-          fileSystemService.invalidateAllCaches();
-          loadRootItems(undefined, true, false);
-        }, 100);
+        // File system watcher will handle refresh automatically
       } catch (error) {
         console.error('Failed to delete file:', error);
       }
@@ -750,7 +735,6 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   
   // Listen for external refresh triggers (like when files are created)
   useEffect(() => {
-    console.log('🔄 [DEBUG] FileExplorer rootPath or key changed, reloading...', { rootPath });
     if (rootPath) {
       // Refresh but preserve expanded state to avoid collapsing folders
       loadRootItems(undefined, true, false);
@@ -760,7 +744,6 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   // Component cleanup on unmount
   useEffect(() => {
     return () => {
-      console.log('🔄 [DEBUG] FileExplorer component unmounting...');
       abortControllerRef.current?.abort();
     };
   }, []);

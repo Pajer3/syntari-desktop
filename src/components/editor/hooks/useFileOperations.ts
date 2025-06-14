@@ -36,29 +36,7 @@ export const useFileOperations = ({
     editorStateRef.current = editorState;
   }, [editorState]);
 
-  // Debug logging to track state synchronization
-  useEffect(() => {
-    console.log('📊 [DEBUG] useFileOperations state updated:', {
-      fileTabs: fileTabs.length,
-      activeTabIndex,
-      activeTab: activeTab ? {
-        path: activeTab.file.path,
-        name: activeTab.file.name,
-        isModified: activeTab.isModified
-      } : null,
-      tabPaths: fileTabs.map(tab => tab.file.path)
-    });
-  }, [fileTabs, activeTabIndex, activeTab]);
-
-  // Additional debugging for editorState parameter
-  useEffect(() => {
-    console.log('🔍 [DEBUG] editorState parameter changed:', {
-      fileTabs: editorState.fileTabs?.length || 0,
-      activeTabIndex: editorState.activeTabIndex,
-      hasFileTabs: !!editorState.fileTabs,
-      timestamp: Date.now()
-    });
-  }, [editorState]);
+  // State tracking ready
 
   // Custom hooks for file operations
   const fileCache = useFileCache();
@@ -193,40 +171,23 @@ export const useFileOperations = ({
 
   // Save file
   const handleSave = useCallback(async () => {
-    console.log('💾 🔍 handleSave called!');
-    
     // Always get fresh state from ref instead of using stale closure
     const currentState = editorStateRef.current;
     const currentTabs = currentState.fileTabs;
     const currentActiveIndex = currentState.activeTabIndex;
     const currentActiveTab = currentActiveIndex >= 0 ? currentTabs[currentActiveIndex] : null;
-    
-    console.log('💾 Current state:', {
-      activeTab: currentActiveTab ? {
-        path: currentActiveTab.file.path,
-        name: currentActiveTab.file.name,
-        isModified: currentActiveTab.isModified,
-        contentLength: currentActiveTab.content.length
-      } : null,
-      activeTabIndex: currentActiveIndex,
-      totalTabs: currentTabs.length,
-      tabPaths: currentTabs.map(tab => tab.file.path)
-    });
 
     if (!currentActiveTab) {
-      console.log('💾 ❌ No active tab to save');
       return;
     }
 
     try {
       // Handle unsaved files differently
       if (currentActiveTab.file.path.startsWith('<unsaved>/')) {
-        console.log('💾 📝 Unsaved file detected, opening SaveAs dialog');
         updateDialogStates({ saveAs: true });
         return;
       }
 
-      console.log('💾 💽 Saving existing file:', currentActiveTab.file.path);
       await fileSaver.saveFile(currentActiveTab.file.path, currentActiveTab.content);
       
       // Mark tab as saved
@@ -240,8 +201,6 @@ export const useFileOperations = ({
       
       // Update cache
       fileCache.setCachedContent(currentActiveTab.file.path, currentActiveTab.content);
-      
-      console.log('💾 ✅ File saved successfully');
       
     } catch (error) {
       console.error('💾 ❌ Save failed:', error);
@@ -295,24 +254,14 @@ export const useFileOperations = ({
     // Construct the full file path by combining directory and filename
     const fullFilePath = `${selectedPath}/${fileName}`;
 
-    console.log('💾 Debug - SaveAs called with:', {
-      selectedPath,
-      fileName,
-      fullFilePath,
-      activeTabPath: activeTab.file.path,
-      activeTabContent: activeTab.content.substring(0, 50) + '...'
-    });
-
     try {
-      console.log('💾 Saving file as:', fullFilePath);
       
       await fileSaver.saveFile(fullFilePath, activeTab.content);
       
       // Clear file system cache to ensure new file appears in explorer
       const { fileSystemService } = await import('../../../services/fileSystemService');
       fileSystemService.clearFolderCache(selectedPath);
-      fileSystemService.invalidateAllCaches(); // Clear all cache to be safe
-      console.log('🗑️ Cleared all file system cache to force refresh');
+      fileSystemService.invalidateAllCaches();
       
       // Update the tab with new file info
       const newFileInfo: FileInfo = {
@@ -336,10 +285,8 @@ export const useFileOperations = ({
       
       // Use ref-based refresh to preserve expanded folders
       if (fileExplorerRefreshRef?.current) {
-        console.log('🔄 Triggering ref-based file explorer refresh');
         fileExplorerRefreshRef.current();
       } else {
-        console.log('🔄 ⚠️ fileExplorerRefreshRef not available, falling back to key-based refresh');
         // Fallback to key-based refresh if ref not available
         const currentState = editorStateRef.current;
         updateEditorState({ 
@@ -350,10 +297,8 @@ export const useFileOperations = ({
       // Additional refresh after a delay to ensure filesystem sync
       setTimeout(() => {
         if (fileExplorerRefreshRef?.current) {
-          console.log('🔄 Secondary ref-based refresh after 500ms');
           fileExplorerRefreshRef.current();
         } else {
-          console.log('🔄 Secondary key-based refresh after 500ms');
           const currentState = editorStateRef.current;
           updateEditorState({ 
             fileExplorerKey: currentState.fileExplorerKey + 1 
