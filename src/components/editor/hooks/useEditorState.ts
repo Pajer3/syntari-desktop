@@ -22,6 +22,10 @@ export interface EditorState {
   fileExplorerKey: number;
   isLoading: boolean;
   unsavedFileCounter: number;
+  // Footer panel states
+  showFooter: boolean;
+  activeFooterPanel: 'terminal' | 'problems' | 'output' | 'debug' | null;
+  footerHeight: number;
 }
 
 export interface UnsavedDialog {
@@ -66,6 +70,10 @@ export const useEditorState = (project: ProjectContext) => {
     fileExplorerKey: 0,
     isLoading: false,
     unsavedFileCounter: 1,
+    // Footer panel states
+    showFooter: false,
+    activeFooterPanel: null,
+    footerHeight: 300,
   }));
 
   // Dialog states with lazy initialization

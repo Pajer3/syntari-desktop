@@ -9,8 +9,6 @@ export { ResourceMonitoring } from "./ResourceMonitoring";
 export { GettingStartedSection } from "./GettingStartedSection";
 export { RecentProjectsList } from "./RecentProjectsList";
 export { ActionCard } from "./ActionCard";
-export { Terminal } from "./Terminal";
-export { TerminalPanel } from "./TerminalPanel";
 export { CommandPalette } from "./CommandPalette";
 export { StatusBar, useStatusBar, createStatusBarItems } from "./StatusBar";
 export { ProblemsPanel } from "./ProblemsPanel";

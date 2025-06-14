@@ -15,7 +15,7 @@ import { ProjectAIAssistant } from './components/ProjectAIAssistant';
 import { LoadingScreen, ErrorScreen, PermissionRequestDialog } from './components/ui';
 import { ChatView } from './components/chat';
 import { SettingsView } from './components/layout';
-import { EnhancedTerminalPanel } from './components/terminal/EnhancedTerminalPanel';
+
 
 import type { FileInfo } from './types';
 import './App.css';
@@ -60,8 +60,7 @@ const App: React.FC = () => {
   // TERMINAL STATE
   // ================================
   
-  const [showTerminal, setShowTerminal] = useState(false);
-  const [terminalHeight] = useState(300);
+
 
   // ================================
   // HANDLER FUNCTIONS (declare before use)
@@ -71,9 +70,7 @@ const App: React.FC = () => {
     appViewModel.setCurrentView('settings');
   };
 
-  const toggleTerminal = useCallback(() => {
-    setShowTerminal(prev => !prev);
-  }, []);
+
 
 
 
@@ -355,10 +352,7 @@ const App: React.FC = () => {
     return false;
   }, [appViewModel.viewModel.currentView, tabManager]);
 
-  useShortcut('views', 'toggleTerminal', () => {
-    toggleTerminal();
-    return true;
-  }, [toggleTerminal]);
+
 
   // ================================
   // RENDER LOGIC
@@ -545,16 +539,7 @@ const App: React.FC = () => {
         })()}
       </div>
 
-      {/* Enhanced Terminal Panel */}
-      {appViewModel.viewModel.project && (
-        <EnhancedTerminalPanel
-          projectPath={appViewModel.viewModel.project.rootPath}
-          isVisible={showTerminal}
-          onToggleVisibility={toggleTerminal}
-          height={terminalHeight}
-          onAIRequest={handleAIRequest}
-        />
-      )}
+
 
       {/* Context Menu */}
       {/* DISABLED: Custom context menu */}

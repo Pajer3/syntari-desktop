@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import { Terminal } from 'lucide-react';
 import type { ProjectContext } from '../../types';
 import type { FileNode } from '../../types/fileSystem';
 import type { FileTab, EditorState, DialogStates } from './hooks/useEditorState';
@@ -7,7 +8,7 @@ import { MonacoEditorWrapper } from './MonacoEditorWrapper';
 import { SimpleMonacoWrapper } from './SimpleMonacoWrapper';
 import { FileTabBar } from './FileTabBar';
 import { SearchPanel } from './search/SearchPanel';
-import { TerminalPanel } from '../ui/TerminalPanel';
+import { EditorFooter } from './EditorFooter';
 import { UnsavedChangesDialog } from './UnsavedChangesDialog';
 import { GoToLineDialog } from './GoToLineDialog';
 import { QuickOpen } from '../QuickOpen';
@@ -143,10 +144,10 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
     showGoToLine,
     showSidebar,
     fileExplorerKey,
+    showFooter,
+    activeFooterPanel,
+    footerHeight,
   } = editorState;
-
-  // Terminal panel state (using local state for now)
-  const [showTerminal, setShowTerminal] = React.useState(false);
 
   const {
     saveAs: isSaveAsDialogOpen,
@@ -186,7 +187,45 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
     updateDialogStates({ templateManager: false } as any);
   };
 
-  // Navigate to search result handler removed - now handled inline in SearchPanel props
+  // Footer panel handlers
+  const handleToggleFooter = () => {
+    updateEditorState({ showFooter: !showFooter });
+  };
+
+  const handleFooterPanelChange = (panel: 'terminal' | 'problems' | 'output' | 'debug' | null) => {
+    updateEditorState({ activeFooterPanel: panel });
+  };
+
+  const handleFooterHeightChange = (height: number) => {
+    updateEditorState({ footerHeight: height });
+  };
+
+  const handleToggleTerminal = () => {
+    if (activeFooterPanel === 'terminal' && showFooter) {
+      // If terminal is active and footer is visible, hide footer
+      updateEditorState({ showFooter: false });
+    } else {
+      // Show footer and set terminal as active panel
+      updateEditorState({ 
+        showFooter: true, 
+        activeFooterPanel: 'terminal' 
+      });
+    }
+  };
+
+  // Keyboard shortcuts
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+` (backtick) to toggle terminal like VS Code
+      if (e.ctrlKey && e.key === '`') {
+        e.preventDefault();
+        handleToggleTerminal();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [activeFooterPanel, showFooter]);
 
   // Enhanced create new file handler with project type detection
   const handleEnhancedCreateNewFile = async (fileName: string, content?: string) => {
@@ -452,6 +491,23 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
                   fontSize={14}
                   readOnly={false}
                 />
+                
+                {/* Terminal Toggle Button - Floating */}
+                <button
+                  onClick={handleToggleTerminal}
+                  className={`
+                    absolute bottom-4 right-4 p-2 rounded-lg shadow-lg transition-all duration-200
+                    ${showFooter && activeFooterPanel === 'terminal' 
+                      ? 'bg-vscode-accent text-white' 
+                      : 'bg-vscode-sidebar text-vscode-fg-muted hover:text-vscode-fg hover:bg-gray-700/50'
+                    }
+                    border border-gray-600/30 backdrop-blur-sm
+                    focus:outline-none focus:ring-2 focus:ring-vscode-accent focus:ring-opacity-50
+                  `}
+                  title="Toggle Terminal (Ctrl+`)"
+                >
+                  <Terminal size={16} />
+                </button>
               </div>
                          ) : (
                /* Modern Welcome Screen */
@@ -496,8 +552,9 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
                     </button>
                   </div>
                   
-                  <div className="text-vscode-fg-muted text-sm">
+                  <div className="text-vscode-fg-muted text-sm space-y-2">
                     <p>💡 <strong>Tip:</strong> Use <kbd className="bg-vscode-sidebar px-1 py-0.5 rounded text-xs">Ctrl+P</kbd> for quick file search</p>
+                    <p>🖥️ <strong>Terminal:</strong> Press <kbd className="bg-vscode-sidebar px-1 py-0.5 rounded text-xs">Ctrl+`</kbd> to open terminal</p>
                   </div>
                 </div>
               </div>
@@ -526,18 +583,17 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
           )}
         </div>
 
-                 {/* Terminal Panel */}
-         {showTerminal && (
-           <div className="border-t border-gray-700/40">
-            <TerminalPanel
-              projectPath={safeProject.rootPath}
-              isVisible={showTerminal}
-              onToggleVisibility={() => setShowTerminal(false)}
-              height={300}
-              className="bg-vscode-sidebar"
-            />
-          </div>
-        )}
+        {/* Editor Footer with Terminal and other panels */}
+        <EditorFooter
+          projectPath={safeProject.rootPath}
+          isVisible={showFooter}
+          activePanel={activeFooterPanel}
+          height={footerHeight}
+          onToggleVisibility={handleToggleFooter}
+          onPanelChange={handleFooterPanelChange}
+          onHeightChange={handleFooterHeightChange}
+          onAIRequest={onAskAI}
+        />
       </div>
 
       {/* Dialogs */}
