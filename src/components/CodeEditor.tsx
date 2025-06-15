@@ -145,6 +145,13 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     reopenRecentlyClosedTab();
   }, [reopenRecentlyClosedTab]);
 
+  // System tab switching handler
+  const handleSwitchSystemTabs = useCallback(() => {
+    console.log('🔑 DEBUG: handleSwitchSystemTabs called - switching between system tabs');
+    // Dispatch an event to App.tsx to handle system tab switching
+    window.dispatchEvent(new CustomEvent('syntari:switchSystemTabs'));
+  }, []);
+
   // Shortcut handler functions
   const handleShowQuickOpen = useCallback(() => {
     updateEditorState({ showQuickOpen: true });
@@ -193,6 +200,8 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const handleAskAI = useCallback((context: any) => {
     onRequestAI?.(context);
   }, [onRequestAI]);
+
+
 
   // Initialize command service on mount
   useEffect(() => {
@@ -262,6 +271,18 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           console.log('🔑 Executing reopen-recent-tab');
           console.log('🔑 DEBUG: About to call handleReopenRecentTab()');
           handleReopenRecentTab();
+          break;
+        case 'next-file-tab':
+          console.log('🔑 Executing next-file-tab');
+          handleNextTab();
+          break;
+        case 'previous-file-tab':
+          console.log('🔑 Executing previous-file-tab');
+          handlePreviousTab();
+          break;
+        case 'switch-system-tabs':
+          console.log('🔑 Executing switch-system-tabs');
+          handleSwitchSystemTabs();
           break;
         default:
           console.log('🔑 Unhandled command:', type);
@@ -335,6 +356,36 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         window.dispatchEvent(new CustomEvent('syntari:command', { detail: { type: 'reopen-recent-tab' } }));
         return;
       }
+      
+      // 7. Ctrl+Tab - Next file tab (cycle through file tabs only)
+      if (isCtrl && e.key === 'Tab' && !isShift) {
+        console.log('🔑 Global: Preventing browser Ctrl+Tab and dispatching next-file-tab');
+        e.preventDefault();
+        e.stopPropagation();
+        // Dispatch the actual command
+        window.dispatchEvent(new CustomEvent('syntari:command', { detail: { type: 'next-file-tab' } }));
+        return;
+      }
+      
+      // 8. Ctrl+Shift+Tab - Switch between system tabs (Editor, AI Assistant)
+      if (isCtrl && isShift && e.key === 'Tab') {
+        console.log('🔑 Global: Preventing browser Ctrl+Shift+Tab and dispatching switch-system-tabs');
+        e.preventDefault();
+        e.stopPropagation();
+        // Dispatch the actual command
+        window.dispatchEvent(new CustomEvent('syntari:command', { detail: { type: 'switch-system-tabs' } }));
+        return;
+      }
+      
+      // 9. Alt+Left - Previous file tab (cycle through file tabs only)
+      if (e.altKey && e.key === 'ArrowLeft' && !isCtrl && !isShift) {
+        console.log('🔑 Global: Alt+Left pressed - dispatching previous-file-tab');
+        e.preventDefault();
+        e.stopPropagation();
+        // Dispatch the actual command
+        window.dispatchEvent(new CustomEvent('syntari:command', { detail: { type: 'previous-file-tab' } }));
+        return;
+      }
     };
 
     window.addEventListener('syntari:command', handleSyntariCommand as EventListener);
@@ -357,7 +408,8 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     handleNextTab,
     handlePreviousTab,
     handleShowCommandPalette,
-    handleShowGoToLine
+    handleShowGoToLine,
+    handleSwitchSystemTabs
   ]);
 
   // Keyboard shortcuts

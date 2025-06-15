@@ -79,6 +79,33 @@
           "component": "TabLayout",
           "priority": "P1",
           "businessImpact": "Error recovery - Essential workflow feature that restores file path, unsaved content, and cursor position from recently closed tabs"
+        },
+        "nextFileTab": {
+          "key": "Ctrl+Tab",
+          "description": "Switch to next file tab (cycles through file tabs only, wraps around)",
+          "implemented": true,
+          "planned": false,
+          "component": "TabLayout",
+          "priority": "P1",
+          "businessImpact": "Navigation efficiency - Fast switching between open files without affecting system tabs"
+        },
+        "previousFileTab": {
+          "key": "Alt+Left",
+          "description": "Switch to previous file tab (cycles through file tabs only, wraps around)",
+          "implemented": true,
+          "planned": false,
+          "component": "TabLayout", 
+          "priority": "P1",
+          "businessImpact": "Navigation efficiency - Fast switching between open files in reverse order using intuitive arrow key"
+        },
+        "switchSystemTabs": {
+          "key": "Ctrl+Shift+Tab",
+          "description": "Switch between system tabs (Editor and AI Assistant tabs)",
+          "implemented": true,
+          "planned": false,
+          "component": "App",
+          "priority": "P1",
+          "businessImpact": "Workspace efficiency - Quick switching between main application areas without disrupting file workflow"
         }
       },
       "contextMenu": {
@@ -631,6 +658,7 @@
             "Smart comment placement"
           ]
         }
+
       }
     },
     "ai": {

@@ -482,6 +482,39 @@ const App: React.FC = () => {
     return false;
   }, [appViewModel.viewModel.currentView, tabManager]);
 
+  // System tab switching handler (Ctrl+Shift+Tab)
+  useEffect(() => {
+    const handleSwitchSystemTabs = () => {
+      console.log('🔄 System tab switching requested');
+      
+      if (appViewModel.viewModel.currentView === 'editor') {
+        // Get current active tab and switch to the next one
+        const currentTabId = tabManager.activeTabId;
+        console.log('🔄 Current system tab:', currentTabId);
+        
+        if (currentTabId === 'editor') {
+          // Switch to AI Assistant
+          tabManager.switchToTab('ai-assistant');
+          console.log('🔄 ✅ Switched to AI Assistant tab');
+        } else if (currentTabId === 'ai-assistant') {
+          // Switch back to Editor
+          tabManager.switchToTab('editor');
+          console.log('🔄 ✅ Switched to Editor tab');
+        } else {
+          // Default to Editor if unknown tab
+          tabManager.switchToTab('editor');
+          console.log('🔄 ✅ Defaulted to Editor tab');
+        }
+      }
+    };
+
+    window.addEventListener('syntari:switchSystemTabs', handleSwitchSystemTabs);
+    
+    return () => {
+      window.removeEventListener('syntari:switchSystemTabs', handleSwitchSystemTabs);
+    };
+  }, [appViewModel.viewModel.currentView, tabManager]);
+
 
 
   // ================================
