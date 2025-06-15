@@ -49,14 +49,14 @@ impl TerminalManager {
         }
     }
 
-    pub fn create_session(&self, working_dir: &str) -> Result<String, String> {
+    pub fn create_session(&self, working_dir: &str, cols: u16, rows: u16) -> Result<String, String> {
         let pty_system = portable_pty::native_pty_system();
         
-        // Create pty with reasonable default size - frontend will resize to fit container
+        // Create pty with specified dimensions from frontend
         let pty_pair = pty_system
             .openpty(portable_pty::PtySize {
-                rows: 24,   // Standard terminal height
-                cols: 80,   // Standard terminal width - will be resized by frontend
+                rows,   // Use frontend-specified height
+                cols,   // Use frontend-specified width
                 pixel_width: 0,
                 pixel_height: 0,
             })
@@ -96,24 +96,67 @@ impl TerminalManager {
         // Generate session ID
         let session_id = uuid::Uuid::new_v4().to_string();
 
-        // Spawn background thread to read output
+        // Optimized background thread for better performance on low-end hardware
         let output_sender = Arc::new(Mutex::new(output_sender));
         thread::spawn(move || {
-            let mut buffer = [0u8; 8192];
+            let mut buffer = [0u8; 4096]; // Reduced buffer size for faster processing
+            let mut accumulated_output = String::new();
+            let mut last_flush = std::time::Instant::now();
+            const FLUSH_INTERVAL_MS: u64 = 50; // More responsive - flush every 50ms
+            const MIN_FLUSH_SIZE: usize = 32; // Smaller threshold for better interactivity
+            const MAX_FLUSH_SIZE: usize = 1024; // Prevent overwhelming frontend
             
             loop {
                 match reader.read(&mut buffer) {
-                    Ok(0) => break, // EOF
+                    Ok(0) => {
+                        // EOF - send any remaining buffered output
+                        if !accumulated_output.is_empty() {
+                            if let Ok(sender) = output_sender.lock() {
+                                let _ = sender.try_send(accumulated_output);
+                            }
+                        }
+                        break;
+                    }
                     Ok(n) => {
                         let output = String::from_utf8_lossy(&buffer[..n]).to_string();
-                        if let Ok(sender) = output_sender.lock() {
-                            if sender.try_send(output).is_err() {
-                                break; // Channel closed
+                        accumulated_output.push_str(&output);
+                        
+                        // More aggressive flushing for better interactivity
+                        let should_flush = 
+                            // Flush if we have enough data (smaller threshold)
+                            accumulated_output.len() >= MIN_FLUSH_SIZE ||
+                            // Force flush if buffer is getting large
+                            accumulated_output.len() >= MAX_FLUSH_SIZE ||
+                            // Flush more frequently for responsiveness
+                            last_flush.elapsed().as_millis() >= FLUSH_INTERVAL_MS as u128 ||
+                            // Immediate flush on interactive patterns
+                            output.contains('\n') ||
+                            output.contains('$') || output.contains('#') || output.contains('>') ||
+                            // Also flush on common shell patterns for instant feedback
+                            output.contains(':') && output.len() < 10; // Likely a prompt
+                        
+                        if should_flush && !accumulated_output.is_empty() {
+                            if let Ok(sender) = output_sender.lock() {
+                                if sender.try_send(accumulated_output.clone()).is_err() {
+                                    break; // Channel closed
+                                }
                             }
+                            accumulated_output.clear();
+                            last_flush = std::time::Instant::now();
                         }
                     }
                     Err(_) => {
-                        thread::sleep(Duration::from_millis(10));
+                        // On read error, flush any pending output with shorter timeout
+                        if !accumulated_output.is_empty() && last_flush.elapsed().as_millis() >= 30 {
+                            if let Ok(sender) = output_sender.lock() {
+                                if sender.try_send(accumulated_output.clone()).is_err() {
+                                    break; // Channel closed
+                                }
+                            }
+                            accumulated_output.clear();
+                            last_flush = std::time::Instant::now();
+                        }
+                        thread::sleep(Duration::from_millis(5)); // Shorter sleep for responsiveness
                     }
                 }
             }
@@ -173,15 +216,30 @@ impl TerminalManager {
         let start = std::time::Instant::now();
         let _timeout = Duration::from_millis(timeout_ms);
 
-        // First, try to get immediate output (non-blocking)
+        // First, try to get immediate output (non-blocking) 
         let mut got_output = false;
+        let mut chunk_count = 0;
+        const MAX_CHUNKS_PER_READ: usize = 20; // Reduced to prevent too much accumulation
+        
+        // Collect all immediately available chunks
         while let Ok(chunk) = receiver.try_recv() {
             output.push_str(&chunk);
             got_output = true;
+            chunk_count += 1;
+            
+            // Prevent accumulating too many chunks in one call
+            if chunk_count >= MAX_CHUNKS_PER_READ {
+                break;
+            }
+            
+            // If we get a substantial amount of data, return it immediately
+            if output.len() >= 256 {
+                break;
+            }
         }
 
-        // If we got output immediately, return it
-        if got_output {
+        // If we got substantial output immediately, return it
+        if got_output && !output.trim().is_empty() {
             return Ok(output);
         }
 
@@ -237,9 +295,14 @@ impl TerminalManager {
 #[command]
 pub async fn create_terminal_session(
     workingDirectory: String,
+    cols: Option<u16>,
+    rows: Option<u16>,
     terminal_manager: State<'_, TerminalManager>,
 ) -> Result<String, String> {
-    terminal_manager.create_session(&workingDirectory)
+    // Use provided dimensions or reasonable defaults
+    let cols = cols.unwrap_or(100); // Generous default width
+    let rows = rows.unwrap_or(30);  // Reasonable default height
+    terminal_manager.create_session(&workingDirectory, cols, rows)
 }
 
 /// Send input to terminal (like typing in VS Code terminal)

@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { XTerm } from '@pablo-lion/xterm-react';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { invoke } from '@tauri-apps/api/core';
@@ -26,7 +26,7 @@ interface TerminalSession {
   workingDirectory: string;
 }
 
-export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
+export const XTerminalPanel: React.FC<XTerminalPanelProps> = React.memo(({
   projectPath,
   isVisible,
   onToggleVisibility,
@@ -85,15 +85,40 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
     initializingRef.current = true;
     
     try {
-
+      console.log('🚀 Initializing terminal...');
       
       // Create initial session
       const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
-      // Create PTY session in backend
+      // Calculate initial terminal dimensions
+      let initialCols = 100; // Default
+      let initialRows = 30;
+      
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          const charWidth = 7.2;
+          const charHeight = 18.2;
+          initialCols = Math.max(80, Math.floor((rect.width - 8) / charWidth));
+          initialRows = Math.max(24, Math.floor((rect.height - 8) / charHeight));
+        }
+      }
+      
+      // Only log in development to reduce production overhead
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🎯 Creating PTY with initial dimensions:', `${initialCols}x${initialRows}`);
+      }
+      
+      // Create PTY session in backend with proper initial dimensions
       const ptyId = await invoke<string>('create_terminal_session', {
-        workingDirectory: projectPath
+        workingDirectory: projectPath,
+        cols: initialCols,
+        rows: initialRows
       });
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log('✅ PTY session created:', ptyId);
+      }
       
       const newSession: TerminalSession = {
         id: sessionId,
@@ -107,75 +132,112 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
       setIsInitialized(true);
       initializingRef.current = false;
       
-
+      if (process.env.NODE_ENV === 'development') {
+        console.log('✅ Terminal session initialized');
+      }
       
-      // Start polling for output
-      startOutputPolling(ptyId);
+      // Wait a bit before starting polling to let shell settle
+      setTimeout(() => {
+        startOutputPolling(ptyId);
+      }, 200);
       
     } catch (error) {
-      console.error('Failed to initialize terminal:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('❌ Failed to initialize terminal:', error);
+      }
       initializingRef.current = false;
     }
   };
 
-  // Start smart output polling (adaptive polling rate)
+  // Optimized output polling for low-end hardware
   const startOutputPolling = (ptyId: string) => {
-    outputPollingRef.current = true; // Enable polling
+    outputPollingRef.current = true;
     
-    let consecutiveEmptyReads = 0;
-    const maxEmptyReads = 10; // After 10 empty reads, slow down polling
+    let pollActive = false;
+    let emptyReadCount = 0;
+    let lastOutputTime = Date.now();
     
     const poll = async () => {
-      // Check if polling is still enabled
-      if (!outputPollingRef.current) return;
+      // Prevent overlapping polls
+      if (!outputPollingRef.current || pollActive) {
+        return;
+      }
+      
+      pollActive = true;
       
       try {
         const output = await invoke<string>('read_terminal_output', {
           sessionId: ptyId,
-          timeoutMs: 100 // Reasonable timeout
+          timeoutMs: 150 // Reduced from 200ms for faster response
         });
         
-        if (output && output.length > 0 && xtermRef.current) {
-          xtermRef.current.write(output);
-          consecutiveEmptyReads = 0; // Reset counter on successful read
+        if (output && output.length > 0) {
+          // Write to terminal immediately - remove logging overhead
+          if (xtermRef.current?.terminal) {
+            xtermRef.current.write(output);
+          }
           
-          // Schedule next poll immediately for active output
-          setTimeout(poll, 16);
+          emptyReadCount = 0;
+          lastOutputTime = Date.now();
+          
+          // Faster polling after output for interactive feel
+          setTimeout(poll, 100); // Reduced from 200ms
+          
         } else {
-          consecutiveEmptyReads++;
+          emptyReadCount++;
           
-          // Adaptive polling: slow down when no output
-          const delay = consecutiveEmptyReads > maxEmptyReads ? 200 : 50;
+          // More aggressive adaptive delays for better performance
+          const timeSinceLastOutput = Date.now() - lastOutputTime;
+          let delay;
+          
+          if (timeSinceLastOutput < 500) {
+            // Very recent activity - keep responsive
+            delay = emptyReadCount < 2 ? 150 : 250;
+          } else if (timeSinceLastOutput < 2000) {
+            // Recent activity - moderate polling
+            delay = 400;
+          } else if (timeSinceLastOutput < 10000) {
+            // Moderate idle - slow down
+            delay = 800;
+          } else {
+            // Long idle - very slow polling
+            delay = 2000;
+          }
+          
           setTimeout(poll, delay);
         }
+        
       } catch (error) {
-        // Ignore timeout errors and slow down polling
-        consecutiveEmptyReads++;
-        const delay = consecutiveEmptyReads > maxEmptyReads ? 500 : 100;
-        setTimeout(poll, delay);
+        // On error, wait longer before retrying
+        emptyReadCount++;
+        setTimeout(poll, 600);
+      } finally {
+        pollActive = false;
       }
     };
     
-    // Start polling
-    poll();
+    // Start first poll quicker
+    setTimeout(poll, 200);
   };
 
-  // Handle terminal data (direct pty communication)
+  // Optimized terminal data handler - critical for typing performance
   const handleTerminalData = useCallback(async (data: string) => {
     if (!activeSessionId) return;
     
     const activeSession = sessions.find(s => s.id === activeSessionId);
     if (!activeSession?.ptyId) return;
 
-    try {
-      // Send raw data directly to pty - let the shell handle line endings completely
-      await invoke('send_terminal_input', {
-        sessionId: activeSession.ptyId,
-        input: data
-      });
-    } catch (error) {
-      console.error('Failed to send input to pty:', error);
-    }
+    // Fire-and-forget for maximum responsiveness
+    invoke('send_terminal_input', {
+      sessionId: activeSession.ptyId,
+      input: data
+    }).catch(() => {
+      // Silent error handling - avoid console.error overhead during typing
+      // Only log if in development
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Input send failed');
+      }
+    });
   }, [activeSessionId, sessions]);
 
   // Initialize fit addon after terminal is mounted
@@ -205,16 +267,29 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
           
           console.log('FitAddon successfully initialized');
           
-          // Initial fit with delay to ensure container is ready
+          // Wait for container to be properly sized, then fit
           setTimeout(() => {
             try {
-              fitTerminal();
+              // Force container to have proper dimensions first
+              if (containerRef.current) {
+                const container = containerRef.current;
+                const rect = container.getBoundingClientRect();
+                
+                // Ensure we have actual dimensions
+                if (rect.width > 0 && rect.height > 0) {
+                  console.log('Container dimensions:', rect.width, 'x', rect.height);
+                  fitTerminal();
+                } else {
+                  console.warn('Container has no dimensions, retrying...');
+                  setTimeout(() => fitTerminal(), 300);
+                }
+              }
             } catch (error) {
               console.warn('Initial fit failed:', error);
               // Retry after a longer delay
               setTimeout(() => fitTerminal(), 500);
             }
-          }, 200);
+          }, 100);
           
         } catch (error) {
           console.error('Failed to initialize FitAddon:', error);
@@ -330,8 +405,26 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
     try {
       const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
+      // Calculate terminal dimensions for new session
+      let cols = 100; // Default
+      let rows = 30;
+      
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          const charWidth = 7.2;
+          const charHeight = 18.2;
+          cols = Math.max(80, Math.floor((rect.width - 8) / charWidth));
+          rows = Math.max(24, Math.floor((rect.height - 8) / charHeight));
+        }
+      }
+      
+      console.log('🎯 Creating new session with dimensions:', `${cols}x${rows}`);
+      
       const ptyId = await invoke<string>('create_terminal_session', {
-        workingDirectory: projectPath
+        workingDirectory: projectPath,
+        cols: cols,
+        rows: rows
       });
       
       const newSession: TerminalSession = {
@@ -432,8 +525,28 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
 
   const handleClearTerminal = () => {
     if (xtermRef.current) {
+      // Clear terminal display
       xtermRef.current.clear();
-      console.log('🗑️ Terminal cleared');
+      
+      // Send clear command to shell to reset state
+      const activeSession = sessions.find(s => s.id === activeSessionId);
+      if (activeSession?.ptyId) {
+        // Send Ctrl+L (form feed) to clear shell buffer
+        invoke('send_terminal_input', {
+          sessionId: activeSession.ptyId,
+          input: '\x0c'
+        }).catch(console.error);
+        
+        // Also send reset command to terminal
+        setTimeout(() => {
+          invoke('send_terminal_input', {
+            sessionId: activeSession.ptyId,
+            input: 'reset\r'
+          }).catch(console.error);
+        }, 100);
+      }
+      
+      console.log('✨ Terminal cleared and reset');
     }
   };
 
@@ -474,8 +587,13 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
       const availableWidth = containerRect.width - paddingLeft - paddingRight;
       const availableHeight = containerRect.height - paddingTop - paddingBottom;
 
+      // Only log in development to reduce overhead
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🎯 Terminal fit:', `${availableWidth}x${availableHeight}`);
+      }
+
       // Ensure container has proper dimensions
-      if (availableWidth <= 0 || availableHeight <= 0) {
+      if (availableWidth <= 50 || availableHeight <= 20) {
         setTimeout(() => fitTerminal(), 100);
         return;
       }
@@ -533,12 +651,41 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
       // Perform the fit operation
       fitAddonRef.current.fit();
       
-      // Get the new dimensions after fit
-      const newCols = xtermRef.current.cols || 80;
-      const newRows = xtermRef.current.rows || 24;
+      // Get dimensions after fit and validate
+      const terminal = xtermRef.current.terminal;
+      const newCols = terminal?.cols || 80;
+      const newRows = terminal?.rows || 24;
+      
+      // Only log detailed info in development
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🚀 Terminal fit result:', `${newCols}x${newRows}`);
+      }
+      
+      // Ensure minimum usable width - force at least 80 columns for reasonable use
+      if (newCols < 60) {
+        // Force a reasonable column count
+        const minCols = Math.max(80, Math.floor(availableWidth / 8)); // At least 80 cols or calculated
+        const minRows = Math.max(24, Math.floor(availableHeight / 17)); // At least 24 rows or calculated
+        
+        try {
+          terminal?.resize(minCols, minRows);
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`✅ Forced terminal resize to ${minCols}x${minRows}`);
+          }
+        } catch (error) {
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Failed to force terminal resize:', error);
+          }
+        }
+      }
+      
+      // Get final dimensions
+      const finalCols = terminal?.cols || newCols;
+      const finalRows = terminal?.rows || newRows;
       
       // VS Code-style validation: ensure dimensions are reasonable
-      if (newCols < 10 || newRows < 1 || newCols > 500 || newRows > 200) {
+      if (finalCols < 10 || finalRows < 1 || finalCols > 500 || finalRows > 200) {
+        console.warn('Terminal dimensions out of range, skipping backend sync');
         return;
       }
       
@@ -551,10 +698,13 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
         }
         
         resizeTimeoutRef.current = setTimeout(() => {
+          console.log(`🔄 Syncing backend PTY to ${finalCols}x${finalRows}`);
           invoke('resize_terminal_session', {
             sessionId: activeSession.ptyId,
-            cols: newCols,
-            rows: newRows
+            cols: finalCols,
+            rows: finalRows
+          }).then(() => {
+            console.log('✅ Backend PTY resized successfully');
           }).catch((error) => {
             console.warn('Failed to resize backend PTY:', error);
           });
@@ -568,8 +718,8 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
 
   if (!isVisible) return null;
 
-  // Calculate dynamic terminal options based on container size
-  const getTerminalOptions = useCallback(() => {
+  // Memoized terminal options for better performance
+  const terminalOptions = useMemo(() => {
     const baseOptions = {
       theme: {
         background: '#1e1e1e',
@@ -604,7 +754,7 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
       cursorBlink: true,
       cursorStyle: 'bar' as const,
       cursorWidth: 2,
-      scrollback: 10000,
+      scrollback: 8000, // Reduced scrollback for better performance
       tabStopWidth: 4,
       allowTransparency: false,
       convertEol: false,
@@ -616,34 +766,18 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
       fastScrollSensitivity: 5,
       scrollSensitivity: 3,
       windowsMode: false,
+      // Performance optimizations
+      rendererType: 'canvas' as const, // Use canvas renderer for better performance
+      smoothScrollDuration: 0, // Disable smooth scrolling for faster response
     };
 
-    // Calculate dimensions based on container if available
-    if (containerRef.current) {
-      const containerRect = containerRef.current.getBoundingClientRect();
-      const availableWidth = containerRect.width - 8; // Account for padding
-      const availableHeight = containerRect.height - 8;
-      
-      // Calculate approximate cols/rows based on font size
-      const charWidth = 7.2; // Approximate character width for size 13 font
-      const charHeight = 18.2; // Approximate character height with line height 1.4
-      
-      const cols = Math.floor(availableWidth / charWidth);
-      const rows = Math.floor(availableHeight / charHeight);
-      
-      if (cols > 10 && rows > 1) {
-        return {
-          ...baseOptions,
-          cols: cols,
-          rows: rows,
-        };
-      }
-    }
-    
-    return baseOptions;
-  }, []);
-
-  const terminalOptions = getTerminalOptions();
+    // Use generous defaults that work well - avoid runtime calculations
+    return {
+      ...baseOptions,
+      cols: 100, // Good default that works across screen sizes
+      rows: 30,  // Reasonable height
+    };
+  }, []); // Empty dependency array - options are static
 
   return (
     <div 
@@ -879,6 +1013,14 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
               onData={handleTerminalData}
               addons={[new WebLinksAddon()]}
               className="h-full w-full block terminal-xterm"
+              style={{
+                width: '100%',
+                height: '100%',
+                maxWidth: 'none',
+                minWidth: '0',
+                // Force the terminal to use full available width
+                flex: '1 1 auto'
+              }}
             />
             
             {/* Terminal overlay effects */}
@@ -1066,4 +1208,4 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
       />
     </div>
   );
-}; 
+}); 

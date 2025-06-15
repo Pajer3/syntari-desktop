@@ -4,8 +4,6 @@ import {
   AlertCircle, 
   FileText, 
   ChevronDown,
-  Maximize2, 
-  Minimize2,
 } from 'lucide-react';
 import { XTerminalPanel } from '../terminal/XTerminalPanel';
 import { ProblemsPanel } from '../ui/ProblemsPanel';
@@ -34,7 +32,6 @@ export const EditorFooter: React.FC<EditorFooterProps> = ({
   onAIRequest,
   className = '',
 }) => {
-  const [isMaximized, setIsMaximized] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
 
   const handlePanelClick = useCallback((panel: 'terminal' | 'problems' | 'output' | 'debug') => {
@@ -49,14 +46,6 @@ export const EditorFooter: React.FC<EditorFooterProps> = ({
       }
     }
   }, [activePanel, isVisible, onToggleVisibility, onPanelChange]);
-
-  const handleToggleMaximize = useCallback(() => {
-    setIsMaximized(prev => {
-      const newMaximized = !prev;
-      onHeightChange(newMaximized ? 600 : 300);
-      return newMaximized;
-    });
-  }, [onHeightChange]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -166,14 +155,6 @@ export const EditorFooter: React.FC<EditorFooterProps> = ({
         
         <div className="flex items-center gap-1">
           <button
-            onClick={handleToggleMaximize}
-            className="p-1 text-vscode-fg-muted hover:text-vscode-fg hover:bg-gray-700/30 rounded transition-colors"
-            title={isMaximized ? 'Restore' : 'Maximize'}
-          >
-            {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-          </button>
-          
-          <button
             onClick={onToggleVisibility}
             className="p-1 text-vscode-fg-muted hover:text-vscode-fg hover:bg-gray-700/30 rounded transition-colors"
             title="Hide Panel"
@@ -200,12 +181,36 @@ export const EditorFooter: React.FC<EditorFooterProps> = ({
         {activePanel === 'problems' && (
           <ProblemsPanel
             problems={[]} // You can pass actual problems here
+            onNavigateToLocation={(location) => console.log('Navigate to:', location)}
             className="h-full"
           />
         )}
         
         {activePanel === 'output' && (
           <OutputPanel
+            channels={[
+              {
+                id: 'general',
+                name: 'General',
+                icon: '📋',
+                entries: [],
+                isActive: true
+              },
+              {
+                id: 'build',
+                name: 'Build',
+                icon: '🔨',
+                entries: []
+              },
+              {
+                id: 'debug',
+                name: 'Debug Console',
+                icon: '🐛',
+                entries: []
+              }
+            ]}
+            activeChannelId="general"
+            onChannelSelect={(channelId) => console.log('Channel selected:', channelId)}
             className="h-full"
           />
         )}
