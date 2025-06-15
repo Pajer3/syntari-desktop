@@ -1,6 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { XTerm } from '@pablo-lion/xterm-react';
-import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { invoke } from '@tauri-apps/api/core';
 import { Terminal, X, Plus, Maximize2, Minimize2, Copy } from 'lucide-react';
@@ -168,48 +167,114 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
   // Initialize fit addon after terminal is mounted
   useEffect(() => {
     if (isInitialized && xtermRef.current && !fitAddonRef.current) {
-      // Multiple attempts to find the fit addon
-      const findFitAddon = () => {
-        if (!xtermRef.current) return false;
+      // Create FitAddon instance directly
+      const initializeFitAddon = async () => {
+        try {
+          // Import FitAddon dynamically to ensure it's available
+          const { FitAddon } = await import('@xterm/addon-fit');
+          
+          // Create new FitAddon instance
+          const fitAddon = new FitAddon();
+          
+          // Get the terminal instance
+          const terminal = xtermRef.current?.terminal;
+          if (!terminal) {
+            console.warn('Terminal instance not available for FitAddon');
+            return;
+          }
+          
+          // Load the addon into the terminal
+          terminal.loadAddon(fitAddon);
+          
+          // Store reference for later use
+          fitAddonRef.current = fitAddon;
+          
+          console.log('FitAddon successfully initialized');
+          
+          // Initial fit with delay to ensure container is ready
+          setTimeout(() => {
+            try {
+              fitTerminal();
+            } catch (error) {
+              console.warn('Initial fit failed:', error);
+              // Retry after a longer delay
+              setTimeout(() => fitTerminal(), 500);
+            }
+          }, 200);
+          
+        } catch (error) {
+          console.error('Failed to initialize FitAddon:', error);
+          
+          // Fallback: try the old approach as last resort
+          setTimeout(() => {
+            tryFallbackInitialization();
+          }, 500);
+        }
+      };
+      
+      // Fallback initialization method
+      const tryFallbackInitialization = () => {
+        console.log('Attempting fallback FitAddon initialization...');
         
-        // Try different ways to access the fit addon
-        const addons = xtermRef.current.loadedAddons || [];
-        let fitAddon = addons.find((addon: any) => addon.constructor.name === 'FitAddon');
+        if (!xtermRef.current?.terminal) return;
         
-        // Alternative: try to access via terminal instance
-        if (!fitAddon && xtermRef.current.terminal) {
-          const terminal = xtermRef.current.terminal;
-          if (terminal._addonManager && terminal._addonManager._addons) {
-            fitAddon = terminal._addonManager._addons.find((addon: any) => 
-              addon.constructor.name === 'FitAddon'
-            );
+        const terminal = xtermRef.current.terminal;
+        
+        // Check if FitAddon is already loaded
+        if (terminal._addonManager && terminal._addonManager._addons) {
+          const existingFitAddon = terminal._addonManager._addons.find((addon: any) => 
+            addon.constructor.name === 'FitAddon'
+          );
+          
+          if (existingFitAddon) {
+            fitAddonRef.current = existingFitAddon;
+            console.log('Found existing FitAddon in fallback');
+            setTimeout(() => fitTerminal(), 200);
+            return;
           }
         }
         
-        if (fitAddon) {
-          fitAddonRef.current = fitAddon;
-          return true;
-        }
+        // If still no FitAddon, create a manual fit function
+        console.warn('Creating manual fit function as final fallback');
+        fitAddonRef.current = {
+          fit: () => {
+            // Manual terminal fitting logic
+            if (!containerRef.current || !xtermRef.current?.terminal) return;
+            
+            const container = containerRef.current;
+            const terminal = xtermRef.current.terminal;
+            const rect = container.getBoundingClientRect();
+            
+            // Calculate dimensions
+            const style = window.getComputedStyle(container);
+            const paddingX = parseInt(style.paddingLeft) + parseInt(style.paddingRight);
+            const paddingY = parseInt(style.paddingTop) + parseInt(style.paddingBottom);
+            
+            const availableWidth = rect.width - paddingX;
+            const availableHeight = rect.height - paddingY;
+            
+            // Estimate character dimensions (approximate values)
+            const charWidth = 9; // Approximate character width
+            const charHeight = 17; // Approximate character height
+            
+            const cols = Math.max(10, Math.floor(availableWidth / charWidth));
+            const rows = Math.max(3, Math.floor(availableHeight / charHeight));
+            
+            // Resize terminal
+            try {
+              terminal.resize(cols, rows);
+              console.log(`Manual fit: ${cols}x${rows}`);
+            } catch (error) {
+              console.warn('Manual terminal resize failed:', error);
+            }
+          }
+        };
         
-        return false;
+        setTimeout(() => fitTerminal(), 200);
       };
       
-      // Try to find fit addon with retries
-      const tryInitialize = (attempts = 0) => {
-        if (attempts > 10) {
-          console.error('Failed to initialize FitAddon after 10 attempts');
-          return;
-        }
-        
-        if (findFitAddon()) {
-          // Initial fit with delay to ensure container is ready
-          setTimeout(() => fitTerminal(), 200);
-        } else {
-          setTimeout(() => tryInitialize(attempts + 1), 100);
-        }
-      };
-      
-      tryInitialize();
+      // Start initialization
+      initializeFitAddon();
     }
   }, [isInitialized]);
 
@@ -316,7 +381,13 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
 
   // Enhanced fit function following VS Code's approach
   const fitTerminal = useCallback(() => {
-    if (!fitAddonRef.current || !xtermRef.current || !containerRef.current) {
+    if (!xtermRef.current || !containerRef.current) {
+      console.warn('Terminal or container not available for fitting');
+      return;
+    }
+    
+    if (!fitAddonRef.current) {
+      console.warn('FitAddon not available, skipping fit operation');
       return;
     }
     
@@ -626,7 +697,7 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
               ref={xtermRef}
               options={terminalOptions}
               onData={handleTerminalData}
-              addons={[new FitAddon(), new WebLinksAddon()]}
+              addons={[new WebLinksAddon()]}
               className="h-full w-full block terminal-xterm"
             />
           </div>
