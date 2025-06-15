@@ -85,6 +85,7 @@ interface TabContextMenuProps {
   filePath?: string;
   tabIndex?: number;
   totalTabs?: number;
+  isCloseable?: boolean;
 }
 
 // ================================
@@ -103,6 +104,7 @@ const TabContextMenu: React.FC<TabContextMenuProps> = React.memo(({
   filePath,
   tabIndex = 0,
   totalTabs = 0,
+  isCloseable = true,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -136,22 +138,53 @@ const TabContextMenu: React.FC<TabContextMenuProps> = React.memo(({
     };
   }, [visible, onClose]);
 
-  const menuItems = useMemo(() => [
-    { id: 'close', label: 'Close Tab', disabled: false, hotkey: 'Ctrl+W' },
-    { id: 'close-others', label: 'Close Others', disabled: totalTabs <= 1 },
-    { id: 'close-to-right', label: 'Close Tabs to the Right', disabled: tabIndex >= totalTabs - 1 },
-    { id: 'close-all', label: 'Close All Tabs', disabled: totalTabs === 0 },
-    { id: 'separator1', label: '---', disabled: true },
-    { id: 'pin', label: isPinned ? 'Unpin Tab' : 'Pin Tab', disabled: false },
-    { id: 'duplicate', label: 'Duplicate Tab', disabled: !filePath },
-    { id: 'separator2', label: '---', disabled: true },
-    { id: 'split-horizontal', label: 'Split Right', disabled: false, hotkey: 'Ctrl+\\' },
-    { id: 'split-vertical', label: 'Split Down', disabled: false, hotkey: 'Ctrl+Shift+\\' },
-    { id: 'separator3', label: '---', disabled: true },
-    { id: 'copy-path', label: 'Copy File Path', disabled: !filePath },
-    { id: 'copy-relative-path', label: 'Copy Relative Path', disabled: !filePath },
-    { id: 'reveal-explorer', label: 'Reveal in File Explorer', disabled: !filePath },
-  ], [isPinned, filePath, tabIndex, totalTabs]);
+  const menuItems = useMemo(() => {
+    const items = [];
+    
+    // Only show close-related options for closeable tabs
+    if (isCloseable) {
+      items.push(
+        { id: 'close', label: 'Close Tab', disabled: false, hotkey: 'Ctrl+W' },
+        { id: 'close-others', label: 'Close Others', disabled: totalTabs <= 1 },
+        { id: 'close-to-right', label: 'Close Tabs to the Right', disabled: tabIndex >= totalTabs - 1 },
+        { id: 'close-all', label: 'Close All Tabs', disabled: totalTabs === 0 },
+        { id: 'separator1', label: '---', disabled: true }
+      );
+    }
+    
+    // Pin/unpin for system tabs (but they can't be closed)
+    if (isCloseable) {
+      items.push({ id: 'pin', label: isPinned ? 'Unpin Tab' : 'Pin Tab', disabled: false });
+    }
+    
+    // Duplicate only for file tabs
+    if (filePath && isCloseable) {
+      items.push({ id: 'duplicate', label: 'Duplicate Tab', disabled: !filePath });
+    }
+    
+    // Add separator before split/copy actions if we have previous items
+    if (items.length > 0) {
+      items.push({ id: 'separator2', label: '---', disabled: true });
+    }
+    
+    // Split and copy actions (available for all tabs)
+    items.push(
+      { id: 'split-horizontal', label: 'Split Right', disabled: false, hotkey: 'Ctrl+\\' },
+      { id: 'split-vertical', label: 'Split Down', disabled: false, hotkey: 'Ctrl+Shift+\\' }
+    );
+    
+    // File-specific actions only for file tabs
+    if (filePath) {
+      items.push(
+        { id: 'separator3', label: '---', disabled: true },
+        { id: 'copy-path', label: 'Copy File Path', disabled: !filePath },
+        { id: 'copy-relative-path', label: 'Copy Relative Path', disabled: !filePath },
+        { id: 'reveal-explorer', label: 'Reveal in File Explorer', disabled: !filePath }
+      );
+    }
+    
+    return items;
+  }, [isPinned, filePath, tabIndex, totalTabs, isCloseable]);
 
   if (!visible) return null;
 
@@ -499,6 +532,12 @@ export const TabLayout: React.FC<TabLayoutProps> = ({
     const tab = tabs.find(t => t.id === tabId);
     if (!tab) return;
 
+    // Prevent closing system tabs (File Explorer, AI Assistant)
+    if (tab.closeable === false) {
+      console.log('🔒 Cannot close system tab:', tab.title);
+      return;
+    }
+
     try {
       // Check for unsaved changes
       if (tab.modified && onUnsavedChangesWarning) {
@@ -521,11 +560,14 @@ export const TabLayout: React.FC<TabLayoutProps> = ({
 
     switch (action) {
       case 'close':
-        handleTabClose(tabId);
+        // Only allow closing if tab is closeable
+        if (tab.closeable !== false) {
+          handleTabClose(tabId);
+        }
         break;
       case 'close-others':
         tabs.forEach(t => {
-          if (t.id !== tabId && !t.pinned) {
+          if (t.id !== tabId && !t.pinned && t.closeable !== false) {
             handleTabClose(t.id);
           }
         });
@@ -533,7 +575,7 @@ export const TabLayout: React.FC<TabLayoutProps> = ({
       case 'close-to-right': {
         const fromIndex = tabs.findIndex(t => t.id === tabId);
         tabs.slice(fromIndex + 1).forEach(t => {
-          if (!t.pinned) {
+          if (!t.pinned && t.closeable !== false) {
             handleTabClose(t.id);
           }
         });
@@ -541,7 +583,7 @@ export const TabLayout: React.FC<TabLayoutProps> = ({
       }
       case 'close-all':
         tabs.forEach(t => {
-          if (!t.pinned) {
+          if (!t.pinned && t.closeable !== false) {
             handleTabClose(t.id);
           }
         });
@@ -861,6 +903,7 @@ export const TabLayout: React.FC<TabLayoutProps> = ({
         filePath={tabs.find(t => t.id === contextMenu.tabId)?.filePath}
         tabIndex={tabs.findIndex(t => t.id === contextMenu.tabId)}
         totalTabs={tabs.length}
+        isCloseable={tabs.find(t => t.id === contextMenu.tabId)?.closeable ?? true}
       />
     </div>
   );

@@ -153,16 +153,34 @@ export const useFileOperations = ({
   const handleContentChange = useCallback((newContent: string) => {
     if (!activeTab) return;
 
-    // Update tab content and mark as modified
+    const currentTab = fileTabs[activeTabIndex];
+    if (!currentTab) return;
+
+    // Simple but effective: compare against the file's original content
+    // When the tab was first opened, it should contain the saved file content
+    const originalContent = activeTab.file.content || '';
+    const hasChanged = newContent !== originalContent;
+
+    // Debug logging to help track modification state
+    console.log('📝 Content change detected:', {
+      filePath: activeTab.file.path,
+      hasChanged,
+      currentlyModified: currentTab.isModified,
+      newLength: newContent.length,
+      originalLength: originalContent.length,
+      willMarkModified: hasChanged
+    });
+
+    // Update tab content and modification state
     const newTabs = fileTabs.map((tab, index) => 
       index === activeTabIndex 
-        ? { ...tab, content: newContent, isModified: true }
+        ? { ...tab, content: newContent, isModified: hasChanged }
         : tab
     );
     
     updateEditorState({ fileTabs: newTabs });
 
-    // Update cache
+    // Update cache with current content
     fileCache.setCachedContent(activeTab.file.path, newContent);
     
     // Notify parent
@@ -190,10 +208,17 @@ export const useFileOperations = ({
 
       await fileSaver.saveFile(currentActiveTab.file.path, currentActiveTab.content);
       
-      // Mark tab as saved
+      // Mark tab as saved and update the file's original content
       const newTabs = currentTabs.map((tab, index) => 
         index === currentActiveIndex 
-          ? { ...tab, isModified: false }
+          ? { 
+              ...tab, 
+              isModified: false,
+              file: {
+                ...tab.file,
+                content: currentActiveTab.content // Update the original content
+              }
+            }
           : tab
       );
       
@@ -201,6 +226,8 @@ export const useFileOperations = ({
       
       // Update cache
       fileCache.setCachedContent(currentActiveTab.file.path, currentActiveTab.content);
+      
+      console.log('💾 ✅ File saved, modification indicator cleared:', currentActiveTab.file.path);
       
     } catch (error) {
       console.error('💾 ❌ Save failed:', error);

@@ -1,6 +1,9 @@
 // Syntari AI IDE - Service Types
 // TypeScript interfaces for Tauri backend integration
 
+// Re-export core types to avoid duplication
+export type { AppError, FileInfo, AiProvider, ProjectContext } from '../types/core';
+
 // Terminal Service Types
 export interface TerminalSession {
   id: string;
@@ -84,8 +87,7 @@ export interface CommandPaletteState {
   recentCommands: string[];
 }
 
-// AI Service Types (using core AiProvider interface)
-
+// AI Service Types
 export interface AIRequest {
   prompt: string;
   provider?: string;
@@ -121,13 +123,6 @@ export interface FileSystemEntry {
   size?: number;
   modified: Date;
   permissions: string;
-}
-
-// Error Types
-export interface ServiceError {
-  code: string;
-  message: string;
-  details?: any;
 }
 
 // System Types

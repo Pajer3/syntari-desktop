@@ -396,6 +396,107 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
         contextMenuService.openAIAssistant();
       });
 
+      // Register application-level shortcuts in Monaco to work when editor has focus
+      const registerApplicationShortcuts = () => {
+        console.log('🔑 Registering FOCUSED shortcuts in Monaco...');
+        
+        // FOCUSED IMPLEMENTATION - Only 3 critical shortcuts with enhanced registration
+        
+        // 1. CTRL+S (Save) - CRITICAL
+        const saveCommandId = editor.addCommand(
+          monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, 
+          () => {
+            console.log('🔑 Monaco: Ctrl+S triggered - dispatching save-file');
+            window.dispatchEvent(new CustomEvent('syntari:command', { detail: { type: 'save-file' } }));
+          },
+          'syntari.save' // Unique context ID
+        );
+        
+        // 2. CTRL+W (Close Tab) - CRITICAL
+        const closeTabCommandId = editor.addCommand(
+          monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyW, 
+          () => {
+            console.log('🔑 Monaco: Ctrl+W triggered - dispatching close-tab');
+            window.dispatchEvent(new CustomEvent('syntari:command', { detail: { type: 'close-tab' } }));
+          },
+          'syntari.closeTab' // Unique context ID
+        );
+        
+        // 3. CTRL+SHIFT+P (Command Palette) - CRITICAL with higher priority
+        const commandPaletteId = editor.addCommand(
+          monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyP, 
+          () => {
+            console.log('🔑 Monaco: Ctrl+Shift+P triggered - dispatching command-palette');
+            window.dispatchEvent(new CustomEvent('syntari:command', { detail: { type: 'command-palette' } }));
+          },
+          'syntari.commandPalette' // Unique context ID
+        );
+        
+        // Also register with Monaco's action system for better integration
+        editor.addAction({
+          id: 'syntari.save',
+          label: 'Save File',
+          keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
+          run: () => {
+            console.log('🔑 Monaco Action: Save triggered');
+            window.dispatchEvent(new CustomEvent('syntari:command', { detail: { type: 'save-file' } }));
+          }
+        });
+        
+        editor.addAction({
+          id: 'syntari.closeTab',
+          label: 'Close Tab',
+          keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyW],
+          run: () => {
+            console.log('🔑 Monaco Action: Close Tab triggered');
+            window.dispatchEvent(new CustomEvent('syntari:command', { detail: { type: 'close-tab' } }));
+          }
+        });
+        
+        editor.addAction({
+          id: 'syntari.commandPalette',
+          label: 'Show Command Palette',
+          keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyP],
+          run: () => {
+            console.log('🔑 Monaco Action: Command Palette triggered');
+            window.dispatchEvent(new CustomEvent('syntari:command', { detail: { type: 'command-palette' } }));
+          }
+        });
+        
+        console.log('🔑 Registered commands and actions:', { saveCommandId, closeTabCommandId, commandPaletteId });
+      };
+      
+      registerApplicationShortcuts();
+
+      // Add event handlers for context menu actions
+      const addContextMenuEventListeners = () => {
+        window.addEventListener('syntari:formatDocument', () => {
+          if (editorRef.current) {
+            editorRef.current.getAction('editor.action.formatDocument')?.run();
+          }
+        });
+        
+        window.addEventListener('syntari:goToDefinition', () => {
+          if (editorRef.current) {
+            editorRef.current.getAction('editor.action.revealDefinition')?.run();
+          }
+        });
+        
+        window.addEventListener('syntari:findReferences', () => {
+          if (editorRef.current) {
+            editorRef.current.getAction('editor.action.goToReferences')?.run();
+          }
+        });
+        
+        window.addEventListener('syntari:renameSymbol', () => {
+          if (editorRef.current) {
+            editorRef.current.getAction('editor.action.rename')?.run();
+          }
+        });
+      };
+      
+      addContextMenuEventListeners();
+
       // Set up context menu on the editor DOM element
       const editorDomNode = editor.getDomNode();
       if (editorDomNode) {
@@ -500,6 +601,16 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
       // Keep selection features
       occurrencesHighlight: 'singleFile' as const,
       selectionHighlight: true,
+      renderWhitespace: 'selection' as const,
+      renderControlCharacters: true,
+      
+      // Enhanced selection options for better visibility
+      wordWrap: 'on' as const,
+      wordWrapColumn: 120,
+      selectOnLineNumbers: true,
+      
+      // Ensure proper selection styling
+      theme: theme,
       
       // Safe folding
       folding: !performanceConfig.performanceMode,

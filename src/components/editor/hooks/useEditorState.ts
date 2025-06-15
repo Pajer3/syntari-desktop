@@ -13,6 +13,7 @@ export interface EditorState {
   activeTabIndex: number;
   showSearchPanel: boolean;
   showQuickOpen: boolean;
+  showCommandPalette: boolean;
   currentError: Error | null;
   draggedTabIndex: number | null;
   dragOverIndex: number | null;
@@ -61,6 +62,7 @@ export const useEditorState = (project: ProjectContext) => {
     activeTabIndex: -1,
     showSearchPanel: false,
     showQuickOpen: false,
+    showCommandPalette: false,
     currentError: null,
     draggedTabIndex: null,
     dragOverIndex: null,

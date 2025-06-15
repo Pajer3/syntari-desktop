@@ -7,6 +7,7 @@ import { useEditorState } from './editor/hooks/useEditorState';
 import { useTabManager } from './editor/hooks/useTabManager';
 import { useFileOperations } from './editor/hooks/useFileOperations';
 import { useEditorShortcuts } from './editor/hooks/useEditorShortcuts';
+import { useRecentlyClosedTabs } from '../hooks/useRecentlyClosedTabs';
 import { EditorLayout } from './editor/EditorLayout';
 import { TabContextMenu } from './editor/TabContextMenu';
 import { commandService } from '../services';
@@ -41,6 +42,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   
   // Recent files state
   const [recentFilePaths, setRecentFilePaths] = useState<string[]>([]);
+  const recentlyClosedTabsManager = useRecentlyClosedTabs();
   
   // Core state management
   const { editorState, dialogStates, updateEditorState, updateDialogStates } = useEditorState(project);
@@ -127,22 +129,33 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   }, [editorState, handleTabSelect]);
 
   const handleCloseCurrentTab = useCallback(() => {
-    handleTabClose(editorState.activeTabIndex);
-  }, [handleTabClose, editorState.activeTabIndex]);
+    console.log('🔑 handleCloseCurrentTab called, activeTabIndex:', editorState.activeTabIndex);
+    console.log('🔑 fileTabs:', editorState.fileTabs);
+    
+    if (editorState.activeTabIndex >= 0 && editorState.activeTabIndex < editorState.fileTabs.length) {
+      console.log('🔑 Closing tab at index:', editorState.activeTabIndex);
+      handleTabClose(editorState.activeTabIndex);
+    } else {
+      console.log('🔑 Invalid activeTabIndex, cannot close tab');
+    }
+  }, [handleTabClose, editorState.activeTabIndex, editorState.fileTabs]);
 
   // Reopen recently closed tab function
-      const handleReopenRecentTab = useCallback(() => {
-      // Feature: Reopen recently closed tab functionality to be implemented
-    }, []);
+  const handleReopenRecentTab = useCallback(() => {
+    const lastClosedTab = recentlyClosedTabsManager.reopenMostRecentTab();
+    if (lastClosedTab) {
+      openFileInTab(lastClosedTab.filePath); // Use the proper filePath property
+    }
+  }, [recentlyClosedTabsManager, openFileInTab]);
 
   // Shortcut handler functions
   const handleShowQuickOpen = useCallback(() => {
     updateEditorState({ showQuickOpen: true });
   }, [updateEditorState]);
 
-      const handleShowCommandPalette = useCallback(() => {
-      // Feature: Command palette integration to be implemented
-    }, []);
+  const handleShowCommandPalette = useCallback(() => {
+    updateEditorState({ showCommandPalette: true });
+  }, [updateEditorState]);
 
   const handleToggleSidebar = useCallback(() => {
     updateEditorState({ showSidebar: !editorState.showSidebar });
@@ -170,9 +183,10 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     }
   }, []);
 
-      const handleShowAIAssistant = useCallback(() => {
-      // Feature: AI assistant dialog integration to be implemented
-    }, []);
+  const handleShowAIAssistant = useCallback(() => {
+    // Feature disabled - focusing on core IDE functionality first
+    console.log('AI Assistant integration will be implemented after core features are complete');
+  }, []);
 
   const handleOpenFile = useCallback(() => {
     updateDialogStates({ openFile: true });
@@ -194,10 +208,20 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   useEffect(() => {
     const handleSyntariCommand = (event: CustomEvent) => {
       const { type } = event.detail;
+      console.log('🔑 Syntari command received:', type);
       
       switch (type) {
         case 'save-file':
+          console.log('🔑 Executing save-file');
           handleSave();
+          break;
+        case 'close-tab':
+          console.log('🔑 Executing close-tab');
+          handleCloseCurrentTab();
+          break;
+        case 'command-palette':
+          console.log('🔑 Executing command-palette');
+          handleShowCommandPalette();
           break;
         case 'save-as':
           updateDialogStates({ saveAs: true });
@@ -217,15 +241,67 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         case 'toggle-sidebar':
           handleToggleSidebar();
           break;
+        case 'reopen-tab':
+          handleReopenRecentTab();
+          break;
+        case 'next-tab':
+          handleNextTab();
+          break;
+        case 'previous-tab':
+          handlePreviousTab();
+          break;
+        case 'go-to-line':
+          handleShowGoToLine();
+          break;
         default:
-          // Unhandled command
+          console.log('🔑 Unhandled command:', type);
+      }
+    };
+
+    // FOCUSED Global keydown handler - prevent browser defaults AND dispatch commands
+    const handleGlobalKeydown = (e: KeyboardEvent) => {
+      const isCtrl = e.ctrlKey || e.metaKey;
+      const isShift = e.shiftKey;
+      
+      // FOCUSED: Only handle our 3 critical shortcuts - prevent browser AND dispatch command
+      
+      // 1. Ctrl+S - Prevent browser Save Page dialog AND trigger save
+      if (isCtrl && e.key === 's' && !isShift) {
+        console.log('🔑 Global: Preventing browser Ctrl+S and dispatching save-file');
+        e.preventDefault();
+        e.stopPropagation();
+        // Dispatch the actual command
+        window.dispatchEvent(new CustomEvent('syntari:command', { detail: { type: 'save-file' } }));
+        return;
+      }
+      
+      // 2. Ctrl+W - Prevent browser Close Tab AND close current tab
+      if (isCtrl && e.key === 'w' && !isShift) {
+        console.log('🔑 Global: Preventing browser Ctrl+W and dispatching close-tab');
+        e.preventDefault();
+        e.stopPropagation();
+        // Dispatch the actual command
+        window.dispatchEvent(new CustomEvent('syntari:command', { detail: { type: 'close-tab' } }));
+        return;
+      }
+      
+      // 3. Ctrl+Shift+P - Prevent browser print dialog AND open command palette
+      if (isCtrl && isShift && e.key === 'P') {
+        console.log('🔑 Global: Preventing browser Ctrl+Shift+P and dispatching command-palette');
+        e.preventDefault();
+        e.stopPropagation();
+        // Dispatch the actual command
+        window.dispatchEvent(new CustomEvent('syntari:command', { detail: { type: 'command-palette' } }));
+        return;
       }
     };
 
     window.addEventListener('syntari:command', handleSyntariCommand as EventListener);
+    window.addEventListener('keydown', handleGlobalKeydown, true); // Use capture phase
     
     return () => {
       window.removeEventListener('syntari:command', handleSyntariCommand as EventListener);
+      window.removeEventListener('keydown', handleGlobalKeydown, true);
     };
   }, [
     handleSave, 
@@ -234,7 +310,13 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     handleShowFind, 
     handleShowFindReplace, 
     handleToggleSidebar,
-    editorState // Added editorState to dependencies to ensure fresh closure
+    editorState,
+    handleCloseCurrentTab,
+    handleReopenRecentTab,
+    handleNextTab,
+    handlePreviousTab,
+    handleShowCommandPalette,
+    handleShowGoToLine
   ]);
 
   // Keyboard shortcuts

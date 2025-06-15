@@ -173,31 +173,47 @@ export const getDefaultContextMenuItems = (
   items.push(
     { id: 'sep3', separator: true },
     {
-      id: 'ask-ai',
-      label: 'Ask AI',
-      icon: '🤖',
-      shortcut: 'Ctrl+K',
-      action: () => console.log('Ask AI about selection'),
+      id: 'format-document',
+      label: 'Format Document',
+      icon: '🎨',
+      shortcut: 'Shift+Alt+F',
+      action: () => {
+        // Trigger Monaco formatter
+        const event = new CustomEvent('syntari:formatDocument');
+        window.dispatchEvent(event);
+      },
     },
     {
-      id: 'explain-code',
-      label: 'Explain Code',
-      icon: '💡',
+      id: 'go-to-definition',
+      label: 'Go to Definition',
+      icon: '🎯',
+      shortcut: 'F12',
       disabled: !hasSelection,
-      action: () => console.log('Explain selected code'),
+      action: () => {
+        const event = new CustomEvent('syntari:goToDefinition');
+        window.dispatchEvent(event);
+      },
     },
     {
-      id: 'generate-code',
-      label: 'Generate Code',
-      icon: '⚡',
-      action: () => console.log('Generate code here'),
-    },
-    {
-      id: 'optimize-code',
-      label: 'Optimize Code',
-      icon: '🚀',
+      id: 'find-references',
+      label: 'Find All References',
+      icon: '🔍',
       disabled: !hasSelection,
-      action: () => console.log('Optimize selected code'),
+      action: () => {
+        const event = new CustomEvent('syntari:findReferences');
+        window.dispatchEvent(event);
+      },
+    },
+    {
+      id: 'rename-symbol',
+      label: 'Rename Symbol',
+      icon: '✏️',
+      shortcut: 'F2',
+      disabled: !hasSelection,
+      action: () => {
+        const event = new CustomEvent('syntari:renameSymbol');
+        window.dispatchEvent(event);
+      },
     }
   );
 

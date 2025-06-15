@@ -200,22 +200,13 @@ pub async fn save_file_impl(path: String, content: String) -> std::result::Resul
 // #[tauri::command]
 pub async fn create_file_impl(path: String, content: Option<String>) -> Result<String, String> {
     use std::fs;
+    use std::path::Path;
     
     tracing::info!("Creating file: {}", path);
     
-    // Security: Validate path first
-    let secure_path = match validate_path_security(&path) {
-        Ok(p) => p,
-        Err(e) => return Err(format!("Security validation failed: {}", e)),
-    };
+    let file_path = Path::new(&path);
     
-    let file_path = secure_path.as_path();
-    
-    if file_path.exists() {
-        return Err(format!("File already exists: {}", path));
-    }
-    
-    // Create parent directories if they don't exist
+    // Ensure parent directory exists
     if let Some(parent) = file_path.parent() {
         if !parent.exists() {
             match fs::create_dir_all(parent) {
@@ -228,9 +219,14 @@ pub async fn create_file_impl(path: String, content: Option<String>) -> Result<S
         }
     }
     
-    let file_content = content.unwrap_or_default();
+    // Check if file already exists
+    if file_path.exists() {
+        return Err(format!("File already exists: {}", path));
+    }
     
-    match fs::write(&file_path, file_content) {
+    // Create the file with optional content
+    let content = content.unwrap_or_default();
+    match fs::write(file_path, content) {
         Ok(_) => {
             tracing::info!("File created successfully: {}", path);
             Ok(format!("File created: {}", path))
@@ -369,21 +365,171 @@ pub async fn get_app_data_dir(app_handle: tauri::AppHandle) -> Result<String, St
     
     match app_handle.path().app_data_dir() {
         Ok(path) => {
-            let app_data_path = path.to_string_lossy().to_string();
-            tracing::info!("App data directory: {}", app_data_path);
-            Ok(app_data_path)
-        },
-        Err(e) => {
-            tracing::error!("Failed to get app data directory: {}", e);
+            let path_str = path.to_string_lossy().to_string();
             
-            // Fallback to home directory + .syntari
-            if let Ok(home_dir) = std::env::var("HOME") {
-                let fallback_path = format!("{}/.syntari", home_dir);
-                tracing::warn!("Using fallback app data directory: {}", fallback_path);
-                Ok(fallback_path)
-            } else {
-                Err(format!("Failed to get app data directory: {}", e))
+            // Ensure the directory exists
+            if let Err(e) = std::fs::create_dir_all(&path) {
+                return Err(format!("Failed to create app data directory: {}", e));
+            }
+            
+            Ok(path_str)
+        }
+        Err(e) => Err(format!("Failed to get app data directory: {}", e))
+    }
+}
+
+#[tauri::command]
+pub async fn copy_file(source_path: String, target_path: String) -> std::result::Result<TauriResult<String>, String> {
+    use std::fs;
+    use std::path::Path;
+    
+    tracing::info!("Copying file from '{}' to '{}'", source_path, target_path);
+    
+    let source = Path::new(&source_path);
+    let target = Path::new(&target_path);
+    
+    if !source.exists() {
+        return Ok(TauriResult::error(format!("Source file does not exist: {}", source_path)));
+    }
+    
+    if target.exists() {
+        return Ok(TauriResult::error(format!("Target file already exists: {}", target_path)));
+    }
+    
+    // Create parent directories if they don't exist
+    if let Some(parent) = target.parent() {
+        if !parent.exists() {
+            match fs::create_dir_all(parent) {
+                Ok(_) => tracing::debug!("Created parent directories for: {}", target_path),
+                Err(e) => {
+                    tracing::error!("Failed to create parent directories: {}", e);
+                    return Ok(TauriResult::error(format!("Failed to create parent directories: {}", e)));
+                }
             }
         }
     }
+    
+    // Copy file or directory
+    if source.is_dir() {
+        match copy_dir_recursive(source, target) {
+            Ok(_) => {
+                tracing::info!("Directory copied successfully from '{}' to '{}'", source_path, target_path);
+                Ok(TauriResult::success(format!("Directory copied to {}", target_path)))
+            }
+            Err(e) => {
+                tracing::error!("Failed to copy directory: {}", e);
+                Ok(TauriResult::error(format!("Failed to copy directory: {}", e)))
+            }
+        }
+    } else {
+        match fs::copy(source, target) {
+            Ok(_) => {
+                tracing::info!("File copied successfully from '{}' to '{}'", source_path, target_path);
+                Ok(TauriResult::success(format!("File copied to {}", target_path)))
+            }
+            Err(e) => {
+                tracing::error!("Failed to copy file: {}", e);
+                Ok(TauriResult::error(format!("Failed to copy file: {}", e)))
+            }
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn move_file(source_path: String, target_path: String) -> std::result::Result<TauriResult<String>, String> {
+    use std::fs;
+    use std::path::Path;
+    
+    tracing::info!("Moving file from '{}' to '{}'", source_path, target_path);
+    
+    let source = Path::new(&source_path);
+    let target = Path::new(&target_path);
+    
+    if !source.exists() {
+        return Ok(TauriResult::error(format!("Source file does not exist: {}", source_path)));
+    }
+    
+    if target.exists() {
+        return Ok(TauriResult::error(format!("Target file already exists: {}", target_path)));
+    }
+    
+    // Create parent directories if they don't exist
+    if let Some(parent) = target.parent() {
+        if !parent.exists() {
+            match fs::create_dir_all(parent) {
+                Ok(_) => tracing::debug!("Created parent directories for: {}", target_path),
+                Err(e) => {
+                    tracing::error!("Failed to create parent directories: {}", e);
+                    return Ok(TauriResult::error(format!("Failed to create parent directories: {}", e)));
+                }
+            }
+        }
+    }
+    
+    // Move file or directory
+    match fs::rename(source, target) {
+        Ok(_) => {
+            tracing::info!("File moved successfully from '{}' to '{}'", source_path, target_path);
+            Ok(TauriResult::success(format!("File moved to {}", target_path)))
+        }
+        Err(e) => {
+            tracing::error!("Failed to move file: {}", e);
+            Ok(TauriResult::error(format!("Failed to move file: {}", e)))
+        }
+    }
+}
+
+fn copy_dir_recursive(source: &std::path::Path, target: &std::path::Path) -> std::io::Result<()> {
+    use std::fs;
+    
+    if !source.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Source is not a directory",
+        ));
+    }
+    
+    if !target.exists() {
+        fs::create_dir_all(target)?;
+    }
+    
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let entry_path = entry.path();
+        let target_path = target.join(entry.file_name());
+        
+        if entry_path.is_dir() {
+            copy_dir_recursive(&entry_path, &target_path)?;
+        } else {
+            fs::copy(&entry_path, &target_path)?;
+        }
+    }
+    
+    Ok(())
+}
+
+// ================================
+// COMPATIBILITY ALIASES
+// ================================
+
+#[tauri::command]
+pub async fn read_file_smart(path: String) -> std::result::Result<TauriResult<FileReadResult>, String> {
+    read_file_smart_impl(path).await
+}
+
+#[tauri::command]
+pub async fn save_file(path: String, content: String) -> std::result::Result<TauriResult<String>, String> {
+    save_file_impl(path, content).await
+}
+
+#[tauri::command]
+pub async fn write_file(path: String, content: String) -> std::result::Result<TauriResult<String>, String> {
+    // Frontend calls: invoke('write_file', { path: filePath, content: content })
+    // This is essentially identical to save_file - providing alias for compatibility
+    save_file_impl(path, content).await
+}
+
+#[tauri::command]
+pub async fn create_file(path: String, content: Option<String>) -> std::result::Result<String, String> {
+    create_file_impl(path, content).await
 } 

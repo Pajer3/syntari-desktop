@@ -150,8 +150,11 @@ export const useTabManager = ({
         handleTabPin(tabIndex);
         break;
       case 'reveal-explorer':
-        console.log('Reveal in explorer:', tab.file.path);
-        // Feature: Reveal in file explorer to be implemented
+        // Reveal file in the file explorer panel
+        const event = new CustomEvent('syntari:revealFile', { 
+          detail: { filePath: tab.file.path } 
+        });
+        window.dispatchEvent(event);
         break;
       case 'copy-path':
         navigator.clipboard.writeText(tab.file.path);

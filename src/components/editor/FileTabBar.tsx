@@ -163,16 +163,24 @@ export const FileTabBar: React.FC<FileTabBarProps> = ({
               <span className={`
                 flex-1 truncate text-sm font-medium transition-all duration-200
                 ${isActive ? 'font-semibold' : 'group-hover:font-medium'}
+                ${tab.isModified ? 'text-yellow-100' : ''}
               `}>
-                {tab.file.name}
+                {tab.isModified ? '● ' : ''}{tab.file.name}
               </span>
 
               {tab.isModified && (
                 <div className={`
-                  flex-shrink-0 w-2 h-2 rounded-full ml-2
-                  bg-gradient-to-r from-vscode-accent to-vscode-accent/80
-                  animate-pulse shadow-lg shadow-vscode-accent/30
-                `} />
+                  flex-shrink-0 ml-2 flex items-center
+                `} title="File has unsaved changes">
+                  {/* Professional unsaved indicator */}
+                  <div className={`
+                    w-2.5 h-2.5 rounded-full
+                    bg-gradient-to-r from-yellow-400 to-orange-500
+                    shadow-lg shadow-yellow-400/40
+                    ring-1 ring-yellow-300/30
+                    ${isActive ? 'animate-pulse' : 'animate-pulse'}
+                  `} />
+                </div>
               )}
 
               {tab.isPinned && (

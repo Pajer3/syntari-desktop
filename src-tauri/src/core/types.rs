@@ -4,6 +4,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+// Re-export the main error system from errors module
+pub use super::errors::{AppError, AppResult, ErrorContext};
+
 // ================================
 // COMMON RESULT TYPE
 // ================================
@@ -31,34 +34,12 @@ impl<T> TauriResult<T> {
             error: Some(message.into()),
         }
     }
-}
-
-// ================================
-// ERROR TYPES
-// ================================
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AppError {
-    pub code: String,
-    pub message: String,
-    pub severity: String,
-    pub timestamp: u64,
-    pub context: Option<HashMap<String, serde_json::Value>>,
-    pub recoverable: bool,
-}
-
-impl AppError {
-    pub fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self {
-            code: code.into(),
-            message: message.into(),
-            severity: "error".to_string(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
-            context: None,
-            recoverable: true,
+    
+    /// Convert from AppResult to TauriResult for frontend communication
+    pub fn from_result<E: std::fmt::Display>(result: Result<T, E>) -> Self {
+        match result {
+            Ok(data) => Self::success(data),
+            Err(error) => Self::error(error.to_string()),
         }
     }
 }
@@ -101,6 +82,18 @@ pub struct FileInfoChunk {
 pub struct ScanFilesResult {
     pub files: Vec<FileInfoChunk>,
     pub has_more: bool,
+}
+
+// ================================
+// PERFORMANCE METRICS TYPES
+// ================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerformanceMetrics {
+    pub scan_count: u64,
+    pub total_nodes: u64,
+    pub memory_saved_bytes: u64,
+    pub avg_response_time_ms: u64,
 }
 
 // ================================

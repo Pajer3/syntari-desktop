@@ -31,17 +31,19 @@ fn main() {
             core::commands::get_app_stats,
             core::commands::get_user_preferences,
             core::commands::set_user_preference,
-            core::commands::read_file_smart,
-            core::commands::save_file,
-            core::commands::write_file,
-            core::commands::create_file,
-            core::commands::copy_file,
-            core::commands::move_file,
+            
+            // File operations (now directly from filesystem)
+            filesystem::commands::read_file_smart,
+            filesystem::commands::save_file,
+            filesystem::commands::write_file,
+            filesystem::commands::create_file,
+            filesystem::commands::copy_file,
+            filesystem::commands::move_file,
             
             // Project management commands  
             project::commands::open_project,
             
-            // AI provider commands (removing duplicate get_ai_providers)
+            // AI provider commands
             ai::commands::generate_ai_response,
             ai::context7::commands::resolve_library_id,
             ai::context7::commands::get_library_docs,
@@ -51,7 +53,7 @@ fn main() {
             chat::commands::send_chat_message,
             chat::commands::get_chat_session,
             
-            // VS Code-style filesystem operations (removing duplicates)
+            // Filesystem operations
             filesystem::commands::read_file,
             filesystem::commands::get_directory_mtime,
             filesystem::commands::open_folder_dialog,
@@ -66,13 +68,13 @@ fn main() {
             filesystem::commands::search_in_project,
             filesystem::commands::search_in_project_streaming,
             
-            // Directory management (removing duplicates)
+            // Directory management
             filesystem::commands::create_dir_all,
             filesystem::commands::delete_file,
             filesystem::commands::create_directory,
             filesystem::commands::get_app_data_dir,
             
-            // Live file system watcher (VS Code style)
+            // Live file system watcher
             filesystem::watcher::start_file_watcher,
             filesystem::watcher::stop_file_watcher,
             filesystem::watcher::get_file_watcher_stats,

@@ -17,6 +17,7 @@ import { OpenFileDialog } from './dialogs/OpenFileDialog';
 import { NewFileDialog } from './dialogs/NewFileDialog';
 import { NewFolderDialog } from './dialogs/NewFolderDialog';
 import { TemplateManagerDialog } from './dialogs/TemplateManagerDialog';
+import { CommandPalette } from '../ui/CommandPalette';
 import { usePerformanceConfig } from './usePerformanceConfig';
 import { useFileSave } from './useFileSave';
 import type { FileInfo } from '../../types';
@@ -141,6 +142,7 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
     currentDirectory,
     showSearchPanel,
     showQuickOpen,
+    showCommandPalette,
     showGoToLine,
     showSidebar,
     fileExplorerKey,
@@ -667,6 +669,16 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
           <TemplateManagerDialog
             isOpen={isTemplateManagerOpen}
             onClose={handleCloseTemplateManager}
+          />
+        </div>
+      )}
+
+      {/* Command Palette */}
+      {showCommandPalette && (
+        <div className="animate-fadeIn">
+          <CommandPalette
+            isOpen={showCommandPalette}
+            onClose={() => updateEditorState({ showCommandPalette: false })}
           />
         </div>
       )}
