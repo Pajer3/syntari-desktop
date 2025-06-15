@@ -2,7 +2,12 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { XTerm } from '@pablo-lion/xterm-react';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { invoke } from '@tauri-apps/api/core';
-import { Terminal, X, Plus, Maximize2, Minimize2, Copy } from 'lucide-react';
+import { 
+  Terminal, X, Plus, Maximize2, Minimize2, Copy, Search, 
+  Download, Settings, Palette, History, Bot, Trash2,
+  FileText, Camera, Volume2, VolumeX
+} from 'lucide-react';
+import { TerminalStatusBar } from './TerminalStatusBar';
 
 interface XTerminalPanelProps {
   projectPath: string;
@@ -40,6 +45,15 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
   const outputPollingRef = useRef<boolean>(false);
   const initializingRef = useRef<boolean>(false);
   const resizeTimeoutRef = useRef<any>(null);
+  
+  // Enhanced Terminal Features State
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [terminalTheme, setTerminalTheme] = useState('dark');
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [commandHistory, setCommandHistory] = useState<string[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   // Initialize terminal with proper cleanup
   useEffect(() => {
@@ -83,7 +97,7 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
       
       const newSession: TerminalSession = {
         id: sessionId,
-        name: 'Terminal 1',
+        name: 'Main',
         ptyId: ptyId,
         workingDirectory: projectPath,
       };
@@ -322,7 +336,7 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
       
       const newSession: TerminalSession = {
         id: sessionId,
-        name: `Terminal ${sessions.length + 1}`,
+        name: `Tab ${sessions.length + 1}`,
         ptyId: ptyId,
         workingDirectory: projectPath,
       };
@@ -377,6 +391,60 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
         navigator.clipboard.writeText(selection);
       }
     }
+  };
+
+  // Enhanced Terminal Feature Functions (Mock implementations)
+  const handleSearch = () => {
+    setShowSearch(!showSearch);
+    console.log('🔍 Terminal search toggled');
+  };
+
+  const handleExportSession = () => {
+    // Mock: Export terminal session to file
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `terminal-session-${timestamp}.txt`;
+    console.log(`📥 Exporting terminal session to ${filename}`);
+    // In real implementation: generate and download file
+  };
+
+  const handleThemeChange = () => {
+    const themes = ['dark', 'light', 'matrix', 'cyberpunk', 'vintage'];
+    const currentIndex = themes.indexOf(terminalTheme);
+    const nextTheme = themes[(currentIndex + 1) % themes.length];
+    setTerminalTheme(nextTheme);
+    console.log(`🎨 Terminal theme changed to: ${nextTheme}`);
+  };
+
+  const handleToggleSound = () => {
+    setSoundEnabled(!soundEnabled);
+    console.log(`🔊 Terminal sound ${!soundEnabled ? 'enabled' : 'disabled'}`);
+  };
+
+  const handleShowHistory = () => {
+    setShowHistory(!showHistory);
+    console.log('📚 Command history toggled');
+  };
+
+  const handleAIAssist = () => {
+    console.log('🤖 AI terminal assistant activated');
+    // Mock AI integration
+  };
+
+  const handleClearTerminal = () => {
+    if (xtermRef.current) {
+      xtermRef.current.clear();
+      console.log('🗑️ Terminal cleared');
+    }
+  };
+
+  const handleTakeScreenshot = () => {
+    console.log('📸 Terminal screenshot captured');
+    // Mock screenshot functionality
+  };
+
+  const handleShowSettings = () => {
+    setShowSettings(!showSettings);
+    console.log('⚙️ Terminal settings toggled');
   };
 
   // Enhanced fit function following VS Code's approach
@@ -584,18 +652,21 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
         height: isMaximized ? '80vh' : height,
         width: '100%',
         maxWidth: 'none',
-        minWidth: '0'
+        minWidth: '0',
+        // Add subtle glass effect when enhanced-terminal-ui class is present
+        ...(className?.includes('enhanced-terminal-ui') ? {
+          backgroundColor: '#1e1e1edd',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.05)'
+        } : {})
       }}
     >
       {/* Terminal Header - VS Code Style */}
       {showHeader && (
         <div className="flex items-center justify-between bg-[#2d2d30] px-3 py-1.5 border-b border-[#3c3c3c]">
           <div className="flex items-center space-x-3">
-            <div className="flex items-center space-x-2">
-              <Terminal className="w-4 h-4 text-[#cccccc]" />
-              <span className="text-[#cccccc] text-sm font-medium">Terminal</span>
-            </div>
-            
             {/* Terminal Tabs */}
             <div className="flex space-x-0">
               {sessions.map((session, index) => (
@@ -634,8 +705,112 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
             </div>
           </div>
           
-          {/* Terminal Controls */}
+          {/* Enhanced Terminal Feature Toolbar */}
           <div className="flex items-center space-x-1">
+            {/* Search Feature */}
+            <button
+              onClick={handleSearch}
+              className={`p-1.5 rounded transition-all duration-200 ${
+                showSearch 
+                  ? 'text-[#007acc] bg-[#007acc]/20 hover:bg-[#007acc]/30' 
+                  : 'text-[#cccccc] hover:text-[#ffffff] hover:bg-[#37373d]'
+              }`}
+              title="Search in Terminal (Ctrl+F)"
+            >
+              <Search className="w-4 h-4" />
+            </button>
+
+            {/* Command History */}
+            <button
+              onClick={handleShowHistory}
+              className={`p-1.5 rounded transition-all duration-200 ${
+                showHistory 
+                  ? 'text-[#007acc] bg-[#007acc]/20 hover:bg-[#007acc]/30' 
+                  : 'text-[#cccccc] hover:text-[#ffffff] hover:bg-[#37373d]'
+              }`}
+              title="Command History"
+            >
+              <History className="w-4 h-4" />
+            </button>
+
+            {/* AI Assistant */}
+            <button
+              onClick={handleAIAssist}
+              className="p-1.5 text-[#cccccc] hover:text-[#00ff88] hover:bg-[#00ff88]/10 rounded transition-all duration-200"
+              title="AI Terminal Assistant"
+            >
+              <Bot className="w-4 h-4" />
+            </button>
+
+            <div className="w-px h-4 bg-[#3c3c3c] mx-1" />
+
+            {/* Export Session */}
+            <button
+              onClick={handleExportSession}
+              className="p-1.5 text-[#cccccc] hover:text-[#ffffff] hover:bg-[#37373d] rounded transition-all duration-200"
+              title="Export Terminal Session"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+
+            {/* Take Screenshot */}
+            <button
+              onClick={handleTakeScreenshot}
+              className="p-1.5 text-[#cccccc] hover:text-[#ffffff] hover:bg-[#37373d] rounded transition-all duration-200"
+              title="Take Terminal Screenshot"
+            >
+              <Camera className="w-4 h-4" />
+            </button>
+
+            {/* Theme Selector */}
+            <button
+              onClick={handleThemeChange}
+              className="p-1.5 text-[#cccccc] hover:text-[#ffffff] hover:bg-[#37373d] rounded transition-all duration-200"
+              title={`Current Theme: ${terminalTheme}`}
+            >
+              <Palette className="w-4 h-4" />
+            </button>
+
+            {/* Sound Toggle */}
+            <button
+              onClick={handleToggleSound}
+              className={`p-1.5 rounded transition-all duration-200 ${
+                soundEnabled 
+                  ? 'text-[#00ff88] hover:text-[#ffffff] hover:bg-[#37373d]' 
+                  : 'text-[#ff6b6b] hover:text-[#ffffff] hover:bg-[#37373d]'
+              }`}
+              title={soundEnabled ? 'Disable Terminal Sounds' : 'Enable Terminal Sounds'}
+            >
+              {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            </button>
+
+            <div className="w-px h-4 bg-[#3c3c3c] mx-1" />
+
+            {/* Clear Terminal */}
+            <button
+              onClick={handleClearTerminal}
+              className="p-1.5 text-[#cccccc] hover:text-[#ff6b6b] hover:bg-[#ff6b6b]/10 rounded transition-all duration-200"
+              title="Clear Terminal"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+
+            {/* Settings */}
+            <button
+              onClick={handleShowSettings}
+              className={`p-1.5 rounded transition-all duration-200 ${
+                showSettings 
+                  ? 'text-[#007acc] bg-[#007acc]/20 hover:bg-[#007acc]/30' 
+                  : 'text-[#cccccc] hover:text-[#ffffff] hover:bg-[#37373d]'
+              }`}
+              title="Terminal Settings"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+
+            <div className="w-px h-4 bg-[#3c3c3c] mx-1" />
+
+            {/* Standard Controls */}
             <button
               onClick={createNewSession}
               className="p-1.5 text-[#cccccc] hover:text-[#ffffff] hover:bg-[#37373d] rounded transition-all duration-200"
@@ -650,8 +825,9 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
             >
               <Copy className="w-4 h-4" />
             </button>
-            
+
             <div className="w-px h-4 bg-[#3c3c3c] mx-1" />
+            
             <button
               onClick={() => setIsMaximized(!isMaximized)}
               className="p-1.5 text-[#cccccc] hover:text-[#ffffff] hover:bg-[#37373d] rounded transition-all duration-200"
@@ -684,15 +860,19 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
       >
         {isInitialized ? (
           <div 
-            className="h-full w-full min-h-0 min-w-0 terminal-container" 
+            className="h-full w-full min-h-0 min-w-0 terminal-container terminal-glow" 
             style={{ 
               width: '100%', 
               maxWidth: 'none',
               minWidth: '0',
               height: '100%',
-              display: 'block'
+              display: 'block',
+              position: 'relative',
             }}
           >
+            {/* Subtle scanline effect */}
+            <div className="terminal-scanline absolute inset-0 pointer-events-none" />
+            
             <XTerm
               ref={xtermRef}
               options={terminalOptions}
@@ -700,20 +880,190 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = ({
               addons={[new WebLinksAddon()]}
               className="h-full w-full block terminal-xterm"
             />
+            
+            {/* Terminal overlay effects */}
+            <div 
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background: 'radial-gradient(circle at center, transparent 60%, rgba(0, 122, 204, 0.02) 100%)',
+                opacity: 0.5,
+              }}
+            />
           </div>
         ) : (
-          <div className="flex items-center justify-center h-full text-[#cccccc]">
+          <div className="flex items-center justify-center h-full text-[#cccccc] backdrop-blur-sm">
             <div className="text-center">
-              <div className="relative">
-                <Terminal className="w-8 h-8 mx-auto mb-3 text-[#007acc]" />
-                <div className="absolute inset-0 w-8 h-8 mx-auto mb-3 border-2 border-[#007acc] rounded-full animate-ping opacity-20" />
+              <div className="relative mb-6">
+                <div className="w-16 h-16 mx-auto relative">
+                  <Terminal className="w-8 h-8 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-[#007acc] z-10" />
+                  <div className="absolute inset-0 border-2 border-[#007acc] rounded-full animate-spin opacity-30" />
+                  <div className="absolute inset-2 border border-[#007acc] rounded-full animate-ping opacity-20" />
+                  <div className="absolute inset-4 bg-[#007acc] rounded-full animate-pulse opacity-10" />
+                </div>
               </div>
-              <p className="text-sm font-medium">Initializing terminal...</p>
-              <p className="text-xs text-[#858585] mt-1">Setting up shell environment</p>
+              <p className="text-sm font-medium mb-2 animate-fade-in">Initializing terminal...</p>
+              <p className="text-xs text-[#858585] animate-fade-in-up">Setting up shell environment</p>
+              
+              {/* Loading progress */}
+              <div className="mt-4 w-32 mx-auto">
+                <div className="h-1 bg-[#3c3c3c] rounded-full overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-[#007acc] to-[#00a8ff] rounded-full animate-pulse" style={{ width: '60%' }} />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Enhanced Feature Panels */}
+        {showSearch && (
+          <div className="absolute top-0 right-0 m-4 bg-[#2d2d30] border border-[#3c3c3c] rounded-lg shadow-2xl backdrop-blur-sm z-10 min-w-[300px]">
+            <div className="p-3">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-[#cccccc] text-sm font-medium flex items-center gap-2">
+                  <Search className="w-4 h-4" />
+                  Search Terminal
+                </h3>
+                <button
+                  onClick={() => setShowSearch(false)}
+                  className="text-[#cccccc] hover:text-[#ff6b6b] p-1"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+              <input
+                type="text"
+                placeholder="Search in terminal output..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full px-3 py-2 bg-[#1e1e1e] border border-[#3c3c3c] rounded text-[#cccccc] text-sm focus:border-[#007acc] focus:outline-none"
+                autoFocus
+              />
+              <div className="mt-2 text-xs text-[#858585]">
+                Press Enter to search • Esc to close
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showHistory && (
+          <div className="absolute top-0 right-0 m-4 bg-[#2d2d30] border border-[#3c3c3c] rounded-lg shadow-2xl backdrop-blur-sm z-10 min-w-[350px] max-h-[400px] overflow-hidden">
+            <div className="p-3">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-[#cccccc] text-sm font-medium flex items-center gap-2">
+                  <History className="w-4 h-4" />
+                  Command History
+                </h3>
+                <button
+                  onClick={() => setShowHistory(false)}
+                  className="text-[#cccccc] hover:text-[#ff6b6b] p-1"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+              <div className="space-y-1 max-h-[300px] overflow-y-auto">
+                {commandHistory.length > 0 ? (
+                  commandHistory.map((cmd, index) => (
+                    <div
+                      key={index}
+                      className="px-2 py-1 bg-[#1e1e1e] rounded text-[#cccccc] text-sm font-mono hover:bg-[#37373d] cursor-pointer"
+                      onClick={() => {
+                        // Mock: Copy command to clipboard
+                        navigator.clipboard.writeText(cmd);
+                        console.log(`Copied command: ${cmd}`);
+                      }}
+                    >
+                      {cmd}
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-[#858585] text-sm py-4 text-center">
+                    No command history yet
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showSettings && (
+          <div className="absolute top-0 right-0 m-4 bg-[#2d2d30] border border-[#3c3c3c] rounded-lg shadow-2xl backdrop-blur-sm z-10 min-w-[320px]">
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-[#cccccc] text-sm font-medium flex items-center gap-2">
+                  <Settings className="w-4 h-4" />
+                  Terminal Settings
+                </h3>
+                <button
+                  onClick={() => setShowSettings(false)}
+                  className="text-[#cccccc] hover:text-[#ff6b6b] p-1"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                {/* Theme Setting */}
+                <div>
+                  <label className="block text-[#cccccc] text-sm mb-2">Theme</label>
+                  <select
+                    value={terminalTheme}
+                    onChange={(e) => setTerminalTheme(e.target.value)}
+                    className="w-full px-3 py-2 bg-[#1e1e1e] border border-[#3c3c3c] rounded text-[#cccccc] text-sm focus:border-[#007acc] focus:outline-none"
+                  >
+                    <option value="dark">Dark</option>
+                    <option value="light">Light</option>
+                    <option value="matrix">Matrix</option>
+                    <option value="cyberpunk">Cyberpunk</option>
+                    <option value="vintage">Vintage</option>
+                  </select>
+                </div>
+
+                {/* Sound Setting */}
+                <div className="flex items-center justify-between">
+                  <span className="text-[#cccccc] text-sm">Terminal Sounds</span>
+                  <button
+                    onClick={handleToggleSound}
+                    className={`w-10 h-6 rounded-full transition-colors ${
+                      soundEnabled ? 'bg-[#007acc]' : 'bg-[#3c3c3c]'
+                    }`}
+                  >
+                    <div className={`w-4 h-4 bg-white rounded-full transition-transform ${
+                      soundEnabled ? 'translate-x-5' : 'translate-x-1'
+                    }`} />
+                  </button>
+                </div>
+
+                {/* Font Size */}
+                <div>
+                  <label className="block text-[#cccccc] text-sm mb-2">Font Size</label>
+                  <input
+                    type="range"
+                    min="10"
+                    max="20"
+                    defaultValue="13"
+                    className="w-full accent-[#007acc]"
+                  />
+                  <div className="text-xs text-[#858585] mt-1">13px</div>
+                </div>
+              </div>
             </div>
           </div>
         )}
       </div>
+      
+      {/* Enhanced Terminal Status Bar */}
+      <TerminalStatusBar
+        osInfo={{
+          os: 'linux',
+          shell: 'bash', 
+          username: 'pajer',
+          hostname: 'IdeaPad-Gaming'
+        }}
+        workingDirectory={projectPath}
+        commandCount={sessions.length}
+        isConnected={isInitialized}
+        className="border-t border-gray-700/30 bg-gray-900/80 backdrop-blur-sm"
+      />
     </div>
   );
 }; 

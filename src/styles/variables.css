@@ -19,16 +19,16 @@
   -webkit-text-size-adjust: 100%;
 
   /* VSCode Color Palette */
-  --vscode-bg: #1E1E1E;
-  --vscode-fg: #D4D4D4;
+  --vscode-bg: #1e1e1e;
+  --vscode-fg: #cccccc;
   --vscode-fg-muted: #858585;
   --vscode-sidebar: #252526;
-  --vscode-tab-bg: #2D2D30;
-  --vscode-border: rgba(75, 85, 99, 0.3);
-  --vscode-accent: #007ACC;
+  --vscode-tab-bg: #2d2d30;
+  --vscode-border: #3e3e42;
+  --vscode-accent: #007acc;
   
   /* Editor specific variables */
-  --vscode-editor: #3a3a3a;
+  --vscode-editor: #1e1e1e;
   --bg-primary: #3a3a3a;
   
   /* Professional Typography */
@@ -39,4 +39,96 @@
   /* Shadows */
   --vscode-shadow: 0 2px 8px rgba(0, 0, 0, 0.32);
   --vscode-shadow-large: 0 5px 26px rgba(0, 0, 0, 0.22), 0 4px 7px rgba(0, 0, 0, 0.28);
+
+  /* ================================
+     TERMINAL-SPECIFIC VARIABLES
+     ================================ */
+  
+  /* Terminal Colors */
+  --terminal-bg: #1e1e1e;
+  --terminal-bg-glass: #1e1e1edd;
+  --terminal-fg: #ffffff;
+  --terminal-accent: #007acc;
+  --terminal-success: #89d185;
+  --terminal-error: #f85149;
+  --terminal-warning: #ffcc02;
+  --terminal-info: #79b8ff;
+  
+  /* Terminal Prompt Colors */
+  --terminal-prompt: #89d185;
+  --terminal-prompt-bg: #89d18515;
+  --terminal-prompt-border: #89d18530;
+  
+  /* Terminal Command Colors */
+  --terminal-command: #ffffff;
+  --terminal-command-hover: #007acc20;
+  --terminal-output: #cccccc;
+  --terminal-timestamp: #858585;
+  
+  /* Terminal Border & Glass Effects */
+  --terminal-border: #3e3e4280;
+  --terminal-glass-bg: #1e1e1eaa;
+  --terminal-glass-border: #ffffff05;
+  --terminal-backdrop-blur: blur(12px);
+  --terminal-inner-blur: blur(4px);
+  
+  /* Terminal Shadows & Glows */
+  --terminal-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  --terminal-glow: 0 0 10px;
+  --terminal-prompt-glow: 0 0 10px #89d18520;
+  --terminal-accent-glow: 0 0 10px #007acc20;
+  --terminal-error-glow: 0 0 10px #f8514920;
+  
+  /* Terminal Animation Durations */
+  --terminal-transition-fast: 0.15s;
+  --terminal-transition-normal: 0.2s;
+  --terminal-transition-slow: 0.3s;
+  
+  /* Terminal Font Settings */
+  --terminal-font-family: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, Consolas, monospace;
+  --terminal-font-size: 14px;
+  --terminal-line-height: 1.4;
+  --terminal-font-weight: 400;
+  --terminal-font-weight-bold: 700;
+  
+  /* Terminal Spacing */
+  --terminal-padding: 16px;
+  --terminal-padding-sm: 8px;
+  --terminal-padding-lg: 24px;
+  --terminal-border-radius: 12px;
+  --terminal-border-radius-sm: 8px;
+  
+  /* Terminal Loading States */
+  --terminal-loading-bg: #ffcc0220;
+  --terminal-loading-border: #ffcc0240;
+  --terminal-loading-text: #ffcc02;
+  
+  /* Terminal Hover States */
+  --terminal-hover-bg: rgba(255, 255, 255, 0.05);
+  --terminal-hover-border: #007acc40;
+  --terminal-hover-transform: translateY(-1px);
+  
+  /* OS-Specific Overrides */
+  
+  /* Windows Terminal Theme */
+  --windows-terminal-bg: #0c0c0c;
+  --windows-terminal-fg: #cccccc;
+  --windows-terminal-prompt: #ffffff;
+  --windows-terminal-border: #404040;
+  
+  /* macOS Terminal Theme */
+  --macos-terminal-bg: #1d1d1d;
+  --macos-terminal-fg: #ffffff;
+  --macos-terminal-prompt: #ffffff;
+  --macos-terminal-border: #2d2d2d;
+  --macos-terminal-success: #32d74b;
+  --macos-terminal-error: #ff453a;
+  
+  /* Linux Terminal Theme */
+  --linux-terminal-bg: #300a24;
+  --linux-terminal-fg: #ffffff;
+  --linux-terminal-prompt: #8ae234;
+  --linux-terminal-border: #4a4a4a;
+  --linux-terminal-success: #98fb98;
+  --linux-terminal-error: #ff6c6b;
 } 

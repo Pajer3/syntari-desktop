@@ -58,6 +58,78 @@
 }
 
 /* ================================
+   TERMINAL-SPECIFIC ANIMATIONS
+   ================================ */
+
+/* Shimmer effect for terminal input */
+.shimmer {
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+/* Terminal typing animation */
+.animate-typing {
+  animation: typing 2s steps(20, end) forwards;
+  white-space: nowrap;
+  overflow: hidden;
+  border-right: 2px solid;
+}
+
+/* Terminal cursor blink with enhanced timing */
+.terminal-cursor-blink {
+  animation: terminalBlink 1.2s infinite;
+}
+
+/* Terminal output slide-in with stagger */
+.terminal-line-entrance {
+  animation: terminalLineEntrance 0.3s ease-out forwards;
+  opacity: 0;
+  transform: translateX(-10px);
+}
+
+/* Terminal glow effects */
+.terminal-glow {
+  position: relative;
+}
+
+.terminal-glow::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background: linear-gradient(45deg, transparent, var(--terminal-accent), transparent);
+  border-radius: inherit;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.terminal-glow:hover::before {
+  opacity: 0.3;
+}
+
+/* Command prompt pulse */
+.prompt-pulse {
+  animation: promptPulse 2s ease-in-out infinite;
+}
+
+/* Terminal scan line effect */
+.terminal-scanline {
+  position: relative;
+  overflow: hidden;
+}
+
+.terminal-scanline::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--terminal-accent), transparent);
+  animation: scanline 3s linear infinite;
+  opacity: 0.1;
+}
+
+/* ================================
    KEYFRAMES
    ================================ */
 
@@ -107,4 +179,198 @@
 @keyframes skeleton-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
+}
+
+/* ================================
+   TERMINAL KEYFRAMES
+   ================================ */
+
+@keyframes shimmer {
+  0% { 
+    background-position: -200% 0; 
+    opacity: 0.1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+  100% { 
+    background-position: 200% 0; 
+    opacity: 0.1;
+  }
+}
+
+@keyframes typing {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+@keyframes terminalBlink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+@keyframes terminalLineEntrance {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes promptPulse {
+  0%, 100% { 
+    opacity: 1; 
+    transform: scale(1);
+  }
+  50% { 
+    opacity: 0.8; 
+    transform: scale(1.02);
+  }
+}
+
+@keyframes scanline {
+  0% { transform: translateY(-100vh); }
+  100% { transform: translateY(100vh); }
+}
+
+/* ================================
+   ENHANCED HOVER EFFECTS
+   ================================ */
+
+.terminal-hover-effect {
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.terminal-hover-effect:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.terminal-hover-effect::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.terminal-hover-effect:hover::before {
+  opacity: 1;
+}
+
+/* ================================
+   ENHANCED TERMINAL UI STYLES
+   ================================ */
+
+/* Enhanced Terminal UI - Real terminal with glass effects */
+.enhanced-terminal-ui {
+  background: rgba(30, 30, 30, 0.85) !important;
+  backdrop-filter: blur(16px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+  border: 1px solid rgba(0, 122, 204, 0.2) !important;
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.4), 
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  border-radius: 8px !important;
+  position: relative;
+}
+
+.enhanced-terminal-ui::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0, 122, 204, 0.5), transparent);
+  z-index: 1;
+}
+
+.enhanced-terminal-ui .terminal-xterm {
+  position: relative;
+  transition: all 0.3s ease;
+  border-radius: 4px;
+  overflow: hidden;
+  background: transparent !important;
+}
+
+.enhanced-terminal-ui .terminal-xterm:hover {
+  box-shadow: inset 0 0 20px rgba(0, 122, 204, 0.1), 0 0 20px rgba(0, 122, 204, 0.05);
+}
+
+.enhanced-terminal-ui .xterm-viewport {
+  background: transparent !important;
+  backdrop-filter: blur(1px);
+}
+
+.enhanced-terminal-ui .xterm-screen {
+  position: relative;
+  background: transparent;
+}
+
+.enhanced-terminal-ui .xterm-cursor-layer {
+  z-index: 3;
+}
+
+/* Modern terminal font and styling */
+.enhanced-terminal-ui .xterm {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', monospace !important;
+  font-feature-settings: 'liga' 1, 'calt' 1;
+  font-variant-ligatures: contextual;
+  letter-spacing: 0.01em;
+  line-height: 1.5;
+}
+
+.enhanced-terminal-ui .xterm-cursor {
+  background-color: #00d4ff !important;
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.6);
+  animation: cursor-pulse 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes cursor-pulse {
+  from { 
+    opacity: 1;
+    box-shadow: 0 0 8px rgba(0, 212, 255, 0.6);
+  }
+  to { 
+    opacity: 0.7;
+    box-shadow: 0 0 12px rgba(0, 212, 255, 0.8);
+  }
+}
+
+/* Enhanced text selection */
+.enhanced-terminal-ui .xterm-selection div {
+  background-color: rgba(0, 122, 204, 0.3) !important;
+  border-radius: 2px;
+}
+
+/* Terminal text enhancement */
+.enhanced-terminal-ui .xterm-rows {
+  position: relative;
+}
+
+/* Subtle scanline effect for enhanced terminals */
+.enhanced-terminal-ui .terminal-scanline {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 212, 255, 0.02) 2px,
+    rgba(0, 212, 255, 0.02) 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Terminal glow overlay */
+.enhanced-terminal-ui .terminal-glow::before {
+  background: linear-gradient(90deg, transparent, rgba(0, 122, 204, 0.05), transparent);
+  animation: terminal-scan 4s ease-in-out infinite;
 } 

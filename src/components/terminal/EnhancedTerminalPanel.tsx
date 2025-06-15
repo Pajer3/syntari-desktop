@@ -18,6 +18,7 @@ import {
   type TerminalTheme 
 } from './OSTerminalTheme';
 import { TerminalAutoComplete } from './TerminalAutoComplete';
+import { TerminalStatusBar } from './TerminalStatusBar';
 import type { TerminalSession, TerminalOutput, TerminalInfo } from '../../services/types';
 
 interface EnhancedTerminalPanelProps {
@@ -509,30 +510,46 @@ Keyboard Shortcuts:
 
   return (
     <div 
-      className={`flex flex-col ${className}`}
+      className={`flex flex-col ${className} glass-terminal-container`}
       style={{ 
         height: isMaximized ? '80vh' : height,
-        backgroundColor: theme.backgroundColor,
-        border: `1px solid ${theme.borderColor}`,
-        borderRadius: '8px',
-        overflow: 'hidden'
+        backgroundColor: `${theme.backgroundColor}dd`, // Add transparency
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        border: `1px solid ${theme.borderColor}80`,
+        borderRadius: '12px',
+        overflow: 'hidden',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.05)',
       }}
       onContextMenu={handleTerminalContextMenu}
     >
-      {/* Terminal Header */}
+      {/* Terminal Header with Glass Effect */}
       <div 
-        className="flex items-center justify-between px-4 py-2 border-b"
+        className="flex items-center justify-between px-4 py-2 border-b backdrop-blur-md"
         style={{
-          backgroundColor: theme.backgroundColor,
-          borderColor: theme.borderColor,
+          backgroundColor: `${theme.backgroundColor}aa`,
+          borderColor: `${theme.borderColor}60`,
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
         }}
       >
         <div className="flex items-center space-x-2">
-          <Terminal className="w-4 h-4" style={{ color: theme?.successColor || '#51cf66' }} />
-          <span className="text-xs px-2 py-1 rounded" style={{ 
-            backgroundColor: theme?.successColor || '#51cf66',
-            color: theme?.backgroundColor || '#1e1e1e'
-          }}>
+          <div className="relative">
+            <Terminal className="w-4 h-4" style={{ color: theme?.successColor || '#51cf66' }} />
+            <div 
+              className="absolute inset-0 w-4 h-4 rounded-full animate-pulse opacity-30"
+              style={{ backgroundColor: theme?.successColor || '#51cf66' }}
+            />
+          </div>
+          <span 
+            className="text-xs px-3 py-1.5 rounded-full font-medium backdrop-blur-sm border transition-all duration-200 hover:scale-105" 
+            style={{ 
+              backgroundColor: `${theme?.successColor || '#51cf66'}20`,
+              color: theme?.successColor || '#51cf66',
+              borderColor: `${theme?.successColor || '#51cf66'}40`,
+              boxShadow: `0 0 10px ${theme?.successColor || '#51cf66'}20`,
+            }}
+          >
             {osInfo?.os.toUpperCase() || 'TERMINAL'}
           </span>
           <div className="flex items-center space-x-1">
@@ -642,34 +659,42 @@ Keyboard Shortcuts:
         </div>
       )}
 
-      {/* Terminal Output */}
+      {/* Terminal Output with Enhanced Styling */}
       <div 
         ref={terminalRef}
-        className="flex-1 overflow-y-auto p-4 leading-relaxed"
+        className="flex-1 overflow-y-auto p-4 leading-relaxed terminal-output-container"
         style={{
-          backgroundColor: theme?.backgroundColor || '#1e1e1e',
+          backgroundColor: `${theme?.backgroundColor || '#1e1e1e'}88`,
           color: theme?.textColor || '#ffffff',
           fontFamily: theme?.fontFamily || 'monospace',
           fontSize: theme?.fontSize || '14px',
           lineHeight: theme?.lineHeight || '1.4',
+          backdropFilter: 'blur(4px)',
+          WebkitBackdropFilter: 'blur(4px)',
         }}
       >
-        {filteredHistory.map((output) => (
+        {filteredHistory.map((output, index) => (
           <div 
             key={output.id} 
-            className="mb-1 flex items-start space-x-2"
+            className="mb-1 flex items-start space-x-2 animate-fade-in-up transition-all duration-200 hover:bg-white/5 px-2 py-1 rounded-md"
             style={{
               color: output.type === 'error' ? theme?.errorColor || '#ff6b6b' : 
                      output.type === 'command' ? theme?.commandColor || '#ffffff' : 
-                     theme?.outputColor || '#ffffff'
+                     theme?.outputColor || '#ffffff',
+              animationDelay: `${index * 20}ms`,
             }}
           >
             {output.type === 'command' && (
               <>
-                <ChevronRight className="w-4 h-4 mt-0.5 text-blue-400" />
-                <span className="text-gray-500 text-xs">{formatTimestamp(output.timestamp)}</span>
+                <div className="relative">
+                  <ChevronRight className="w-4 h-4 mt-0.5 text-blue-400 transition-transform hover:scale-110" />
+                  <div className="absolute inset-0 w-4 h-4 bg-blue-400/20 rounded-full animate-pulse opacity-0 hover:opacity-100 transition-opacity" />
+                </div>
+                <span className="text-gray-500 text-xs font-mono bg-gray-800/30 px-2 py-0.5 rounded">
+                  {formatTimestamp(output.timestamp)}
+                </span>
                 <span 
-                  className="cursor-pointer hover:bg-gray-800 px-1 rounded"
+                  className="cursor-pointer hover:bg-gradient-to-r hover:from-blue-500/20 hover:to-purple-500/20 px-2 py-0.5 rounded transition-all duration-200 border border-transparent hover:border-blue-500/30"
                   onClick={() => copyCommand(output.content)}
                   title="Click to copy command"
                 >
@@ -679,29 +704,52 @@ Keyboard Shortcuts:
             )}
             {output.type !== 'command' && (
               <>
-                <span className="text-gray-500 text-xs w-16">{formatTimestamp(output.timestamp)}</span>
-                <pre className="whitespace-pre-wrap flex-1">{output.content}</pre>
+                <span className="text-gray-500 text-xs w-16 font-mono bg-gray-800/20 px-1 py-0.5 rounded text-center">
+                  {formatTimestamp(output.timestamp)}
+                </span>
+                <pre className="whitespace-pre-wrap flex-1 hover:bg-white/5 p-1 rounded transition-colors duration-200">
+                  {output.content}
+                </pre>
               </>
             )}
           </div>
         ))}
         
         {isExecuting && (
-          <div className="flex items-center space-x-2 text-yellow-400">
-            <div className="animate-spin w-4 h-4 border-2 border-yellow-400 border-t-transparent rounded-full"></div>
-            <span>Executing command...</span>
+          <div className="flex items-center space-x-3 text-yellow-400 animate-fade-in p-3 bg-yellow-400/10 rounded-lg border border-yellow-400/20">
+            <div className="relative">
+              <div className="animate-spin w-5 h-5 border-2 border-yellow-400 border-t-transparent rounded-full"></div>
+              <div className="absolute inset-0 w-5 h-5 border border-yellow-400/30 rounded-full animate-ping"></div>
+            </div>
+            <span className="font-medium">Executing command...</span>
+            <div className="flex space-x-1">
+              <div className="w-1 h-1 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+              <div className="w-1 h-1 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+              <div className="w-1 h-1 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+            </div>
           </div>
         )}
       </div>
 
-      {/* Command Input */}
+      {/* Enhanced Command Input */}
       <div 
-        className="border-t p-4 relative"
+        className="border-t p-4 relative backdrop-blur-md"
         style={{
-          backgroundColor: theme?.backgroundColor || '#1e1e1e',
-          borderColor: theme?.borderColor || '#404040',
+          backgroundColor: `${theme?.backgroundColor || '#1e1e1e'}cc`,
+          borderColor: `${theme?.borderColor || '#404040'}80`,
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
         }}
       >
+        {/* Subtle glow effect */}
+        <div 
+          className="absolute inset-0 opacity-20 pointer-events-none"
+          style={{
+            background: `linear-gradient(90deg, transparent, ${theme?.promptColor || '#8ae234'}20, transparent)`,
+            animation: 'shimmer 3s ease-in-out infinite',
+          }}
+        />
+
         {/* Auto-complete */}
         {osInfo && (
           <TerminalAutoComplete
@@ -720,44 +768,60 @@ Keyboard Shortcuts:
           />
         )}
         
-        <form onSubmit={handleInputSubmit} className="w-full flex items-center gap-2">
-          <span 
-            className="flex-shrink-0 text-sm"
-            style={{
-              color: theme?.promptColor || '#8ae234',
-              fontFamily: theme?.fontFamily || 'monospace',
-              minWidth: 'max-content',
-            }}
-          >
-            {osInfo && activeSession ? 
-              generatePrompt(osInfo, activeSession.workingDirectory) : 
-              'terminal$'
-            }
-          </span>
+        <form onSubmit={handleInputSubmit} className="w-full flex items-center gap-3 relative z-10">
+          <div className="flex items-center space-x-2">
+            <div 
+              className="w-2 h-2 rounded-full animate-pulse"
+              style={{ backgroundColor: theme?.promptColor || '#8ae234' }}
+            />
+            <span 
+              className="flex-shrink-0 text-sm font-medium px-2 py-1 rounded-md transition-all duration-200"
+              style={{
+                color: theme?.promptColor || '#8ae234',
+                fontFamily: theme?.fontFamily || 'monospace',
+                minWidth: 'max-content',
+                background: `linear-gradient(135deg, ${theme?.promptColor || '#8ae234'}15, ${theme?.promptColor || '#8ae234'}05)`,
+                border: `1px solid ${theme?.promptColor || '#8ae234'}30`,
+              }}
+            >
+              {osInfo && activeSession ? 
+                generatePrompt(osInfo, activeSession.workingDirectory) : 
+                'terminal$'
+              }
+            </span>
+          </div>
+          
           <div className="flex-1 relative flex items-center">
-          <input
-            ref={inputRef}
-            type="text"
-            value={currentInput}
-            onChange={(e) => setCurrentInput(e.target.value)}
-            onKeyDown={handleInputKeyDown}
-            placeholder="Type a command... (try 'ai <question>' for AI help)"
-              className="w-full bg-transparent focus:outline-none placeholder-gray-500 pr-2"
-            style={{
-              color: theme?.textColor || '#ffffff',
-              fontFamily: theme?.fontFamily || 'monospace',
+            <input
+              ref={inputRef}
+              type="text"
+              value={currentInput}
+              onChange={(e) => setCurrentInput(e.target.value)}
+              onKeyDown={handleInputKeyDown}
+              placeholder="Type a command... (try 'ai <question>' for AI help)"
+              className="w-full bg-transparent focus:outline-none placeholder-gray-500 pr-2 transition-all duration-200 focus:bg-white/5 rounded-md px-3 py-2"
+              style={{
+                color: theme?.textColor || '#ffffff',
+                fontFamily: theme?.fontFamily || 'monospace',
                 fontSize: '14px',
-                padding: '4px 8px',
                 minWidth: '0',
-            }}
-            disabled={isExecuting}
-            autoComplete="off"
-          />
-          {!isExecuting && (
-              <div className="absolute right-2 pointer-events-none">
-            <BlinkingCursor theme={theme || { cursorColor: '#ffffff' } as TerminalTheme} />
+                border: isExecuting ? '1px solid transparent' : `1px solid ${theme?.borderColor || '#404040'}40`,
+              }}
+              disabled={isExecuting}
+              autoComplete="off"
+            />
+            {!isExecuting && (
+              <div className="absolute right-4 pointer-events-none">
+                <BlinkingCursor theme={theme || { cursorColor: '#ffffff' } as TerminalTheme} />
               </div>
-          )}
+            )}
+            
+            {/* AI Hint Icon */}
+            {currentInput.startsWith('ai ') && (
+              <div className="absolute right-8 pointer-events-none animate-fade-in">
+                <Bot className="w-4 h-4 text-blue-400 animate-pulse" />
+              </div>
+            )}
           </div>
           {isExecuting && (
           <button
@@ -825,6 +889,15 @@ Keyboard Shortcuts:
           </div>
         </div>
       </div>
+
+      {/* Enhanced Terminal Status Bar */}
+      <TerminalStatusBar
+        osInfo={osInfo || undefined}
+        workingDirectory={activeSession?.workingDirectory}
+        commandCount={activeSession?.history.filter(h => h.type === 'command').length}
+        isConnected={!!activeSession}
+        className="border-t border-gray-700/30"
+      />
     </div>
   );
 }; 

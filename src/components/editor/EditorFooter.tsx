@@ -191,9 +191,9 @@ export const EditorFooter: React.FC<EditorFooterProps> = ({
             isVisible={true}
             onToggleVisibility={() => {}} // Handled by footer
             height={height - 40} // Subtract header height
-            className="border-none"
+            className="border-none enhanced-terminal-ui"
             onAIRequest={onAIRequest}
-            showHeader={false}
+            showHeader={true}
           />
         )}
         
