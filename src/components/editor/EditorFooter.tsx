@@ -3,14 +3,11 @@ import {
   Terminal, 
   AlertCircle, 
   FileText, 
-  Bug, 
-  X, 
+  ChevronDown,
   Maximize2, 
   Minimize2,
-  ChevronUp,
-  ChevronDown
 } from 'lucide-react';
-import { EnhancedTerminalPanel } from '../terminal/EnhancedTerminalPanel';
+import { XTerminalPanel } from '../terminal/XTerminalPanel';
 import { ProblemsPanel } from '../ui/ProblemsPanel';
 import { OutputPanel } from '../ui/OutputPanel';
 
@@ -189,35 +186,26 @@ export const EditorFooter: React.FC<EditorFooterProps> = ({
       {/* Panel Content */}
       <div className="flex-1 overflow-hidden">
         {activePanel === 'terminal' && (
-          <EnhancedTerminalPanel
+          <XTerminalPanel
             projectPath={projectPath}
             isVisible={true}
             onToggleVisibility={() => {}} // Handled by footer
             height={height - 40} // Subtract header height
             className="border-none"
             onAIRequest={onAIRequest}
+            showHeader={false}
           />
         )}
         
         {activePanel === 'problems' && (
           <ProblemsPanel
             problems={[]} // You can pass actual problems here
-            onNavigateToFile={(file, line, column) => {
-              // Handle navigation to file
-              console.log('Navigate to:', file, line, column);
-            }}
             className="h-full"
           />
         )}
         
         {activePanel === 'output' && (
           <OutputPanel
-            entries={[]} // You can pass actual output entries here
-            activeChannel="General"
-            onChannelChange={(channel) => {
-              // Handle channel change
-              console.log('Channel changed to:', channel);
-            }}
             className="h-full"
           />
         )}

@@ -140,4 +140,62 @@ a:hover {
   text-decoration: underline;
 }
 
+/* ================================
+   TERMINAL COMPONENT STYLES
+   ================================ */
+
+/* Ensure XTerm terminal uses full container space */
+.terminal-container {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  display: block !important;
+}
+
+.terminal-xterm {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+}
+
+/* XTerm specific element overrides */
+.terminal-xterm .xterm {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+}
+
+.terminal-xterm .xterm-screen {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+}
+
+.terminal-xterm .xterm-viewport {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+}
+
+.terminal-xterm canvas {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+}
+
+/* CRITICAL: Override XTerm's hardcoded 640px width constraint */
+.terminal-xterm .xterm-rows {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+}
+
+.terminal-xterm .xterm-rows > div {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+}
+
 /* All utility classes, animations, components, etc. are now imported from separate CSS files */

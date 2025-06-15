@@ -31,6 +31,11 @@ export interface TerminalInfo {
   shell: string;
   working_directory: string;
   environment_variables: [string, string][];
+  os: string;
+  arch: string;
+  family: string;
+  username: string;
+  hostname: string;
 }
 
 // Search Service Types

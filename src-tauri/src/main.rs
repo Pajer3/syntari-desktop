@@ -17,6 +17,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .manage(core::state::AppState::default())
+        .manage(terminal::commands::TerminalManager::new())
         .setup(|app| {
             // Initialize the robust file system watcher
             filesystem::watcher::initialize_watcher(app.handle().clone());
@@ -101,6 +102,11 @@ fn main() {
             filesystem::git_get_diff,
             
             // Terminal commands
+            terminal::commands::create_terminal_session,
+            terminal::commands::send_terminal_input,
+            terminal::commands::read_terminal_output,
+            terminal::commands::resize_terminal_session,
+            terminal::commands::close_terminal_session,
             terminal::commands::execute_shell_command,
             terminal::commands::get_terminal_info,
             terminal::commands::change_directory,

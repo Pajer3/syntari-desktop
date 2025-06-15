@@ -73,6 +73,9 @@ git2 = { version = "0.20.2", optional = true }
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 nix = { version = "0.28", features = ["signal"] }
 
+# Terminal emulation - proper pty support like VS Code
+portable-pty = "0.8"
+
 # Encryption and security
 ring = "0.17.14"
 base64 = "0.22.1"

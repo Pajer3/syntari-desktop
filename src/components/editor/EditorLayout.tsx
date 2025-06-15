@@ -461,17 +461,17 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
                   </button>
                   
                   <button
-                    onClick={() => setShowTerminal(!showTerminal)}
+                    onClick={handleToggleTerminal}
                     className={`
                       px-3 py-1.5 text-xs border rounded-md
                       focus:outline-none focus:ring-1 focus:ring-blue-500/30 focus:ring-opacity-50
                       transition-all duration-200 flex items-center gap-1.5
-                      ${showTerminal 
+                      ${showFooter && activeFooterPanel === 'terminal' 
                         ? 'bg-blue-600/80 text-white border-blue-500/50 shadow-sm' 
                         : 'text-vscode-fg hover:bg-vscode-list-hover border-gray-600/40'
                       }
                     `}
-                    title={showTerminal ? 'Hide Terminal (Ctrl+`)' : 'Show Terminal (Ctrl+`)'}
+                    title={showFooter && activeFooterPanel === 'terminal' ? 'Hide Terminal (Ctrl+`)' : 'Show Terminal (Ctrl+`)'}
                   >
                     <span>🖥️</span>
                     <span>Terminal</span>

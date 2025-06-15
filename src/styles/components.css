@@ -340,4 +340,60 @@ kbd {
 
 .skeleton-text.long {
   width: 180px;
+}
+
+/* ================================
+   TERMINAL STYLING
+   ================================ */
+
+/* Force terminal to use full container dimensions */
+.terminal-container .xterm {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+}
+
+.terminal-container .xterm-screen {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+}
+
+.terminal-container .xterm-viewport {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+.terminal-container .xterm-scroll-area {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+.terminal-container canvas {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+/* Ensure terminal takes full space */
+.terminal-xterm {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+}
+
+/* Override any XTerm.js default width constraints */
+.xterm {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+.xterm .xterm-screen {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+.xterm .xterm-viewport {
+  width: 100% !important;
+  max-width: none !important;
 } 
