@@ -1,8 +1,6 @@
-/* Import modern icon fonts for file icons - MUST BE FIRST */
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
-
 /* ================================
    FILE EXPLORER STYLES
+   Note: Google Fonts import moved to App.css to satisfy PostCSS requirements
    ================================ */
 
 /* Modern file icons - badge style */

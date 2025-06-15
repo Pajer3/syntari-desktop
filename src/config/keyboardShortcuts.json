@@ -73,12 +73,12 @@
         },
         "reopenTab": {
           "key": "Ctrl+Shift+T",
-          "description": "Reopen recently closed tab",
+          "description": "Reopen recently closed tab with stack-based behavior",
           "implemented": true,
           "planned": false,
           "component": "TabLayout",
-          "priority": "P2",
-          "businessImpact": "Error recovery"
+          "priority": "P1",
+          "businessImpact": "Error recovery - Essential workflow feature that restores file path, unsaved content, and cursor position from recently closed tabs"
         }
       },
       "contextMenu": {

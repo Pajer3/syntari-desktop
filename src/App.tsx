@@ -98,20 +98,111 @@ const App: React.FC = () => {
   
   const handleOpenProject = useCallback(async () => {
     try {
-      // Use Tauri's native folder dialog
-      const selectedPath = await open({
-        directory: true,
-        multiple: false,
-        title: 'Select Project Folder',
-        defaultPath: undefined, // Let the OS decide the default location
-      });
+      let selectedPath: string | null = null;
+
+      // Check if we're running in Tauri (desktop) vs web browser
+      const isTauri = typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__;
       
-      if (selectedPath && typeof selectedPath === 'string') {
+      if (isTauri) {
+        // Use Tauri's native folder dialog for desktop app
+        console.log('🖥️ Running in Tauri - using native folder picker');
+        const result = await open({
+          directory: true,
+          multiple: false,
+          title: 'Select Project Folder',
+          defaultPath: undefined,
+        });
+        
+        if (result && typeof result === 'string') {
+          selectedPath = result;
+        }
+      } else {
+        // Use Web File System Access API for web browser
+        console.log('🌐 Running in web browser - using File System Access API');
+        
+        // Enhanced browser compatibility check
+        const hasFileSystemAPI = 'showDirectoryPicker' in window && typeof (window as any).showDirectoryPicker === 'function';
+        const isSecureContext = window.isSecureContext;
+        const userAgent = navigator.userAgent.toLowerCase();
+        const isBrave = (navigator as any).brave && typeof (navigator as any).brave.isBrave === 'function';
+        
+        console.log('🔍 Browser compatibility check:', {
+          hasFileSystemAPI,
+          isSecureContext,
+          userAgent: userAgent.includes('chrome') ? 'chrome-based' : 'other',
+          isBrave: isBrave || userAgent.includes('brave')
+        });
+        
+        if (!isSecureContext) {
+          throw new Error('File System Access API requires a secure context (HTTPS). Please use HTTPS or try the desktop version.');
+        }
+        
+        if (!hasFileSystemAPI) {
+          throw new Error('Your browser does not support the File System Access API. Please use Chrome 86+, Edge 86+, or try the desktop version of Syntari AI.');
+        }
+        
+        try {
+          // For Brave browser, we need to be more explicit about permissions
+          const pickerOptions: any = {
+            mode: 'readwrite' as const,
+            startIn: 'documents' as const
+          };
+          
+          // Brave might need additional handling
+          if (isBrave || userAgent.includes('brave')) {
+            console.log('🦁 Brave browser detection - using enhanced picker options');
+            // Brave requires explicit user gesture and may have additional restrictions
+            pickerOptions.multiple = false;
+            pickerOptions.excludeAcceptAllOption = false;
+          }
+          
+          const dirHandle = await (window as any).showDirectoryPicker(pickerOptions);
+          
+          // Verify the directory handle is valid
+          if (!dirHandle || typeof dirHandle.name !== 'string') {
+            throw new Error('Invalid directory handle received from browser');
+          }
+          
+          // Get the directory path from the handle
+          selectedPath = dirHandle.name;
+          
+          // Store the directory handle in the file system service
+          const { fileSystemService } = await import('./services/fileSystemService');
+          if (fileSystemService.webCompat && fileSystemService.webCompat.setDirectoryHandle) {
+            fileSystemService.webCompat.setDirectoryHandle(dirHandle);
+            console.log('✅ Directory handle stored successfully');
+          } else {
+            console.error('❌ WebFileSystemCompat not available');
+            throw new Error('File system compatibility layer not available. Please refresh the page and try again.');
+          }
+          
+          console.log('📁 Selected directory:', selectedPath);
+        } catch (error: any) {
+          if (error.name === 'AbortError') {
+            // User cancelled the picker
+            console.log('📁 Folder picker cancelled by user');
+            return;
+          }
+          
+          // More specific error handling for different browser issues
+          if (error.name === 'NotAllowedError') {
+            throw new Error('Permission denied by browser. Please allow file system access or try the desktop version.');
+          } else if (error.name === 'SecurityError') {
+            throw new Error('Security restrictions prevent folder access. Please use HTTPS or try the desktop version.');
+          } else if (error.message.includes('not supported')) {
+            throw new Error('Your browser version does not support the File System Access API. Please update your browser or try the desktop version.');
+          }
+          
+          throw error;
+        }
+      }
+      
+      if (selectedPath) {
         // Store the selected path and show permission dialog
         setPendingProjectPath(selectedPath);
         setShowPermissionDialog(true);
       }
-      // User cancelled or invalid path - no action needed
+      
     } catch (error) {
       console.error('Error opening project folder:', error);
       
@@ -120,9 +211,15 @@ const App: React.FC = () => {
       let errorCode = 'DIALOG_FAILED';
       
       if (error instanceof Error) {
-        if (error.message.includes('dialog')) {
+        if (error.message.includes('not support')) {
+          errorMessage = error.message;
+          errorCode = 'BROWSER_NOT_SUPPORTED';
+        } else if (error.message.includes('dialog')) {
           errorMessage = 'File dialog failed to open. Please ensure the application has necessary permissions.';
           errorCode = 'DIALOG_FAILED';
+        } else if (error.message.includes('Permission')) {
+          errorMessage = 'Permission denied. Please grant folder access permission.';
+          errorCode = 'PERMISSION_DENIED';
         }
       }
       
@@ -222,58 +319,88 @@ const App: React.FC = () => {
     if (!pendingProjectPath) return;
     
     try {
-      // Check if we have permissions to access this folder
-      const permissionCheck = await invoke<any>('check_folder_permissions', {
-        path: pendingProjectPath,
-      });
+      // Check if we're running in Tauri (desktop) vs web browser
+      const isTauri = typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__;
       
-      if (!permissionCheck.success || !permissionCheck.data) {
-        // Show user-friendly permission error
-        appViewModel.handleError({
-          code: 'PERMISSION_DENIED',
-          message: permissionCheck.error || 'Cannot access the selected folder. Please choose a folder you have read permissions for, or run the application as administrator.',
-          severity: 'error',
-          timestamp: Date.now(),
-          recoverable: true,
+      if (isTauri) {
+        // Desktop app - use Tauri backend
+        console.log('🖥️ Using Tauri backend for project loading');
+        
+        // Check if we have permissions to access this folder
+        const permissionCheck = await invoke<any>('check_folder_permissions', {
+          path: pendingProjectPath,
         });
-        setShowPermissionDialog(false);
-        setPendingProjectPath(null);
-        return;
+        
+        if (!permissionCheck.success || !permissionCheck.data) {
+          // Show user-friendly permission error
+          appViewModel.handleError({
+            code: 'PERMISSION_DENIED',
+            message: permissionCheck.error || 'Cannot access the selected folder. Please choose a folder you have read permissions for, or run the application as administrator.',
+            severity: 'error',
+            timestamp: Date.now(),
+            recoverable: true,
+          });
+          setShowPermissionDialog(false);
+          setPendingProjectPath(null);
+          return;
+        }
+        
+        // Call the backend directly to get project data
+        const projectResult = await invoke<any>('open_project', {
+          path: pendingProjectPath,
+        });
+        
+        if (!projectResult.success || !projectResult.data) {
+          throw new Error(projectResult.error || 'Failed to load project data');
+        }
+        
+        // Convert backend project data to frontend format
+        const project = {
+          rootPath: projectResult.data.root_path,
+          projectType: projectResult.data.project_type,
+          openFiles: projectResult.data.open_files.map((file: any) => ({
+            path: file.path,
+            name: file.name,
+            extension: file.extension,
+            size: file.size,
+            lastModified: file.last_modified,
+            content: file.content,
+            language: file.language,
+          })),
+          dependencies: projectResult.data.dependencies,
+          gitBranch: projectResult.data.git_branch,
+          activeFramework: projectResult.data.active_framework,
+          lastAnalyzed: Date.now(),
+        };
+        
+        // Create project tabs immediately with the project data we have
+        await createProjectTabs(project);
+        
+        // Also update the view model state (this might be async)
+        appViewModel.openProject(pendingProjectPath);
+      } else {
+        // Web browser - use File System Access API
+        console.log('🌐 Using web browser file system for project loading');
+        
+        // Create a basic project structure for web
+        const project = {
+          rootPath: pendingProjectPath,
+          projectType: 'web',
+          openFiles: [],
+          dependencies: [],
+          gitBranch: 'main',
+          activeFramework: 'unknown',
+          lastAnalyzed: Date.now(),
+        };
+        
+        // Create project tabs with the minimal project data
+        await createProjectTabs(project);
+        
+        // Update the view model state  
+        appViewModel.openProject(pendingProjectPath);
+        
+        console.log('✅ Web project loaded successfully');
       }
-      
-      // Call the backend directly to get project data
-      const projectResult = await invoke<any>('open_project', {
-        path: pendingProjectPath,
-      });
-      
-      if (!projectResult.success || !projectResult.data) {
-        throw new Error(projectResult.error || 'Failed to load project data');
-      }
-      
-      // Convert backend project data to frontend format
-      const project = {
-        rootPath: projectResult.data.root_path,
-        projectType: projectResult.data.project_type,
-        openFiles: projectResult.data.open_files.map((file: any) => ({
-          path: file.path,
-          name: file.name,
-          extension: file.extension,
-          size: file.size,
-          lastModified: file.last_modified,
-          content: file.content,
-          language: file.language,
-        })),
-        dependencies: projectResult.data.dependencies,
-        gitBranch: projectResult.data.git_branch,
-        activeFramework: projectResult.data.active_framework,
-        lastAnalyzed: Date.now(),
-      };
-      
-      // Create project tabs immediately with the project data we have
-      await createProjectTabs(project);
-      
-      // Also update the view model state (this might be async)
-      appViewModel.openProject(pendingProjectPath);
       
       setShowPermissionDialog(false);
       setPendingProjectPath(null);
@@ -294,6 +421,9 @@ const App: React.FC = () => {
         } else if (error.message.includes('project data')) {
           errorMessage = 'Failed to analyze project structure. Please ensure the folder contains valid project files.';
           errorCode = 'PROJECT_ANALYSIS_FAILED';
+        } else if (error.message.includes('File system compatibility')) {
+          errorMessage = 'Browser compatibility issue. Please refresh the page and try again.';
+          errorCode = 'BROWSER_COMPATIBILITY_ERROR';
         }
       }
       

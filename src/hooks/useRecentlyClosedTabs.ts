@@ -39,28 +39,41 @@ export const useRecentlyClosedTabs = (maxHistory: number = 20): RecentlyClosedTa
       closedAt: Date.now()
     };
 
+    console.log('📚 DEBUG: Adding closed tab to stack:', closedTab.fileName);
+
     setRecentlyClosedTabs(prev => {
       // Add to beginning of array (most recent first)
       const newHistory = [closedTab, ...prev];
       
       // Maintain history limit
-      return newHistory.slice(0, maxHistory);
+      const trimmedHistory = newHistory.slice(0, maxHistory);
+      console.log('📚 DEBUG: Closed tabs stack size:', trimmedHistory.length, 'items:', trimmedHistory.map(t => t.fileName));
+      
+      return trimmedHistory;
     });
   }, [generateId, maxHistory]);
 
   const reopenMostRecentTab = useCallback((): ClosedTabInfo | null => {
     let tabToReopen: ClosedTabInfo | null = null;
 
+    console.log('📚 DEBUG: Attempting to reopen most recent tab');
+
     setRecentlyClosedTabs(prev => {
+      console.log('📚 DEBUG: Current closed tabs stack:', prev.length, 'items:', prev.map(t => t.fileName));
+      
       if (prev.length === 0) {
+        console.log('📚 DEBUG: No tabs to reopen - stack is empty');
         return prev;
       }
 
       // Get the most recent tab
       tabToReopen = prev[0];
+      console.log('📚 DEBUG: Reopening tab:', tabToReopen.fileName);
       
       // Remove it from history
-      return prev.slice(1);
+      const newStack = prev.slice(1);
+      console.log('📚 DEBUG: Remaining stack size:', newStack.length);
+      return newStack;
     });
 
     return tabToReopen;

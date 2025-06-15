@@ -13,6 +13,106 @@ import type {
 } from '../types/fileSystem';
 import { invoke } from '@tauri-apps/api/core';
 
+// Environment detection
+const isWebEnvironment = () => {
+  return typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__;
+};
+
+// Web File System Access API compatibility layer
+class WebFileSystemCompat {
+  private dirHandle: any = null;
+  
+  setDirectoryHandle(handle: any) {
+    this.dirHandle = handle;
+    (window as any).__SYNTARI_DIR_HANDLE__ = handle;
+  }
+  
+  getDirectoryHandle(): any {
+    return this.dirHandle || (window as any).__SYNTARI_DIR_HANDLE__;
+  }
+  
+  async readDirectoryContents(dirHandle: any): Promise<FileNode[]> {
+    const files: FileNode[] = [];
+    
+    for await (const [name, handle] of dirHandle.entries()) {
+      const isDirectory = handle.kind === 'directory';
+      const path = `${dirHandle.name}/${name}`;
+      
+      let size = 0;
+      let lastModified = Date.now();
+      
+      if (!isDirectory) {
+        try {
+          const file = await handle.getFile();
+          size = file.size;
+          lastModified = file.lastModified;
+        } catch (error) {
+          console.warn('Could not get file info:', error);
+        }
+      }
+      
+      files.push({
+        id: this.generateId(path),
+        path,
+        name,
+        size,
+        isDirectory,
+        lastModified: new Date(lastModified),
+        extension: isDirectory ? '' : this.getFileExtension(name),
+        iconId: this.getIconId(isDirectory ? '' : this.getFileExtension(name), isDirectory),
+        depth: 1, // Web API typically works with single level
+        children: isDirectory ? [] : undefined,
+        hasChildren: isDirectory,
+        isExpanded: false,
+        permissions: 'rw-r--r--', // Default permissions for web
+        canRead: true,
+        canWrite: true,
+        canExecute: false,
+        isHidden: name.startsWith('.'),
+        isGitIgnored: false,
+        isSymlink: false,
+        isWatched: false,
+        metadata: {
+          handle: handle
+        }
+      });
+    }
+    
+    return files.sort((a, b) => {
+      // Directories first, then files, both alphabetically
+      if (a.isDirectory !== b.isDirectory) {
+        return a.isDirectory ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name);
+    });
+  }
+  
+  async readFile(fileHandle: any): Promise<string> {
+    const file = await fileHandle.getFile();
+    return await file.text();
+  }
+  
+  async writeFile(fileHandle: any, content: string): Promise<void> {
+    const writable = await fileHandle.createWritable();
+    await writable.write(content);
+    await writable.close();
+  }
+  
+  private generateId(path: string): string {
+    return btoa(path).replace(/[^a-zA-Z0-9]/g, '');
+  }
+  
+  private getFileExtension(filename: string): string {
+    const lastDot = filename.lastIndexOf('.');
+    return lastDot !== -1 ? filename.substring(lastDot) : '';
+  }
+  
+  private getIconId(extension: string, isDirectory: boolean): string {
+    if (isDirectory) return 'folder';
+    return ICON_MAP.get(extension.toLowerCase()) || 'file';
+  }
+}
+
 // Cache implementation using localStorage with LRU eviction
 class LocalFileSystemCache implements FileSystemCache {
   private readonly maxEntries = 10; // Keep last 10 workspaces
@@ -158,6 +258,7 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
   private iconCache = new Map<string, string>();
   private folderContentsCache = new Map<string, FileNode[]>(); // Cache loaded folder contents
   private lastRefreshTime = Date.now(); // Track last refresh for cache invalidation
+  public webCompat = new WebFileSystemCompat(); // Web browser compatibility
   private metrics = {
     scanTime: 0,
     nodeCount: 0,
@@ -234,6 +335,11 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
       return this.folderContentsCache.get(cacheKey)!;
     }
 
+    // Check if we're in web environment
+    if (isWebEnvironment()) {
+      return this.loadFolderContentsWeb(folderPath, includeHidden);
+    }
+
     return this.loadDirectoryContents('load_folder_contents', {
       folderPath: folderPath,
       includeHidden: includeHidden,
@@ -250,11 +356,58 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
       return this.folderContentsCache.get(cacheKey)!;
     }
 
+    // Use web-compatible loading if in browser environment
+    if (isWebEnvironment()) {
+      return this.loadFolderContentsWeb(rootPath, includeHidden);
+    }
+
     return this.loadDirectoryContents('load_root_items', {
       rootPath: rootPath,
       includeHidden: includeHidden,
       showHiddenFolders: true
     }, cacheKey, rootPath);
+  }
+
+  // Web-compatible folder loading using File System Access API
+  private async loadFolderContentsWeb(folderPath: string, includeHidden: boolean = false): Promise<FileNode[]> {
+    try {
+      const dirHandle = this.webCompat.getDirectoryHandle();
+      
+      if (!dirHandle) {
+        throw new Error('No directory handle available. Please select a project folder first.');
+      }
+
+      // If folderPath is different from root, navigate to subfolder
+      let targetHandle = dirHandle;
+      if (folderPath !== dirHandle.name && folderPath.includes('/')) {
+        const pathParts = folderPath.split('/').filter(part => part && part !== dirHandle.name);
+        
+        for (const part of pathParts) {
+          try {
+            targetHandle = await targetHandle.getDirectoryHandle(part);
+          } catch (error) {
+            console.warn(`Could not access folder ${part}:`, error);
+            throw new Error(`Cannot access folder: ${folderPath}`);
+          }
+        }
+      }
+
+      const files = await this.webCompat.readDirectoryContents(targetHandle);
+      
+      // Filter hidden files if needed
+      const filteredFiles = includeHidden 
+        ? files 
+        : files.filter(file => !file.isHidden);
+
+      // Cache the results
+      const cacheKey = `${folderPath}:${includeHidden}`;
+      this.folderContentsCache.set(cacheKey, filteredFiles);
+
+      return filteredFiles;
+    } catch (error) {
+      console.error('❌ Failed to load folder contents in web environment:', error);
+      throw error instanceof Error ? error : new Error(`Failed to load folder: ${folderPath}`);
+    }
   }
 
   // Unified directory loading with consistent error handling and transformation
@@ -504,6 +657,11 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
   async readFileSimple(filePath: string): Promise<string> {
     console.log('📖 Reading file (simple):', filePath);
     
+    // Check if we're in web environment
+    if (isWebEnvironment()) {
+      return this.readFileWeb(filePath);
+    }
+    
     try {
       const result = await invoke<{
         success: boolean;
@@ -522,20 +680,86 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
     }
   }
 
+  // Web-compatible file reading
+  private async readFileWeb(filePath: string): Promise<string> {
+    try {
+      const dirHandle = this.webCompat.getDirectoryHandle();
+      if (!dirHandle) {
+        throw new Error('No directory handle available. Please select a project folder first.');
+      }
+
+      // Navigate to the file
+      const pathParts = filePath.split('/').filter(part => part && part !== dirHandle.name);
+      let currentHandle = dirHandle;
+      
+      // Navigate through directories
+      for (let i = 0; i < pathParts.length - 1; i++) {
+        currentHandle = await currentHandle.getDirectoryHandle(pathParts[i]);
+      }
+      
+      // Get the file handle
+      const fileName = pathParts[pathParts.length - 1];
+      const fileHandle = await currentHandle.getFileHandle(fileName);
+      
+      return await this.webCompat.readFile(fileHandle);
+    } catch (error) {
+      console.error('❌ Failed to read file in web environment:', error);
+      throw error instanceof Error ? error : new Error(`Failed to read file: ${filePath}`);
+    }
+  }
+
   // File saving
   async saveFile(filePath: string, content: string): Promise<void> {
     try {
       console.log('💾 Saving file:', filePath);
       
-      await invoke('write_file', {
-        path: filePath,
-        content: content
-      });
+      // Check if we're in web environment
+      if (isWebEnvironment()) {
+        await this.saveFileWeb(filePath, content);
+      } else {
+        await invoke('write_file', {
+          path: filePath,
+          content: content
+        });
+      }
       
       console.log('✅ File saved successfully');
     } catch (error) {
       console.error('❌ Failed to save file:', error);
       throw new Error(`Failed to save file: ${error}`);
+    }
+  }
+
+  // Web-compatible file saving
+  private async saveFileWeb(filePath: string, content: string): Promise<void> {
+    try {
+      const dirHandle = this.webCompat.getDirectoryHandle();
+      if (!dirHandle) {
+        throw new Error('No directory handle available. Please select a project folder first.');
+      }
+
+      // Navigate to the file location
+      const pathParts = filePath.split('/').filter(part => part && part !== dirHandle.name);
+      let currentHandle = dirHandle;
+      
+      // Navigate through directories (create if needed)
+      for (let i = 0; i < pathParts.length - 1; i++) {
+        try {
+          currentHandle = await currentHandle.getDirectoryHandle(pathParts[i]);
+        } catch (error) {
+          // Directory doesn't exist, create it
+          currentHandle = await currentHandle.getDirectoryHandle(pathParts[i], { create: true });
+        }
+      }
+      
+      // Get or create the file handle
+      const fileName = pathParts[pathParts.length - 1];
+      const fileHandle = await currentHandle.getFileHandle(fileName, { create: true });
+      
+      await this.webCompat.writeFile(fileHandle, content);
+    } catch (error) {
+      console.error('❌ Failed to save file in web environment:', error);
+      throw error instanceof Error ? error : new Error(`Failed to save file: ${filePath}`);
     }
   }
 

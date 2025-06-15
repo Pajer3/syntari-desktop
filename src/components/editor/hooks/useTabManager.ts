@@ -36,6 +36,8 @@ export const useTabManager = ({
     const tab = fileTabs[index];
     if (!tab) return;
 
+    console.log('🔄 DEBUG: Closing tab and adding to recently closed:', tab.file.name);
+    
     // Store in recently closed tabs
     recentlyClosedTabs.addClosedTab({
       filePath: tab.file.path,
@@ -45,6 +47,8 @@ export const useTabManager = ({
       isPinned: tab.isPinned,
       tabIndex: index
     });
+
+    console.log('🔄 DEBUG: Tab added to recently closed tabs:', tab.file.name);
 
     // Remove from tabs
     const newTabs = fileTabs.filter((_, i) => i !== index);
@@ -126,12 +130,36 @@ export const useTabManager = ({
         handleTabClose(tabIndex);
         break;
       case 'close-others':
+        // Track all tabs that will be closed
+        fileTabs.forEach((tab, index) => {
+          if (index !== tabIndex) {
+            recentlyClosedTabs.addClosedTab({
+              filePath: tab.file.path,
+              fileName: tab.file.name,
+              content: tab.content,
+              isModified: tab.isModified,
+              isPinned: tab.isPinned,
+              tabIndex: index
+            });
+          }
+        });
         updateEditorState({ 
           fileTabs: [fileTabs[tabIndex]], 
           activeTabIndex: 0 
         });
         break;
       case 'close-to-right': {
+        // Track tabs that will be closed
+        fileTabs.slice(tabIndex + 1).forEach((tab, index) => {
+          recentlyClosedTabs.addClosedTab({
+            filePath: tab.file.path,
+            fileName: tab.file.name,
+            content: tab.content,
+            isModified: tab.isModified,
+            isPinned: tab.isPinned,
+            tabIndex: tabIndex + 1 + index
+          });
+        });
         const newTabs = fileTabs.slice(0, tabIndex + 1);
         const newActiveIndex = activeTabIndex > tabIndex ? tabIndex : activeTabIndex;
         updateEditorState({ 
@@ -141,6 +169,17 @@ export const useTabManager = ({
         break;
       }
       case 'close-all':
+        // Track all tabs that will be closed
+        fileTabs.forEach((tab, index) => {
+          recentlyClosedTabs.addClosedTab({
+            filePath: tab.file.path,
+            fileName: tab.file.name,
+            content: tab.content,
+            isModified: tab.isModified,
+            isPinned: tab.isPinned,
+            tabIndex: index
+          });
+        });
         updateEditorState({ 
           fileTabs: [], 
           activeTabIndex: -1 
@@ -166,7 +205,7 @@ export const useTabManager = ({
     
     // Close context menu
     setContextMenu(prev => ({ ...prev, visible: false }));
-  }, [fileTabs, activeTabIndex, handleTabClose, handleTabPin, updateEditorState]);
+  }, [fileTabs, activeTabIndex, handleTabClose, handleTabPin, updateEditorState, recentlyClosedTabs]);
 
   // Close context menu
   const closeContextMenu = useCallback(() => {
@@ -240,6 +279,7 @@ export const useTabManager = ({
       file: fileInfo,
       content,
       isModified: false,
+      isPinned: false,
     };
 
     const newTabs = [...fileTabs, newTab];
@@ -254,6 +294,60 @@ export const useTabManager = ({
     // Notify parent of file change
     onFileChange?.(fileInfo, content);
   }, [fileTabs, updateEditorState, onFileChange]);
+
+  // Reopen recently closed tab
+  const reopenRecentlyClosedTab = useCallback(() => {
+    const lastClosedTab = recentlyClosedTabs.reopenMostRecentTab();
+    if (lastClosedTab) {
+      console.log('🔄 Reopening recently closed tab:', lastClosedTab.filePath, lastClosedTab.fileName);
+      
+      // Check if file is already open
+      const existingIndex = fileTabs.findIndex(tab => tab.file.path === lastClosedTab.filePath);
+      
+      if (existingIndex !== -1) {
+        // File already open, just focus it
+        updateEditorState({ activeTabIndex: existingIndex });
+        console.log('✅ File already open, focusing existing tab');
+        return;
+      }
+      
+      // Create FileInfo from the closed tab data
+      const fileInfo: FileInfo = {
+        path: lastClosedTab.filePath,
+        name: lastClosedTab.fileName,
+        extension: lastClosedTab.fileName.split('.').pop() || '',
+        size: lastClosedTab.content.length,
+        lastModified: Date.now(),
+        content: lastClosedTab.content,
+      };
+      
+      // Create new tab with restored content
+      const newTab: FileTab = {
+        file: fileInfo,
+        content: lastClosedTab.content,
+        isModified: lastClosedTab.isModified,
+        isPinned: lastClosedTab.isPinned,
+      };
+      
+      // Add to tabs at the original position if possible, otherwise at the end
+      const newTabs = [...fileTabs];
+      const insertIndex = Math.min(lastClosedTab.tabIndex, newTabs.length);
+      newTabs.splice(insertIndex, 0, newTab);
+      
+      updateEditorState({ 
+        fileTabs: newTabs,
+        activeTabIndex: insertIndex,
+        currentDirectory: lastClosedTab.filePath.substring(0, lastClosedTab.filePath.lastIndexOf('/'))
+      });
+
+      // Notify parent of file change
+      onFileChange?.(fileInfo, lastClosedTab.content);
+      
+      console.log('✅ Successfully reopened tab:', lastClosedTab.fileName);
+    } else {
+      console.log('📝 No recently closed tabs to reopen');
+    }
+  }, [recentlyClosedTabs, fileTabs, updateEditorState, onFileChange]);
 
   // Create new file with intelligent naming
   const createNewFile = useCallback(() => {
@@ -316,6 +410,7 @@ export const useTabManager = ({
       file: fileInfo,
       content: '',
       isModified: false,
+      isPinned: false,
     };
 
     // Add to tabs
@@ -355,5 +450,6 @@ export const useTabManager = ({
     // File operations
     openFileInTab,
     createNewFile,
+    reopenRecentlyClosedTab,
   };
 }; 

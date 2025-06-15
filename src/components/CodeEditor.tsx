@@ -7,7 +7,6 @@ import { useEditorState } from './editor/hooks/useEditorState';
 import { useTabManager } from './editor/hooks/useTabManager';
 import { useFileOperations } from './editor/hooks/useFileOperations';
 import { useEditorShortcuts } from './editor/hooks/useEditorShortcuts';
-import { useRecentlyClosedTabs } from '../hooks/useRecentlyClosedTabs';
 import { EditorLayout } from './editor/EditorLayout';
 import { TabContextMenu } from './editor/TabContextMenu';
 import { commandService } from '../services';
@@ -42,7 +41,6 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   
   // Recent files state
   const [recentFilePaths, setRecentFilePaths] = useState<string[]>([]);
-  const recentlyClosedTabsManager = useRecentlyClosedTabs();
   
   // Core state management
   const { editorState, dialogStates, updateEditorState, updateDialogStates } = useEditorState(project);
@@ -63,7 +61,8 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     handleDragLeave,
     handleDrop,
     openFileInTab,
-    createNewFile
+    createNewFile,
+    reopenRecentlyClosedTab
   } = useTabManager({
     editorState,
     updateEditorState,
@@ -140,13 +139,11 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     }
   }, [handleTabClose, editorState.activeTabIndex, editorState.fileTabs]);
 
-  // Reopen recently closed tab function
+  // Use the tab manager's reopen function
   const handleReopenRecentTab = useCallback(() => {
-    const lastClosedTab = recentlyClosedTabsManager.reopenMostRecentTab();
-    if (lastClosedTab) {
-      openFileInTab(lastClosedTab.filePath); // Use the proper filePath property
-    }
-  }, [recentlyClosedTabsManager, openFileInTab]);
+    console.log('🔑 DEBUG: handleReopenRecentTab called - calling reopenRecentlyClosedTab()');
+    reopenRecentlyClosedTab();
+  }, [reopenRecentlyClosedTab]);
 
   // Shortcut handler functions
   const handleShowQuickOpen = useCallback(() => {
@@ -253,6 +250,19 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         case 'go-to-line':
           handleShowGoToLine();
           break;
+        case 'open-file-dialog':
+          console.log('🔑 Executing open-file-dialog');
+          updateDialogStates({ openFile: true });
+          break;
+        case 'save-as-dialog':
+          console.log('🔑 Executing save-as-dialog');
+          updateDialogStates({ saveAs: true });
+          break;
+        case 'reopen-recent-tab':
+          console.log('🔑 Executing reopen-recent-tab');
+          console.log('🔑 DEBUG: About to call handleReopenRecentTab()');
+          handleReopenRecentTab();
+          break;
         default:
           console.log('🔑 Unhandled command:', type);
       }
@@ -263,7 +273,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       const isCtrl = e.ctrlKey || e.metaKey;
       const isShift = e.shiftKey;
       
-      // FOCUSED: Only handle our 3 critical shortcuts - prevent browser AND dispatch command
+      // FOCUSED: Only handle our critical shortcuts - prevent browser AND dispatch command
       
       // 1. Ctrl+S - Prevent browser Save Page dialog AND trigger save
       if (isCtrl && e.key === 's' && !isShift) {
@@ -292,6 +302,37 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         e.stopPropagation();
         // Dispatch the actual command
         window.dispatchEvent(new CustomEvent('syntari:command', { detail: { type: 'command-palette' } }));
+        return;
+      }
+      
+      // 4. Ctrl+O - Open file from project tree
+      if (isCtrl && e.key === 'o' && !isShift) {
+        console.log('🔑 Global: Preventing browser Ctrl+O and dispatching open-file-dialog');
+        e.preventDefault();
+        e.stopPropagation();
+        // Dispatch the actual command
+        window.dispatchEvent(new CustomEvent('syntari:command', { detail: { type: 'open-file-dialog' } }));
+        return;
+      }
+      
+      // 5. Ctrl+Shift+S - Save as dialog
+      if (isCtrl && isShift && e.key === 'S') {
+        console.log('🔑 Global: Preventing browser Ctrl+Shift+S and dispatching save-as-dialog');
+        e.preventDefault();
+        e.stopPropagation();
+        // Dispatch the actual command
+        window.dispatchEvent(new CustomEvent('syntari:command', { detail: { type: 'save-as-dialog' } }));
+        return;
+      }
+      
+      // 6. Ctrl+Shift+T - Reopen recently closed tab
+      if (isCtrl && isShift && e.key === 'T') {
+        console.log('🔑 Global: Preventing browser Ctrl+Shift+T and dispatching reopen-recent-tab');
+        console.log('🔑 DEBUG: CTRL+SHIFT+T pressed - reopen recently closed tab');
+        e.preventDefault();
+        e.stopPropagation();
+        // Dispatch the actual command
+        window.dispatchEvent(new CustomEvent('syntari:command', { detail: { type: 'reopen-recent-tab' } }));
         return;
       }
     };
