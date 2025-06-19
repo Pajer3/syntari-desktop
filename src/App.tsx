@@ -82,15 +82,62 @@ const App: React.FC = () => {
     // Initialize Monaco for instant startup
     configureMonaco();
     
-    // Quick app startup - reduced animation time
+    // Very fast app startup - minimal animation time
     const timer = setTimeout(() => {
       setIsAppLoaded(true);
-      // Much faster startup
-      setTimeout(() => setShowStartupAnimation(false), 200);
-    }, 300);
+      // Extremely fast startup - welcome screen shows almost immediately
+      setTimeout(() => setShowStartupAnimation(false), 100);
+    }, 100);
 
     return () => clearTimeout(timer);
   }, []);
+
+  // ================================
+  // APP INITIALIZATION
+  // ================================
+  
+  useEffect(() => {
+    // Initialize the app view model
+    const initApp = async () => {
+      try {
+        await appViewModel.initializeApp();
+        console.log('✅ App initialization completed');
+      } catch (error) {
+        console.error('❌ Failed to initialize app:', error);
+        appViewModel.handleError({
+          code: 'APP_INIT_FAILED',
+          message: 'Failed to initialize application',
+          severity: 'critical',
+          timestamp: Date.now(),
+          recoverable: true,
+        });
+      }
+    };
+
+    initApp();
+  }, [appViewModel]);
+
+  // ================================
+  // DEBUG: Log current state for troubleshooting
+  // ================================
+  
+  useEffect(() => {
+    console.log('🔍 App State Debug:', {
+      currentView: appViewModel.viewModel.currentView,
+      isLoading: appViewModel.viewModel.isLoading,
+      hasError: !!appViewModel.viewModel.error,
+      hasProject: !!appViewModel.viewModel.project,
+      isAppLoaded,
+      showStartupAnimation
+    });
+  }, [
+    appViewModel.viewModel.currentView,
+    appViewModel.viewModel.isLoading,
+    appViewModel.viewModel.error,
+    appViewModel.viewModel.project,
+    isAppLoaded,
+    showStartupAnimation
+  ]);
 
   // ================================
   // FOLDER PICKER & PROJECT MANAGEMENT
@@ -482,31 +529,64 @@ const App: React.FC = () => {
     return false;
   }, [appViewModel.viewModel.currentView, tabManager]);
 
-  // System tab switching handler (Ctrl+Shift+Tab)
-  useEffect(() => {
-    const handleSwitchSystemTabs = () => {
-      console.log('🔄 System tab switching requested');
+  // System tab switching handler (extracted for use in both useShortcut and event listener)
+  const handleSwitchSystemTabs = useCallback(() => {
+    console.log('🔄 System tab switching requested');
+    
+    if (appViewModel.viewModel.currentView === 'editor') {
+      // Get current active tab and switch to the next system tab
+      const currentTabId = tabManager.activeTabId;
+      console.log('🔄 Current active tab:', currentTabId);
       
-      if (appViewModel.viewModel.currentView === 'editor') {
-        // Get current active tab and switch to the next one
-        const currentTabId = tabManager.activeTabId;
-        console.log('🔄 Current system tab:', currentTabId);
-        
-        if (currentTabId === 'editor') {
-          // Switch to AI Assistant
-          tabManager.switchToTab('ai-assistant');
-          console.log('🔄 ✅ Switched to AI Assistant tab');
-        } else if (currentTabId === 'ai-assistant') {
-          // Switch back to Editor
-          tabManager.switchToTab('editor');
-          console.log('🔄 ✅ Switched to Editor tab');
-        } else {
-          // Default to Editor if unknown tab
-          tabManager.switchToTab('editor');
-          console.log('🔄 ✅ Defaulted to Editor tab');
-        }
+      // Get all system tabs (non-closeable tabs)
+      const systemTabs = tabManager.tabs.filter(tab => !tab.closeable);
+      console.log('🔄 Available system tabs:', systemTabs.map(t => t.id));
+      
+      if (systemTabs.length <= 1) {
+        console.log('🔄 Only one or no system tabs available, cannot switch');
+        return;
       }
-    };
+      
+      // Find current tab index in system tabs
+      const currentIndex = systemTabs.findIndex(tab => tab.id === currentTabId);
+      
+      if (currentIndex === -1) {
+        // Current tab is not a system tab, switch to first system tab
+        tabManager.switchToTab(systemTabs[0].id);
+        console.log('🔄 ✅ Switched to first system tab:', systemTabs[0].id);
+      } else {
+        // Switch to next system tab (wrap around)
+        const nextIndex = (currentIndex + 1) % systemTabs.length;
+        const nextTab = systemTabs[nextIndex];
+        tabManager.switchToTab(nextTab.id);
+        console.log('🔄 ✅ Switched to next system tab:', nextTab.id);
+      }
+    }
+  }, [appViewModel.viewModel.currentView, tabManager]);
+
+  // System tab switching (Ctrl+Shift+Tab) - ensures it works through useShortcut system
+  useShortcut('tabManagement', 'switchSystemTabs', () => {
+    console.log('🔄 System tab switching via useShortcut system');
+    handleSwitchSystemTabs();
+    return true; // Indicate the shortcut was handled
+  }, [handleSwitchSystemTabs]);
+
+  // F2 - Rename Symbol (VS Code style)
+  useShortcut('navigation', 'renameSymbol', () => {
+    console.log('🔑 F2 - Rename Symbol via useShortcut system');
+    window.dispatchEvent(new CustomEvent('syntari:command', { detail: { type: 'rename-symbol' } }));
+    return true; // Indicate the shortcut was handled
+  }, []);
+
+  // F12 - Go to Definition (VS Code style)
+  useShortcut('navigation', 'goToDefinition', () => {
+    console.log('🔑 F12 - Go to Definition via useShortcut system');
+    window.dispatchEvent(new CustomEvent('syntari:command', { detail: { type: 'go-to-definition' } }));
+    return true; // Indicate the shortcut was handled
+  }, []);
+
+  // System tab switching handler (Ctrl+Shift+Tab) - fallback event listener
+  useEffect(() => {
 
     window.addEventListener('syntari:switchSystemTabs', handleSwitchSystemTabs);
     
@@ -523,13 +603,20 @@ const App: React.FC = () => {
   
   console.log('🔍 App render - isLoading:', appViewModel.viewModel.isLoading, 'currentView:', appViewModel.viewModel.currentView, 'error:', !!appViewModel.viewModel.error);
   
-  if (appViewModel.viewModel.isLoading) {
-    console.log('📺 Showing LoadingScreen because isLoading is true');
-    return <LoadingScreen />;
+  // Show loading screen only during initial startup animation
+  if (showStartupAnimation) {
+    console.log('📺 Showing startup animation');
+    return (
+      <LoadingScreen 
+        message="Initializing Syntari AI IDE..." 
+        submessage="Welcome to the future of coding..."
+      />
+    );
   }
-  
-  if (appViewModel.viewModel.error) {
-    console.log('📺 Showing ErrorScreen because error exists:', appViewModel.viewModel.error);
+
+  // Show error screen only for critical errors that prevent app usage
+  if (appViewModel.viewModel.error && appViewModel.viewModel.error.severity === 'critical') {
+    console.log('📺 Showing error screen');
     return (
       <ErrorScreen 
         error={appViewModel.viewModel.error} 
@@ -628,8 +715,12 @@ const App: React.FC = () => {
         ${appViewModel.viewModel.currentView === 'welcome' ? 'overflow-y-auto' : 'overflow-hidden'}
       `}>
         {(() => {
-          switch (appViewModel.viewModel.currentView) {
+          const currentView = appViewModel.viewModel.currentView;
+          console.log('🎯 Rendering view:', currentView, 'with project:', !!appViewModel.viewModel.project);
+          
+          switch (currentView) {
             case 'welcome':
+              console.log('📋 Showing WelcomeScreen component');
               return (
                 <div className="animate-scaleIn">
                   <WelcomeScreen 
@@ -641,6 +732,7 @@ const App: React.FC = () => {
             case 'editor':
               // Always show TabLayout when tabs exist, regardless of active tab
               if (tabManager.tabs.length > 0) {
+                console.log('📝 Showing TabLayout with', tabManager.tabs.length, 'tabs');
                 return (
                   <div className="h-full animate-fadeIn">
                     <TabLayout
@@ -655,6 +747,7 @@ const App: React.FC = () => {
                 );
               }
               // Fallback when no project is loaded
+              console.log('📝 Showing editor fallback - no tabs');
               return (
                 <div className="h-full bg-gradient-to-br from-vscode-editor to-vscode-sidebar text-white flex items-center justify-center animate-scaleIn">
                   <div className="text-center max-w-md p-8 glass rounded-2xl shadow-lift">
@@ -677,6 +770,7 @@ const App: React.FC = () => {
               );
               
             case 'chat':
+              console.log('💬 Showing ChatView component');
               return (
                 <div className="animate-slideIn">
                   <ChatView chatViewModel={chatViewModel} />
@@ -684,6 +778,7 @@ const App: React.FC = () => {
               );
               
             case 'settings':
+              console.log('⚙️ Showing SettingsView component');
               return (
                 <div className="animate-fadeIn">
                   <SettingsView />
@@ -691,6 +786,7 @@ const App: React.FC = () => {
               );
               
             default:
+              console.log('🏠 Defaulting to WelcomeScreen for unknown view:', currentView);
               return (
                 <div className="animate-scaleIn">
                   <WelcomeScreen 

@@ -57,7 +57,7 @@ class WebFileSystemCompat {
         name,
         size,
         isDirectory,
-        lastModified: new Date(lastModified),
+        lastModified: new Date(lastModified).getTime(),
         extension: isDirectory ? '' : this.getFileExtension(name),
         iconId: this.getIconId(isDirectory ? '' : this.getFileExtension(name), isDirectory),
         depth: 1, // Web API typically works with single level
@@ -113,44 +113,49 @@ class WebFileSystemCompat {
   }
 }
 
-// Cache implementation using localStorage with LRU eviction
-class LocalFileSystemCache implements FileSystemCache {
+// ============================================================================
+// EXTRACTED CACHE SERVICE - Better separation of concerns
+// ============================================================================
+
+/**
+ * Dedicated file system cache service using localStorage with LRU eviction
+ * Extracted from main service for better maintainability
+ */
+class FileSystemCacheService implements FileSystemCache {
   private readonly maxEntries = 10; // Keep last 10 workspaces
+  private readonly cachePrefix = 'fs-cache-';
+  private readonly orderKey = 'fs-cache-order';
   
   async save(snapshot: FileSystemSnapshot): Promise<void> {
     try {
-      const key = `fs-cache-${this.hashPath(snapshot.rootPath)}`;
-      const compressed = this.compress(snapshot);
-      localStorage.setItem(key, compressed);
-      
-      // Update access order for LRU
+      const key = `${this.cachePrefix}${this.hashPath(snapshot.rootPath)}`;
+      const data = this.serialize(snapshot);
+      localStorage.setItem(key, data);
       this.updateAccessOrder(key);
     } catch (error) {
-      console.warn('Failed to save filesystem cache:', error);
+      console.warn('Cache save failed:', error);
     }
   }
   
   async load(rootPath: string): Promise<FileSystemSnapshot | null> {
     try {
-      const key = `fs-cache-${this.hashPath(rootPath)}`;
-      const compressed = localStorage.getItem(key);
-      if (!compressed) return null;
+      const key = `${this.cachePrefix}${this.hashPath(rootPath)}`;
+      const data = localStorage.getItem(key);
+      if (!data) return null;
       
       this.updateAccessOrder(key);
-      return this.decompress(compressed);
+      return this.deserialize(data);
     } catch (error) {
-      console.warn('Failed to load filesystem cache:', error);
+      console.warn('Cache load failed:', error);
       return null;
     }
   }
   
   async isValid(snapshot: FileSystemSnapshot, rootPath: string): Promise<boolean> {
     try {
-      // Check if root directory modification time changed
       const result = await invoke<{ mtime: number; success: boolean }>('get_directory_mtime', { path: rootPath });
       if (!result.success) return false;
       
-      // Consider valid if less than 5 minutes old and mtime unchanged
       const age = Date.now() - snapshot.timestamp;
       const maxAge = 5 * 60 * 1000; // 5 minutes
       
@@ -161,46 +166,50 @@ class LocalFileSystemCache implements FileSystemCache {
   }
   
   async clear(): Promise<void> {
-    const keys = Object.keys(localStorage).filter(k => k.startsWith('fs-cache-'));
+    const keys = Object.keys(localStorage).filter(k => k.startsWith(this.cachePrefix));
     keys.forEach(key => localStorage.removeItem(key));
+    localStorage.removeItem(this.orderKey);
   }
   
+  getStats(): { entries: number; size: number } {
+    const keys = Object.keys(localStorage).filter(k => k.startsWith(this.cachePrefix));
+    const size = keys.reduce((total, key) => total + (localStorage.getItem(key)?.length || 0), 0);
+    return { entries: keys.length, size };
+  }
+  
+  // Private helper methods for cache operations
   private hashPath(path: string): string {
-    // Simple hash for cache key
     let hash = 0;
     for (let i = 0; i < path.length; i++) {
       const char = path.charCodeAt(i);
       hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32bit integer
+      hash = hash & hash;
     }
     return Math.abs(hash).toString(36);
   }
   
-  private compress(snapshot: FileSystemSnapshot): string {
-    // Simple JSON compression - could use LZ-string for better compression
+  private serialize(snapshot: FileSystemSnapshot): string {
     return JSON.stringify(snapshot);
   }
   
-  private decompress(data: string): FileSystemSnapshot {
+  private deserialize(data: string): FileSystemSnapshot {
     return JSON.parse(data);
   }
   
   private updateAccessOrder(key: string): void {
-    const accessOrder = JSON.parse(localStorage.getItem('fs-cache-order') || '[]');
+    const accessOrder = JSON.parse(localStorage.getItem(this.orderKey) || '[]');
     const index = accessOrder.indexOf(key);
     
-    if (index !== -1) {
-      accessOrder.splice(index, 1);
-    }
+    if (index !== -1) accessOrder.splice(index, 1);
     accessOrder.unshift(key);
     
-    // Evict old entries
+    // LRU eviction
     while (accessOrder.length > this.maxEntries) {
       const oldKey = accessOrder.pop();
       localStorage.removeItem(oldKey);
     }
     
-    localStorage.setItem('fs-cache-order', JSON.stringify(accessOrder));
+    localStorage.setItem(this.orderKey, JSON.stringify(accessOrder));
   }
 }
 
@@ -254,11 +263,16 @@ const ICON_MAP = new Map<string, string>([
 ]);
 
 export class VSCodeLikeFileSystemService implements FileSystemService {
-  private cache = new LocalFileSystemCache();
+  // Extracted services for better separation of concerns
+  private cache = new FileSystemCacheService();
   private iconCache = new Map<string, string>();
-  private folderContentsCache = new Map<string, FileNode[]>(); // Cache loaded folder contents
-  private lastRefreshTime = Date.now(); // Track last refresh for cache invalidation
-  public webCompat = new WebFileSystemCompat(); // Web browser compatibility
+  private folderContentsCache = new Map<string, FileNode[]>();
+  private lastRefreshTime = Date.now();
+  
+  // Web browser compatibility layer
+  public webCompat = new WebFileSystemCompat();
+  
+  // Performance metrics tracking
   private metrics = {
     scanTime: 0,
     nodeCount: 0,
@@ -397,7 +411,7 @@ export class VSCodeLikeFileSystemService implements FileSystemService {
       // Filter hidden files if needed
       const filteredFiles = includeHidden 
         ? files 
-        : files.filter(file => !file.isHidden);
+        : files.filter(file => !file.name.startsWith('.'));
 
       // Cache the results
       const cacheKey = `${folderPath}:${includeHidden}`;

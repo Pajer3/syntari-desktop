@@ -2,7 +2,6 @@
 // Shared data structures across all domains
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 // Re-export the main error system from errors module
 pub use super::errors::{AppError, AppResult, ErrorContext};

@@ -1,5 +1,5 @@
 // Simple Monaco Editor Wrapper - Minimal implementation to avoid getFullModelRange errors
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import Editor from '@monaco-editor/react';
 
 // Local interface to replace missing EditorFile type
@@ -18,17 +18,26 @@ interface SimpleMonacoWrapperProps {
   readOnly?: boolean;
 }
 
-export const SimpleMonacoWrapper: React.FC<SimpleMonacoWrapperProps> = ({
+export interface SimpleMonacoWrapperRef {
+  getEditor: () => any;
+}
+
+export const SimpleMonacoWrapper = forwardRef<SimpleMonacoWrapperRef, SimpleMonacoWrapperProps>(({
   selectedFile,
   fileContent,
   onContentChange,
   onSave,
   fontSize = 14,
   readOnly = false
-}) => {
+}, ref) => {
   const editorRef = useRef<any>(null);
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Expose the editor through the ref
+  useImperativeHandle(ref, () => ({
+    getEditor: () => editorRef.current
+  }), []);
 
   // Ultra minimal editor options
   const editorOptions = {
@@ -163,4 +172,6 @@ export const SimpleMonacoWrapper: React.FC<SimpleMonacoWrapperProps> = ({
       />
     </div>
   );
-}; 
+});
+
+SimpleMonacoWrapper.displayName = 'SimpleMonacoWrapper';

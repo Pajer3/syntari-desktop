@@ -1,10 +1,6 @@
-// Syntari AI IDE - Service Types
-// TypeScript interfaces for Tauri backend integration
+// Syntari AI IDE - Service Layer Types
 
-// Re-export core types to avoid duplication
-export type { AppError, FileInfo, AiProvider, ProjectContext } from '../types/core';
-
-// Terminal Service Types
+// Core Terminal Types
 export interface TerminalSession {
   id: string;
   name: string;
@@ -125,6 +121,21 @@ export interface FileSystemEntry {
   permissions: string;
 }
 
+// Chat Service Types
+export interface ChatUsageMetrics {
+  totalConversations: number;
+  totalMessages: number;
+  averageResponseTime: number;
+  totalCost: number;
+}
+
+export interface ChatCostAnalysis {
+  totalCost: number;
+  averageCostPerMessage: number;
+  costByProvider: Record<string, number>;
+  dailyCosts: Array<{ date: string; cost: number }>;
+}
+
 // System Types
 export interface SystemInfo {
   os: string;
@@ -134,14 +145,12 @@ export interface SystemInfo {
   args: string[];
 }
 
-// Git command result type
 export interface GitCommandResult {
   success: boolean;
   output: string;
   command: string;
 }
 
-// Terminal execution options
 export interface ExecuteOptions {
   workingDirectory?: string;
   timeout?: number;
@@ -155,7 +164,6 @@ export interface TauriResult<T> {
   error?: string;
 }
 
-// Backend AI Provider type (to match Rust backend)
 export interface BackendAiProvider {
   id: string;
   name: string;
@@ -165,7 +173,6 @@ export interface BackendAiProvider {
   requires_auth: boolean;
 }
 
-// Backend project context type
 export interface BackendProjectContext {
   root_path: string;
   project_type: string;
@@ -181,4 +188,95 @@ export interface BackendProjectContext {
   dependencies: any[];
   git_branch?: string;
   active_framework?: string;
+}
+
+// Enhanced error types with business context and recovery strategies
+export interface ServiceError {
+  code: string;
+  message: string;
+  category: 'user' | 'system' | 'network' | 'ai' | 'filesystem' | 'security';
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  recoverable: boolean;
+  businessImpact: 'none' | 'productivity' | 'data' | 'security' | 'revenue';
+  recoverySuggestions: string[];
+  timestamp: number;
+  context?: Record<string, any>;
+  userActions?: {
+    primary: { label: string; action: string };
+    secondary?: { label: string; action: string };
+  };
+}
+
+// Error factory for consistent error creation
+export class ServiceErrorFactory {
+  static create(
+    code: string,
+    message: string,
+    category: ServiceError['category'],
+    options: Partial<Omit<ServiceError, 'code' | 'message' | 'category' | 'timestamp'>> = {}
+  ): ServiceError {
+    return {
+      code,
+      message,
+      category,
+      severity: options.severity ?? 'medium',
+      recoverable: options.recoverable ?? true,
+      businessImpact: options.businessImpact ?? 'productivity',
+      recoverySuggestions: options.recoverySuggestions ?? [],
+      timestamp: Date.now(),
+      context: options.context,
+      userActions: options.userActions,
+    };
+  }
+
+  static filesystem(code: string, message: string, path?: string): ServiceError {
+    return this.create(code, message, 'filesystem', {
+      severity: 'medium',
+      businessImpact: 'productivity',
+      context: { path },
+      recoverySuggestions: [
+        'Check file permissions',
+        'Verify file exists',
+        'Try refreshing file tree',
+      ],
+      userActions: {
+        primary: { label: 'Retry', action: 'retry' },
+        secondary: { label: 'Refresh', action: 'refresh' },
+      },
+    });
+  }
+
+  static ai(code: string, message: string, provider?: string, cost?: number): ServiceError {
+    return this.create(code, message, 'ai', {
+      severity: 'high',
+      businessImpact: 'productivity',
+      context: { provider, cost },
+      recoverySuggestions: [
+        'Try alternative AI provider',
+        'Check network connection',
+        'Verify API credentials',
+      ],
+      userActions: {
+        primary: { label: 'Switch Provider', action: 'switch_provider' },
+        secondary: { label: 'Retry', action: 'retry' },
+      },
+    });
+  }
+
+  static security(code: string, message: string, resource?: string): ServiceError {
+    return this.create(code, message, 'security', {
+      severity: 'critical',
+      businessImpact: 'security',
+      recoverable: false,
+      context: { resource },
+      recoverySuggestions: [
+        'Contact system administrator',
+        'Review security policies',
+        'Check user permissions',
+      ],
+      userActions: {
+        primary: { label: 'Contact Admin', action: 'contact_admin' },
+      },
+    });
+  }
 } 

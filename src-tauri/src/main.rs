@@ -103,7 +103,7 @@ fn main() {
             #[cfg(feature = "git-integration")]
             filesystem::git_get_diff,
             
-            // Terminal commands
+            // Terminal commands - Core PTY Operations
             terminal::commands::create_terminal_session,
             terminal::commands::send_terminal_input,
             terminal::commands::read_terminal_output,
@@ -111,6 +111,17 @@ fn main() {
             terminal::commands::close_terminal_session,
             terminal::commands::execute_shell_command,
             terminal::commands::get_terminal_info,
+            
+            // Terminal commands - Session Management
+            terminal::commands::get_terminal_session_info,
+            terminal::commands::list_terminal_sessions,
+            
+            // Terminal commands - Enhanced Features
+            terminal::commands::save_terminal_screenshot,
+            terminal::commands::export_terminal_session,
+            terminal::commands::request_terminal_ai_assist,
+            
+            // Terminal commands - Legacy Compatibility
             terminal::commands::change_directory,
             terminal::commands::list_directory,
             terminal::commands::kill_process,

@@ -349,8 +349,13 @@ export class TerminalService {
     return {
       code,
       message,
-      originalError,
-      timestamp: new Date(),
+      category: 'system',
+      severity: 'medium',
+      recoverable: true,
+      businessImpact: 'productivity',
+      recoverySuggestions: ['Check terminal configuration', 'Restart terminal session'],
+      timestamp: Date.now(),
+      context: { originalError },
     };
   }
 }

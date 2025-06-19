@@ -494,4 +494,25 @@ export class ChatService {
     // Would return: total costs by provider for budgeting
     return {};
   }
+
+  getUsageMetrics(): ChatUsageMetrics {
+    return {
+      totalConversations: this.conversations.length,
+      totalMessages: this.getTotalMessageCount(),
+      averageResponseTime: this.calculateAverageResponseTime(),
+      totalCost: this.getTotalCost(),
+    };
+  }
+
+  getCostAnalysis(): ChatCostAnalysis {
+    const metrics = this.getUsageMetrics();
+    const averageCostPerMessage = metrics.totalMessages > 0 ? metrics.totalCost / metrics.totalMessages : 0;
+    
+    return {
+      totalCost: metrics.totalCost,
+      averageCostPerMessage,
+      costByProvider: this.getCostByProvider(),
+      dailyCosts: this.getDailyCosts(),
+    };
+  }
 } 

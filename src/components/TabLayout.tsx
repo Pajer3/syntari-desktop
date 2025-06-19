@@ -488,6 +488,7 @@ export const TabLayout: React.FC<TabLayoutProps> = ({
   }>({ visible: false, x: 0, y: 0, tabId: '' });
 
   // Enhanced keyboard shortcuts with business context
+  // Note: nextTab/previousTab moved to CTRL+PageDown/PageUp to avoid conflicts with file tab navigation
   useShortcut('tabManagement', 'nextTab', useCallback((e) => {
     e.preventDefault?.();
     const currentIndex = tabs.findIndex(tab => tab.id === activeTabId);

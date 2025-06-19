@@ -29,7 +29,7 @@ class Logger {
   private entries: LogEntry[] = [];
   
   constructor(config: Partial<LoggerConfig> = {}) {
-    const appConfig = configManager.get();
+    const appConfig = configManager.getConfig();
     
     this.config = {
       minLevel: appConfig.dev.enableDetailedLogging ? LogLevel.DEBUG : LogLevel.INFO,
@@ -41,7 +41,13 @@ class Logger {
   }
   
   private shouldLog(level: LogLevel): boolean {
-    return level >= this.config.minLevel;
+    // Get current log level from configuration
+    const appConfig = configManager.getConfig();
+    const configLogLevel = appConfig.dev.logLevel;
+    
+    // Map log levels to numbers for comparison
+    const levels = { debug: 0, info: 1, warn: 2, error: 3 };
+    return levels[level] >= levels[configLogLevel];
   }
   
   private formatMessage(entry: LogEntry): string {

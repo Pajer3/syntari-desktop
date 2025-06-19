@@ -22,7 +22,7 @@
       "component": "TabLayout",
       "shortcuts": {
         "nextTab": {
-          "key": "Ctrl+Tab",
+          "key": "Ctrl+PageDown",
           "description": "Switch to next tab",
           "implemented": true,
           "component": "TabLayout",
@@ -30,7 +30,7 @@
           "businessImpact": "Core navigation efficiency"
         },
         "previousTab": {
-          "key": "Ctrl+Shift+Tab",
+          "key": "Ctrl+PageUp",
           "description": "Switch to previous tab",
           "implemented": true,
           "component": "TabLayout",
@@ -85,7 +85,7 @@
           "description": "Switch to next file tab (cycles through file tabs only, wraps around)",
           "implemented": true,
           "planned": false,
-          "component": "TabLayout",
+          "component": "CodeEditor",
           "priority": "P1",
           "businessImpact": "Navigation efficiency - Fast switching between open files without affecting system tabs"
         },
@@ -94,7 +94,7 @@
           "description": "Switch to previous file tab (cycles through file tabs only, wraps around)",
           "implemented": true,
           "planned": false,
-          "component": "TabLayout", 
+          "component": "CodeEditor", 
           "priority": "P1",
           "businessImpact": "Navigation efficiency - Fast switching between open files in reverse order using intuitive arrow key"
         },
@@ -324,8 +324,26 @@
           "priority": "P2",
           "businessImpact": "Code marking and reference"
         },
-        "nextBookmark": {
+        "renameSymbol": {
           "key": "F2",
+          "description": "Rename symbol at cursor position (VS Code style)",
+          "implemented": true,
+          "planned": false,
+          "component": "MonacoEditor",
+          "priority": "P1",
+          "businessImpact": "Code refactoring efficiency - Essential for safe symbol renaming across files"
+        },
+        "goToDefinition": {
+          "key": "F12",
+          "description": "Go to definition of symbol at cursor (VS Code style)",
+          "implemented": true,
+          "planned": false,
+          "component": "MonacoEditor",
+          "priority": "P1",
+          "businessImpact": "Code navigation efficiency - Essential for understanding code structure and dependencies"
+        },
+        "nextBookmark": {
+          "key": "Ctrl+K,Ctrl+K",
           "description": "Navigate to next bookmark",
           "implemented": true,
           "planned": false,
@@ -333,7 +351,7 @@
           "businessImpact": "Bookmark navigation"
         },
         "previousBookmark": {
-          "key": "Shift+F2",
+          "key": "Ctrl+K,Ctrl+P",
           "description": "Navigate to previous bookmark",
           "implemented": true,
           "planned": false,

@@ -92,7 +92,7 @@ class MonacoErrorBoundary extends React.Component<
   }
 }
 
-export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapperProps>(({
+export const MonacoEditorWrapper = React.memo(forwardRef<MonacoEditorRef, MonacoEditorWrapperProps>(({
   selectedFile,
   fileContent,
   performanceMode,
@@ -888,4 +888,6 @@ export const MonacoEditorWrapper = forwardRef<MonacoEditorRef, MonacoEditorWrapp
       {/* {aiEnabled && editorCanRender && featuresEnabled && <AIAssistantComponent />} */}
     </div>
   );
-}); 
+}));
+
+MonacoEditorWrapper.displayName = 'MonacoEditorWrapper'; 

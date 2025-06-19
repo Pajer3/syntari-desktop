@@ -25,6 +25,17 @@ export default defineConfig(async () => ({
     plugins: () => [react(), tailwindcss()],
   },
 
+  // Build configuration for Monaco workers
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          monaco: ['monaco-editor'],
+        },
+      },
+    },
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent vite from obscuring rust errors
@@ -44,6 +55,10 @@ export default defineConfig(async () => ({
     watch: {
       // 3. tell vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**"],
+    },
+    // Serve Monaco workers from node_modules
+    fs: {
+      allow: ['..'],
     },
   },
 }));

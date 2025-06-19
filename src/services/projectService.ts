@@ -432,11 +432,17 @@ class ProjectService {
   }
 
   private handleError(code: string, message: string, originalError?: any): ServiceError {
-    console.error(`[ProjectService] ${code}: ${message}`, originalError);
+    console.error(`[${code}] ${message}`, originalError);
     return {
       code,
       message,
-      details: originalError,
+      category: 'filesystem',
+      severity: 'medium',
+      recoverable: true,
+      businessImpact: 'productivity', 
+      recoverySuggestions: ['Check project path', 'Verify file permissions', 'Restart application'],
+      timestamp: Date.now(),
+      context: { originalError },
     };
   }
 }

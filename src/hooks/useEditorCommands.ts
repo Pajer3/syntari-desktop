@@ -43,7 +43,7 @@ interface UseEditorCommandsProps {
   onToggleTerminal: () => void;
   onToggleProblems: () => void;
   onToggleOutput: () => void;
-  onToggleSearchReplace: () => void;
+   onToggleSearchReplace: () => void;
   onToggleMinimap: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;

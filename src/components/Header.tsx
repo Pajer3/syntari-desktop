@@ -56,6 +56,19 @@ export const Header: React.FC<HeaderProps> = ({
   onCommandPalette = () => {},
   onHelp = () => {},
 }) => {
+  // Only log in development and reduce frequency
+  const renderCount = useRef(0);
+  if (process.env.NODE_ENV === 'development' && renderCount.current % 10 === 0) {
+    console.log('🎨 Header rendering (every 10th):', {
+      currentView: viewModel.currentView,
+      isLoading: viewModel.isLoading,
+      hasProject: !!viewModel.project,
+      aiProvidersCount: aiProviders.length,
+      renderCount: renderCount.current
+    });
+  }
+  renderCount.current++;
+
   // State for interactive features
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [searchValue, setSearchValue] = useState('');
@@ -485,26 +498,16 @@ export const Header: React.FC<HeaderProps> = ({
       style={{ backgroundColor: '#3F3F3F' }}
       data-tauri-drag-region
     >
-      {/* Left Section - Logo and Interactive Menu */}
-      <div className="flex items-center space-x-6" data-tauri-drag-region>
-        <div className="flex items-center space-x-3" data-tauri-drag-region>
-          <img 
-            src="/logo.png" 
-            alt="Syntari AI IDE" 
-            className="w-8 h-8 rounded-md"
-            onError={(e) => {
-              // Fallback to text logo if image fails
-              const target = e.target as HTMLImageElement;
-              target.style.display = 'none';
-              const parent = target.parentElement;
-              if (parent) {
-                const textLogo = document.createElement('div');
-                textLogo.className = 'w-8 h-8 bg-gray-600 rounded-md flex items-center justify-center text-white font-bold text-sm';
-                textLogo.textContent = 'S';
-                parent.appendChild(textLogo);
-              }
-            }}
-          />
+      {/* Left Section - Logo and Navigation */}
+      <div className="flex items-center space-x-4">
+        {/* Logo Section */}
+        <div className="flex items-center space-x-3">
+          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-md flex items-center justify-center text-white font-bold text-sm shadow-lg">
+            S
+          </div>
+          <span className="text-white font-semibold text-sm hidden sm:inline">
+            Syntari AI IDE
+          </span>
         </div>
 
         <nav className="flex items-center space-x-1 text-sm">

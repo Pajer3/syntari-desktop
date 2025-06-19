@@ -486,6 +486,7 @@ export const EditorLayout: React.FC<EditorLayoutProps> = ({
             {activeTab ? (
               <div className="flex-1 relative overflow-hidden">
                 <SimpleMonacoWrapper
+                  ref={monacoEditorRef}
                   selectedFile={activeTab.file as any}
                   fileContent={activeTab.content}
                   onContentChange={onContentChange}

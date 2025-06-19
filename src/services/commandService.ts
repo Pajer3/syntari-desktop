@@ -672,11 +672,17 @@ class CommandService {
   }
 
   private handleError(code: string, message: string, originalError?: any): ServiceError {
-    console.error(`[CommandService] ${code}: ${message}`, originalError);
+    console.error(`[${code}] ${message}`, originalError);
     return {
       code,
       message,
-      details: originalError,
+      category: 'system',
+      severity: 'medium', 
+      recoverable: true,
+      businessImpact: 'productivity',
+      recoverySuggestions: ['Restart application', 'Check system permissions', 'Clear command cache'],
+      timestamp: Date.now(),
+      context: { originalError },
     };
   }
 }

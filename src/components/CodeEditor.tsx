@@ -152,6 +152,120 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     window.dispatchEvent(new CustomEvent('syntari:switchSystemTabs'));
   }, []);
 
+  // Rename symbol handler
+  const handleRenameSymbol = useCallback(() => {
+    console.log('🔑 DEBUG: handleRenameSymbol called - triggering Monaco rename');
+    
+    // Check if we have an active Monaco editor
+    if (monacoEditorRef.current && monacoEditorRef.current.getEditor) {
+      const editor = monacoEditorRef.current.getEditor();
+      console.log('🔑 DEBUG: Monaco editor found:', !!editor);
+      
+      if (editor) {
+        // Debug: List all available actions
+        const allActions = editor.getActions();
+        console.log('🔑 DEBUG: Total Monaco actions available:', allActions.length);
+        const renameActions = allActions.filter(action => action.id.toLowerCase().includes('rename'));
+        console.log('🔑 DEBUG: Rename-related actions:', renameActions.map(a => `${a.id} (${a.label})`));
+        
+        // Get the rename action from Monaco
+        const renameAction = editor.getAction('editor.action.rename');
+        if (renameAction) {
+          console.log('🔑 ✅ Found Monaco rename action, checking if supported...');
+          console.log('🔑 DEBUG: Action details:', { id: renameAction.id, label: renameAction.label, enabled: renameAction.enabled });
+          
+          // Check if action is supported and enabled
+          if (renameAction.isSupported && !renameAction.isSupported()) {
+            console.log('🔑 ❌ Monaco rename action not supported in current context');
+            return;
+          }
+          
+          console.log('🔑 ✅ Triggering Monaco rename action');
+          renameAction.run().then(() => {
+            console.log('🔑 ✅ Monaco rename action completed successfully');
+          }).catch((error: any) => {
+            console.log('🔑 ❌ Monaco rename action failed:', error);
+          });
+        } else {
+          console.log('🔑 ❌ Monaco rename action not available');
+          // Fallback: Try triggering F2 key event directly
+          console.log('🔑 🔄 Trying fallback F2 key trigger...');
+          editor.trigger('keyboard', 'type', { text: '' }); // This might trigger built-in F2 behavior
+        }
+      } else {
+        console.log('🔑 ❌ Monaco editor instance not available');
+      }
+    } else {
+      console.log('🔑 ❌ No Monaco editor ref available for rename');
+    }
+  }, []);
+
+  // Go to definition handler
+  const handleGoToDefinition = useCallback(() => {
+    console.log('🔑 DEBUG: handleGoToDefinition called - triggering Monaco go to definition');
+    
+    // Check if we have an active Monaco editor
+    if (monacoEditorRef.current && monacoEditorRef.current.getEditor) {
+      const editor = monacoEditorRef.current.getEditor();
+      console.log('🔑 DEBUG: Monaco editor found:', !!editor);
+      
+      if (editor) {
+        // Debug: List all available definition-related actions
+        const allActions = editor.getActions();
+        console.log('🔑 DEBUG: Total Monaco actions available:', allActions.length);
+        const definitionActions = allActions.filter(action => 
+          action.id.toLowerCase().includes('definition') || 
+          action.id.toLowerCase().includes('declaration') ||
+          action.id.toLowerCase().includes('gotodefinition')
+        );
+        console.log('🔑 DEBUG: Definition-related actions:', definitionActions.map(a => `${a.id} (${a.label})`));
+        
+        // Try multiple action names for go to definition
+        const actionNames = [
+          'editor.action.revealDefinition',
+          'editor.action.goToDefinition', 
+          'editor.action.goToDeclaration',
+          'editor.action.peekDefinition'
+        ];
+        
+        let actionFound = false;
+        for (const actionName of actionNames) {
+          const action = editor.getAction(actionName);
+          if (action) {
+            console.log(`🔑 ✅ Found Monaco action: ${actionName}, checking if supported...`);
+            console.log('🔑 DEBUG: Action details:', { id: action.id, label: action.label, enabled: action.enabled });
+            
+            // Check if action is supported and enabled
+            if (action.isSupported && !action.isSupported()) {
+              console.log(`🔑 ❌ Monaco action ${actionName} not supported in current context`);
+              continue;
+            }
+            
+            console.log(`🔑 ✅ Triggering Monaco action: ${actionName}`);
+            action.run().then(() => {
+              console.log(`🔑 ✅ Monaco action ${actionName} completed successfully`);
+            }).catch((error: any) => {
+              console.log(`🔑 ❌ Monaco action ${actionName} failed:`, error);
+            });
+            actionFound = true;
+            break;
+          }
+        }
+        
+        if (!actionFound) {
+          console.log('🔑 ❌ No Monaco definition actions available');
+          // Fallback: Try triggering F12 key event directly
+          console.log('🔑 🔄 Trying fallback F12 key trigger...');
+          editor.trigger('keyboard', 'type', { text: '' }); // This might trigger built-in F12 behavior
+        }
+      } else {
+        console.log('🔑 ❌ Monaco editor instance not available');
+      }
+    } else {
+      console.log('🔑 ❌ No Monaco editor ref available for go to definition');
+    }
+  }, []);
+
   // Shortcut handler functions
   const handleShowQuickOpen = useCallback(() => {
     updateEditorState({ showQuickOpen: true });
@@ -284,6 +398,16 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           console.log('🔑 Executing switch-system-tabs');
           handleSwitchSystemTabs();
           break;
+        
+        case 'rename-symbol':
+          console.log('🔑 Executing rename-symbol');
+          handleRenameSymbol();
+          break;
+          
+        case 'go-to-definition':
+          console.log('🔑 Executing go-to-definition');
+          handleGoToDefinition();
+          break;
         default:
           console.log('🔑 Unhandled command:', type);
       }
@@ -370,8 +494,11 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       // 8. Ctrl+Shift+Tab - Switch between system tabs (Editor, AI Assistant)
       if (isCtrl && isShift && e.key === 'Tab') {
         console.log('🔑 Global: Preventing browser Ctrl+Shift+Tab and dispatching switch-system-tabs');
+        console.log('🔑 DEBUG: CTRL+SHIFT+TAB detected! isCtrl:', isCtrl, 'isShift:', isShift, 'key:', e.key);
+        console.log('🔑 DEBUG: Event details:', { type: e.type, bubbles: e.bubbles, cancelable: e.cancelable, composed: e.composed, isTrusted: e.isTrusted });
         e.preventDefault();
         e.stopPropagation();
+        e.stopImmediatePropagation();
         // Dispatch the actual command
         window.dispatchEvent(new CustomEvent('syntari:command', { detail: { type: 'switch-system-tabs' } }));
         return;
@@ -384,6 +511,26 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         e.stopPropagation();
         // Dispatch the actual command
         window.dispatchEvent(new CustomEvent('syntari:command', { detail: { type: 'previous-file-tab' } }));
+        return;
+      }
+      
+      // 10. F2 - Rename Symbol (VS Code style)
+      if (e.key === 'F2' && !isCtrl && !e.altKey && !isShift) {
+        console.log('🔑 Global: F2 pressed - dispatching rename-symbol');
+        e.preventDefault();
+        e.stopPropagation();
+        // Dispatch the actual command
+        window.dispatchEvent(new CustomEvent('syntari:command', { detail: { type: 'rename-symbol' } }));
+        return;
+      }
+        
+      // 11. F12 - Go to Definition
+      if (e.key === 'F12' && !isCtrl && !e.altKey && !isShift) {
+        console.log('🔑 Global: F12 pressed - dispatching go-to-definition');
+        e.preventDefault();
+        e.stopPropagation();
+        // Dispatch the actual command
+        window.dispatchEvent(new CustomEvent('syntari:command', { detail: { type: 'go-to-definition' } }));
         return;
       }
     };
@@ -409,7 +556,9 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     handlePreviousTab,
     handleShowCommandPalette,
     handleShowGoToLine,
-    handleSwitchSystemTabs
+    handleSwitchSystemTabs,
+    handleRenameSymbol,
+    handleGoToDefinition
   ]);
 
   // Keyboard shortcuts

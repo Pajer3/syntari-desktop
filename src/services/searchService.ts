@@ -363,11 +363,17 @@ class SearchService {
   }
 
   private handleError(code: string, message: string, originalError?: any): ServiceError {
-    console.error(`[SearchService] ${code}: ${message}`, originalError);
+    console.error(`[${code}] ${message}`, originalError);
     return {
       code,
       message,
-      details: originalError,
+      category: 'system',
+      severity: 'medium',
+      recoverable: true,
+      businessImpact: 'productivity',
+      recoverySuggestions: ['Refine search query', 'Check file permissions', 'Clear search cache'],
+      timestamp: Date.now(),
+      context: { originalError },
     };
   }
 }
