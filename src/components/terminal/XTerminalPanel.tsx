@@ -1,13 +1,52 @@
-import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import { XTerm } from '@pablo-lion/xterm-react';
-import { WebLinksAddon } from '@xterm/addon-web-links';
 import { invoke } from '@tauri-apps/api/core';
-import { 
-  Terminal, X, Plus, Maximize2, Minimize2, Copy, Search, 
-  Download, Settings, Palette, History, Bot, Trash2,
-  FileText, Camera, Volume2, VolumeX
+import '@xterm/xterm/css/xterm.css';
+import {
+  Plus,
+  Terminal, X
 } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TerminalStatusBar } from './TerminalStatusBar';
+
+// Enterprise error handling for terminal operations
+interface TerminalError {
+  code: string;
+  message: string;
+  context?: any;
+  recovery?: 'retry' | 'fallback' | 'restart';
+}
+
+class TerminalErrorHandler {
+  static handleError(error: any, context: string): TerminalError {
+    console.error(`Terminal error in ${context}:`, error);
+
+    // Classify error type for appropriate response
+    if (error?.message?.includes('Session not found')) {
+      return {
+        code: 'SESSION_NOT_FOUND',
+        message: 'Terminal session was disconnected. Creating new session...',
+        recovery: 'restart'
+      };
+    } else if (error?.message?.includes('Permission denied')) {
+      return {
+        code: 'PERMISSION_DENIED',
+        message: 'Insufficient permissions. Please check file access.',
+        recovery: 'fallback'
+      };
+    } else if (error?.message?.includes('timeout')) {
+      return {
+        code: 'TIMEOUT',
+        message: 'Operation timed out. Retrying with alternative approach...',
+        recovery: 'retry'
+      };
+    } else {
+      return {
+        code: 'UNKNOWN_ERROR',
+        message: 'An unexpected error occurred. Attempting recovery...',
+        recovery: 'retry'
+      };
+    }
+  }
+}
 
 interface XTerminalPanelProps {
   projectPath: string;
@@ -20,10 +59,16 @@ interface XTerminalPanelProps {
 }
 
 interface TerminalSession {
-  id: string;
+  id: string;              // This will be the PTY ID directly
   name: string;
-  ptyId?: string;
   workingDirectory: string;
+}
+
+// Terminal instance info to track XTerm instances per session
+interface TerminalInstance {
+  container: HTMLDivElement;
+  terminal: any; // XTerm instance
+  fitAddon: any; // FitAddon instance
 }
 
 export const XTerminalPanel: React.FC<XTerminalPanelProps> = React.memo(({
@@ -35,690 +80,23 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = React.memo(({
   onAIRequest: _onAIRequest,
   showHeader = true,
 }) => {
-  const xtermRef = useRef<any>(null);
-  const fitAddonRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const terminalInstancesRef = useRef<HTMLDivElement>(null);
   const [sessions, setSessions] = useState<TerminalSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string>('');
-  const [isMaximized, setIsMaximized] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isTerminalReady, setIsTerminalReady] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const outputPollingRef = useRef<boolean>(false);
   const initializingRef = useRef<boolean>(false);
   const resizeTimeoutRef = useRef<any>(null);
-  
-  // Enhanced Terminal Features State
-  const [showSearch, setShowSearch] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [terminalTheme, setTerminalTheme] = useState('dark');
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [commandHistory, setCommandHistory] = useState<string[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
 
-  // Initialize terminal with proper cleanup
-  useEffect(() => {
-    if (isVisible && !isInitialized) {
-      initializeTerminal();
-    }
-    
-    // Cleanup on unmount
-    return () => {
-      outputPollingRef.current = false; // Stop polling
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current);
-      }
-      if (isInitialized) {
-        sessions.forEach(session => {
-          if (session.ptyId) {
-            invoke('close_terminal_session', { sessionId: session.ptyId }).catch(console.error);
-          }
-        });
-      }
-    };
-  }, [isVisible]);
+  // Map to store terminal instances for each session
+  const terminalsRef = useRef<Map<string, TerminalInstance>>(new Map());
 
-  const initializeTerminal = async () => {
-    if (isInitialized || initializingRef.current) {
-      return;
-    }
-    
-    initializingRef.current = true;
-    
-    try {
-      console.log('🚀 Initializing terminal...');
-      
-      // Create initial session
-      const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      // Calculate initial terminal dimensions
-      let initialCols = 100; // Default
-      let initialRows = 30;
-      
-      if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          const charWidth = 7.2;
-          const charHeight = 18.2;
-          initialCols = Math.max(80, Math.floor((rect.width - 8) / charWidth));
-          initialRows = Math.max(24, Math.floor((rect.height - 8) / charHeight));
-        }
-      }
-      
-      // Only log in development to reduce production overhead
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🎯 Creating PTY with initial dimensions:', `${initialCols}x${initialRows}`);
-      }
-      
-      // Create PTY session in backend with proper initial dimensions
-      const ptyId = await invoke<string>('create_terminal_session', {
-        workingDirectory: projectPath,
-        cols: initialCols,
-        rows: initialRows
-      });
-      
-      if (process.env.NODE_ENV === 'development') {
-        console.log('✅ PTY session created:', ptyId);
-      }
-      
-      const newSession: TerminalSession = {
-        id: sessionId,
-        name: 'Main',
-        ptyId: ptyId,
-        workingDirectory: projectPath,
-      };
-      
-      setSessions([newSession]);
-      setActiveSessionId(sessionId);
-      setIsInitialized(true);
-      initializingRef.current = false;
-      
-      if (process.env.NODE_ENV === 'development') {
-        console.log('✅ Terminal session initialized');
-      }
-      
-      // Wait a bit before starting polling to let shell settle
-      setTimeout(() => {
-        startOutputPolling(ptyId);
-      }, 200);
-      
-    } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('❌ Failed to initialize terminal:', error);
-      }
-      initializingRef.current = false;
-    }
-  };
-
-  // Optimized output polling for low-end hardware
-  const startOutputPolling = (ptyId: string) => {
-    outputPollingRef.current = true;
-    
-    let pollActive = false;
-    let emptyReadCount = 0;
-    let lastOutputTime = Date.now();
-    
-    const poll = async () => {
-      // Prevent overlapping polls
-      if (!outputPollingRef.current || pollActive) {
-        return;
-      }
-      
-      pollActive = true;
-      
-      try {
-        const output = await invoke<string>('read_terminal_output', {
-          sessionId: ptyId,
-          timeoutMs: 150 // Reduced from 200ms for faster response
-        });
-        
-        if (output && output.length > 0) {
-          // Write to terminal immediately - remove logging overhead
-          if (xtermRef.current?.terminal) {
-            xtermRef.current.write(output);
-          }
-          
-          emptyReadCount = 0;
-          lastOutputTime = Date.now();
-          
-          // Faster polling after output for interactive feel
-          setTimeout(poll, 100); // Reduced from 200ms
-          
-        } else {
-          emptyReadCount++;
-          
-          // More aggressive adaptive delays for better performance
-          const timeSinceLastOutput = Date.now() - lastOutputTime;
-          let delay;
-          
-          if (timeSinceLastOutput < 500) {
-            // Very recent activity - keep responsive
-            delay = emptyReadCount < 2 ? 150 : 250;
-          } else if (timeSinceLastOutput < 2000) {
-            // Recent activity - moderate polling
-            delay = 400;
-          } else if (timeSinceLastOutput < 10000) {
-            // Moderate idle - slow down
-            delay = 800;
-          } else {
-            // Long idle - very slow polling
-            delay = 2000;
-          }
-          
-          setTimeout(poll, delay);
-        }
-        
-      } catch (error) {
-        // On error, wait longer before retrying
-        emptyReadCount++;
-        setTimeout(poll, 600);
-      } finally {
-        pollActive = false;
-      }
-    };
-    
-    // Start first poll quicker
-    setTimeout(poll, 200);
-  };
-
-  // Optimized terminal data handler - critical for typing performance
-  const handleTerminalData = useCallback(async (data: string) => {
-    if (!activeSessionId) return;
-    
-    const activeSession = sessions.find(s => s.id === activeSessionId);
-    if (!activeSession?.ptyId) return;
-
-    // Fire-and-forget for maximum responsiveness
-    invoke('send_terminal_input', {
-      sessionId: activeSession.ptyId,
-      input: data
-    }).catch(() => {
-      // Silent error handling - avoid console.error overhead during typing
-      // Only log if in development
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('Input send failed');
-      }
-    });
-  }, [activeSessionId, sessions]);
-
-  // Initialize fit addon after terminal is mounted
-  useEffect(() => {
-    if (isInitialized && xtermRef.current && !fitAddonRef.current) {
-      // Create FitAddon instance directly
-      const initializeFitAddon = async () => {
-        try {
-          // Import FitAddon dynamically to ensure it's available
-          const { FitAddon } = await import('@xterm/addon-fit');
-          
-          // Create new FitAddon instance
-          const fitAddon = new FitAddon();
-          
-          // Get the terminal instance
-          const terminal = xtermRef.current?.terminal;
-          if (!terminal) {
-            console.warn('Terminal instance not available for FitAddon');
-            return;
-          }
-          
-          // Load the addon into the terminal
-          terminal.loadAddon(fitAddon);
-          
-          // Store reference for later use
-          fitAddonRef.current = fitAddon;
-          
-          console.log('FitAddon successfully initialized');
-          
-          // Wait for container to be properly sized, then fit
-          setTimeout(() => {
-            try {
-              // Force container to have proper dimensions first
-              if (containerRef.current) {
-                const container = containerRef.current;
-                const rect = container.getBoundingClientRect();
-                
-                // Ensure we have actual dimensions
-                if (rect.width > 0 && rect.height > 0) {
-                  console.log('Container dimensions:', rect.width, 'x', rect.height);
-                  fitTerminal();
-                } else {
-                  console.warn('Container has no dimensions, retrying...');
-                  setTimeout(() => fitTerminal(), 300);
-                }
-              }
-            } catch (error) {
-              console.warn('Initial fit failed:', error);
-              // Retry after a longer delay
-              setTimeout(() => fitTerminal(), 500);
-            }
-          }, 100);
-          
-        } catch (error) {
-          console.error('Failed to initialize FitAddon:', error);
-          
-          // Fallback: try the old approach as last resort
-          setTimeout(() => {
-            tryFallbackInitialization();
-          }, 500);
-        }
-      };
-      
-      // Fallback initialization method
-      const tryFallbackInitialization = () => {
-        console.log('Attempting fallback FitAddon initialization...');
-        
-        if (!xtermRef.current?.terminal) return;
-        
-        const terminal = xtermRef.current.terminal;
-        
-        // Check if FitAddon is already loaded
-        if (terminal._addonManager && terminal._addonManager._addons) {
-          const existingFitAddon = terminal._addonManager._addons.find((addon: any) => 
-            addon.constructor.name === 'FitAddon'
-          );
-          
-          if (existingFitAddon) {
-            fitAddonRef.current = existingFitAddon;
-            console.log('Found existing FitAddon in fallback');
-            setTimeout(() => fitTerminal(), 200);
-            return;
-          }
-        }
-        
-        // If still no FitAddon, create a manual fit function
-        console.warn('Creating manual fit function as final fallback');
-        fitAddonRef.current = {
-          fit: () => {
-            // Manual terminal fitting logic
-            if (!containerRef.current || !xtermRef.current?.terminal) return;
-            
-            const container = containerRef.current;
-            const terminal = xtermRef.current.terminal;
-            const rect = container.getBoundingClientRect();
-            
-            // Calculate dimensions
-            const style = window.getComputedStyle(container);
-            const paddingX = parseInt(style.paddingLeft) + parseInt(style.paddingRight);
-            const paddingY = parseInt(style.paddingTop) + parseInt(style.paddingBottom);
-            
-            const availableWidth = rect.width - paddingX;
-            const availableHeight = rect.height - paddingY;
-            
-            // Estimate character dimensions (approximate values)
-            const charWidth = 9; // Approximate character width
-            const charHeight = 17; // Approximate character height
-            
-            const cols = Math.max(10, Math.floor(availableWidth / charWidth));
-            const rows = Math.max(3, Math.floor(availableHeight / charHeight));
-            
-            // Resize terminal
-            try {
-              terminal.resize(cols, rows);
-              console.log(`Manual fit: ${cols}x${rows}`);
-            } catch (error) {
-              console.warn('Manual terminal resize failed:', error);
-            }
-          }
-        };
-        
-        setTimeout(() => fitTerminal(), 200);
-      };
-      
-      // Start initialization
-      initializeFitAddon();
-    }
-  }, [isInitialized]);
-
-  // Handle container resize with proper debouncing
-  useEffect(() => {
-    if (!isInitialized || !containerRef.current) return;
-
-    const resizeObserver = new ResizeObserver(() => {
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current);
-      }
-      resizeTimeoutRef.current = setTimeout(() => {
-        fitTerminal();
-      }, 50);
-    });
-
-    resizeObserver.observe(containerRef.current);
-
-    return () => {
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current);
-      }
-      resizeObserver.disconnect();
-    };
-  }, [isInitialized]);
-
-  // Force fit when terminal becomes visible
-  useEffect(() => {
-    if (isVisible && isInitialized && fitAddonRef.current) {
-      // Small delay to ensure container is fully rendered
-      setTimeout(() => {
-        fitTerminal();
-      }, 100);
-    }
-  }, [isVisible, isInitialized]);
-
-  // Create new session
-  const createNewSession = async () => {
-    try {
-      const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      // Calculate terminal dimensions for new session
-      let cols = 100; // Default
-      let rows = 30;
-      
-      if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          const charWidth = 7.2;
-          const charHeight = 18.2;
-          cols = Math.max(80, Math.floor((rect.width - 8) / charWidth));
-          rows = Math.max(24, Math.floor((rect.height - 8) / charHeight));
-        }
-      }
-      
-      console.log('🎯 Creating new session with dimensions:', `${cols}x${rows}`);
-      
-      const ptyId = await invoke<string>('create_terminal_session', {
-        workingDirectory: projectPath,
-        cols: cols,
-        rows: rows
-      });
-      
-      const newSession: TerminalSession = {
-        id: sessionId,
-        name: `Tab ${sessions.length + 1}`,
-        ptyId: ptyId,
-        workingDirectory: projectPath,
-      };
-      
-      setSessions(prev => [...prev, newSession]);
-      setActiveSessionId(sessionId);
-      
-      // Start polling for the new session
-      startOutputPolling(ptyId);
-      
-    } catch (error) {
-      console.error('Failed to create new session:', error);
-    }
-  };
-
-  // Close session
-  const closeSession = async (sessionId: string) => {
-    const session = sessions.find(s => s.id === sessionId);
-    if (session?.ptyId) {
-      try {
-        await invoke('close_terminal_session', {
-          sessionId: session.ptyId
-        });
-      } catch (error) {
-        console.error('Error closing session:', error);
-      }
-    }
-    
-    const newSessions = sessions.filter(s => s.id !== sessionId);
-    setSessions(newSessions);
-    
-    if (activeSessionId === sessionId) {
-      if (newSessions.length > 0) {
-        setActiveSessionId(newSessions[0].id);
-        // Start polling for the new active session
-        const newActiveSession = newSessions[0];
-        if (newActiveSession.ptyId) {
-          startOutputPolling(newActiveSession.ptyId);
-        }
-      } else {
-        outputPollingRef.current = false; // Stop polling
-        onToggleVisibility();
-      }
-    }
-  };
-
-  // Copy terminal content
-  const copyTerminalContent = () => {
-    if (xtermRef.current) {
-      const selection = xtermRef.current.getSelection();
-      if (selection) {
-        navigator.clipboard.writeText(selection);
-      }
-    }
-  };
-
-  // Enhanced Terminal Feature Functions (Mock implementations)
-  const handleSearch = () => {
-    setShowSearch(!showSearch);
-    console.log('🔍 Terminal search toggled');
-  };
-
-  const handleExportSession = () => {
-    // Mock: Export terminal session to file
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `terminal-session-${timestamp}.txt`;
-    console.log(`📥 Exporting terminal session to ${filename}`);
-    // In real implementation: generate and download file
-  };
-
-  const handleThemeChange = () => {
-    const themes = ['dark', 'light', 'matrix', 'cyberpunk', 'vintage'];
-    const currentIndex = themes.indexOf(terminalTheme);
-    const nextTheme = themes[(currentIndex + 1) % themes.length];
-    setTerminalTheme(nextTheme);
-    console.log(`🎨 Terminal theme changed to: ${nextTheme}`);
-  };
-
-  const handleToggleSound = () => {
-    setSoundEnabled(!soundEnabled);
-    console.log(`🔊 Terminal sound ${!soundEnabled ? 'enabled' : 'disabled'}`);
-  };
-
-  const handleShowHistory = () => {
-    setShowHistory(!showHistory);
-    console.log('📚 Command history toggled');
-  };
-
-  const handleAIAssist = () => {
-    console.log('🤖 AI terminal assistant activated');
-    // Mock AI integration
-  };
-
-  const handleClearTerminal = () => {
-    if (xtermRef.current) {
-      // Clear terminal display
-      xtermRef.current.clear();
-      
-      // Send clear command to shell to reset state
-      const activeSession = sessions.find(s => s.id === activeSessionId);
-      if (activeSession?.ptyId) {
-        // Send Ctrl+L (form feed) to clear shell buffer
-        invoke('send_terminal_input', {
-          sessionId: activeSession.ptyId,
-          input: '\x0c'
-        }).catch(console.error);
-        
-        // Also send reset command to terminal
-        setTimeout(() => {
-          invoke('send_terminal_input', {
-            sessionId: activeSession.ptyId,
-            input: 'reset\r'
-          }).catch(console.error);
-        }, 100);
-      }
-      
-      console.log('✨ Terminal cleared and reset');
-    }
-  };
-
-  const handleTakeScreenshot = () => {
-    console.log('📸 Terminal screenshot captured');
-    // Mock screenshot functionality
-  };
-
-  const handleShowSettings = () => {
-    setShowSettings(!showSettings);
-    console.log('⚙️ Terminal settings toggled');
-  };
-
-  // Enhanced fit function following VS Code's approach
-  const fitTerminal = useCallback(() => {
-    if (!xtermRef.current || !containerRef.current) {
-      console.warn('Terminal or container not available for fitting');
-      return;
-    }
-    
-    if (!fitAddonRef.current) {
-      console.warn('FitAddon not available, skipping fit operation');
-      return;
-    }
-    
-    try {
-      // Get container dimensions with proper calculation
-      const container = containerRef.current;
-      const containerRect = container.getBoundingClientRect();
-      
-      // Account for padding and borders (VS Code style calculation)
-      const computedStyle = window.getComputedStyle(container);
-      const paddingLeft = parseInt(computedStyle.paddingLeft) || 0;
-      const paddingRight = parseInt(computedStyle.paddingRight) || 0;
-      const paddingTop = parseInt(computedStyle.paddingTop) || 0;
-      const paddingBottom = parseInt(computedStyle.paddingBottom) || 0;
-      
-      const availableWidth = containerRect.width - paddingLeft - paddingRight;
-      const availableHeight = containerRect.height - paddingTop - paddingBottom;
-
-      // Only log in development to reduce overhead
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🎯 Terminal fit:', `${availableWidth}x${availableHeight}`);
-      }
-
-      // Ensure container has proper dimensions
-      if (availableWidth <= 50 || availableHeight <= 20) {
-        setTimeout(() => fitTerminal(), 100);
-        return;
-      }
-
-      // Force the terminal element to use full available space
-      const xtermElement = xtermRef.current.element;
-      if (xtermElement) {
-        // Set explicit dimensions to prevent XTerm from using default 640px width
-        xtermElement.style.width = `${availableWidth}px`;
-        xtermElement.style.height = `${availableHeight}px`;
-        xtermElement.style.maxWidth = 'none';
-        xtermElement.style.minWidth = '0';
-        
-        // Ensure all child elements also use full space
-        const screen = xtermElement.querySelector('.xterm-screen') as HTMLElement;
-        const viewport = xtermElement.querySelector('.xterm-viewport') as HTMLElement;
-        const canvas = xtermElement.querySelector('canvas') as HTMLCanvasElement;
-        const rows = xtermElement.querySelector('.xterm-rows') as HTMLElement;
-        
-        if (screen) {
-          screen.style.width = `${availableWidth}px`;
-          screen.style.height = `${availableHeight}px`;
-          screen.style.maxWidth = 'none';
-          screen.style.minWidth = '0';
-        }
-        if (viewport) {
-          viewport.style.width = `${availableWidth}px`;
-          viewport.style.height = `${availableHeight}px`;
-          viewport.style.maxWidth = 'none';
-          viewport.style.minWidth = '0';
-        }
-        if (canvas) {
-          canvas.style.width = `${availableWidth}px`;
-          canvas.style.height = `${availableHeight}px`;
-          canvas.style.maxWidth = 'none';
-          canvas.style.minWidth = '0';
-        }
-        
-        // CRITICAL: Force xterm-rows to use full width (this is what's stuck at 640px)
-        if (rows) {
-          rows.style.width = `${availableWidth}px !important`;
-          rows.style.maxWidth = 'none';
-          rows.style.minWidth = '0';
-          
-          // Force all row divs to use full width
-          const rowDivs = rows.querySelectorAll('div');
-          rowDivs.forEach(rowDiv => {
-            (rowDiv as HTMLElement).style.width = `${availableWidth}px !important`;
-            (rowDiv as HTMLElement).style.maxWidth = 'none';
-            (rowDiv as HTMLElement).style.minWidth = '0';
-          });
-        }
-      }
-
-      // Perform the fit operation
-      fitAddonRef.current.fit();
-      
-      // Get dimensions after fit and validate
-      const terminal = xtermRef.current.terminal;
-      const newCols = terminal?.cols || 80;
-      const newRows = terminal?.rows || 24;
-      
-      // Only log detailed info in development
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🚀 Terminal fit result:', `${newCols}x${newRows}`);
-      }
-      
-      // Ensure minimum usable width - force at least 80 columns for reasonable use
-      if (newCols < 60) {
-        // Force a reasonable column count
-        const minCols = Math.max(80, Math.floor(availableWidth / 8)); // At least 80 cols or calculated
-        const minRows = Math.max(24, Math.floor(availableHeight / 17)); // At least 24 rows or calculated
-        
-        try {
-          terminal?.resize(minCols, minRows);
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`✅ Forced terminal resize to ${minCols}x${minRows}`);
-          }
-        } catch (error) {
-          if (process.env.NODE_ENV === 'development') {
-            console.error('Failed to force terminal resize:', error);
-          }
-        }
-      }
-      
-      // Get final dimensions
-      const finalCols = terminal?.cols || newCols;
-      const finalRows = terminal?.rows || newRows;
-      
-      // VS Code-style validation: ensure dimensions are reasonable
-      if (finalCols < 10 || finalRows < 1 || finalCols > 500 || finalRows > 200) {
-        console.warn('Terminal dimensions out of range, skipping backend sync');
-        return;
-      }
-      
-      // Update the backend PTY to match the frontend terminal dimensions
-      const activeSession = sessions.find(s => s.id === activeSessionId);
-      if (activeSession?.ptyId) {
-        // Debounced backend resize (VS Code approach)
-        if (resizeTimeoutRef.current) {
-          clearTimeout(resizeTimeoutRef.current);
-        }
-        
-        resizeTimeoutRef.current = setTimeout(() => {
-          console.log(`🔄 Syncing backend PTY to ${finalCols}x${finalRows}`);
-          invoke('resize_terminal_session', {
-            sessionId: activeSession.ptyId,
-            cols: finalCols,
-            rows: finalRows
-          }).then(() => {
-            console.log('✅ Backend PTY resized successfully');
-          }).catch((error) => {
-            console.warn('Failed to resize backend PTY:', error);
-          });
-        }, 100); // 100ms debounce like VS Code
-      }
-      
-    } catch (error) {
-      console.warn('Terminal fit failed:', error);
-    }
-  }, [activeSessionId, sessions]);
-
-  if (!isVisible) return null;
-
-  // Memoized terminal options for better performance
+  // Memoized terminal options for better performance - moved to top
   const terminalOptions = useMemo(() => {
     const baseOptions = {
       theme: {
@@ -779,11 +157,625 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = React.memo(({
     };
   }, []); // Empty dependency array - options are static
 
+  // Initialize terminal with proper cleanup
+  useEffect(() => {
+    if (isVisible && !isInitialized) {
+      initializeTerminal();
+    }
+
+    // Cleanup on unmount
+    return () => {
+      outputPollingRef.current = false; // Stop polling
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+
+      // Reset ready state when not visible
+      if (!isVisible) {
+        setIsTerminalReady(false);
+      }
+
+      if (isInitialized) {
+        sessions.forEach(session => {
+          if (session.id) {
+            invoke('close_terminal_session', { sessionId: session.id }).catch(console.error);
+          }
+        });
+      }
+    };
+  }, [isVisible]);
+
+  const initializeTerminal = async () => {
+    if (isInitialized || initializingRef.current) {
+      return;
+    }
+
+    initializingRef.current = true;
+
+    try {
+      console.log('🚀 Initializing terminal...');
+
+      // Create initial session
+      // Calculate initial terminal dimensions
+      let initialCols = 100; // Default
+      let initialRows = 30;
+
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          const charWidth = 7.2;
+          const charHeight = 18.2;
+          initialCols = Math.max(80, Math.floor((rect.width - 8) / charWidth));
+          initialRows = Math.max(24, Math.floor((rect.height - 8) / charHeight));
+        }
+      }
+
+      // Only log in development to reduce production overhead
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🎯 Creating PTY with initial dimensions:', `${initialCols}x${initialRows}`);
+      }
+
+      // Create PTY session in backend with proper initial dimensions
+      const ptyId = await invoke<string>('create_terminal_session', {
+        workingDirectory: projectPath,
+        cols: initialCols,
+        rows: initialRows
+      });
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log('✅ PTY session created:', ptyId);
+      }
+
+      const newSession: TerminalSession = {
+        id: ptyId,
+        name: 'Main',
+        workingDirectory: projectPath,
+      };
+
+      setSessions([newSession]);
+      setActiveSessionId(ptyId);
+      setIsInitialized(true);
+      initializingRef.current = false;
+
+      // Wait for DOM to be ready before creating terminal instance
+      setTimeout(async () => {
+        // Mark as creating to prevent premature fits
+        setIsCreating(true);
+
+        // Create terminal instance for the initial session
+        const terminalInstance = await createTerminalInstance(ptyId);
+
+        // Only proceed if instance was created successfully
+        if (terminalInstance) {
+          console.log(`🔍 INIT-SUCCESS: Terminal instance ready, proceeding with setup`);
+
+          // Show the terminal
+          terminalInstance.container.style.display = 'block';
+
+                    // Mark as ready AFTER instance is fully created
+          setIsTerminalReady(true);
+          setIsCreating(false); // Clear creating state
+
+          // Fit the terminal after showing - with proper validation
+          setTimeout(() => {
+            // Double-check that terminal is still in map before fitting
+            const verifyTerminal = terminalsRef.current.get(ptyId);
+            if (verifyTerminal && verifyTerminal.fitAddon) {
+              console.log(`🔍 INIT-FIT: Performing initial fit for ready terminal`);
+              verifyTerminal.fitAddon.fit();
+            }
+          }, 50);
+        } else {
+          console.error(`🔍 INIT-FAIL: Terminal instance creation failed for ${ptyId}`);
+          setIsCreating(false); // Clear creating state on failure too
+        }
+
+        if (process.env.NODE_ENV === 'development') {
+          console.log('✅ Terminal session initialized');
+        }
+
+        // Wait a bit before starting polling to let shell settle
+        setTimeout(() => {
+          startOutputPolling(ptyId);
+        }, 200);
+      }, 100);
+
+    } catch (error) {
+            const terminalError = TerminalErrorHandler.handleError(error, 'terminal initialization');
+
+      // Show user-friendly error message
+      setErrorMessage(terminalError.message);
+
+      if (process.env.NODE_ENV === 'development') {
+        console.error('❌ Failed to initialize terminal:', terminalError);
+      }
+
+      // Implement recovery based on error type
+      if (terminalError.recovery === 'retry') {
+        setTimeout(() => {
+          initializingRef.current = false;
+          setErrorMessage(null); // Clear error on retry
+          initializeTerminal();
+        }, 2000);
+      } else {
+        initializingRef.current = false;
+      }
+    }
+  };
+
+  // Optimized output polling for low-end hardware
+  const startOutputPolling = (ptyId: string) => {
+    // Stop any existing polling first
+    outputPollingRef.current = false;
+
+    // DIAGNOSTIC: Track polling instances
+    const pollId = Math.random().toString(36).substr(2, 9);
+    console.log(`🔍 POLL-START: Starting polling ${pollId} for PTY ${ptyId}`);
+
+    // Wait a moment to ensure previous polling stops
+    setTimeout(() => {
+      outputPollingRef.current = true;
+      console.log(`🔍 POLL-ACTIVE: Polling ${pollId} now active`);
+
+      let pollActive = false;
+      let emptyReadCount = 0;
+      let lastOutputTime = Date.now();
+
+              const poll = async () => {
+          // DIAGNOSTIC: Track poll attempts
+          if (Math.random() < 0.05) { // Log 5% of poll attempts
+            console.log(`🔍 POLL-ATTEMPT: ${pollId} attempting poll for ${ptyId}`);
+          }
+
+          // Prevent overlapping polls and check if this is still the active session
+        if (!outputPollingRef.current || pollActive || ptyId !== activeSessionId) {
+          return;
+        }
+
+        pollActive = true;
+
+        try {
+          const output = await invoke<string>('read_terminal_output', {
+            sessionId: ptyId,
+            timeoutMs: 150 // Reduced from 200ms for faster response
+          });
+
+          if (output && output.length > 0) {
+            // Get the terminal instance for this session
+            const terminalInstance = terminalsRef.current.get(ptyId);
+            if (terminalInstance?.terminal && ptyId === activeSessionId) {
+              terminalInstance.terminal.write(output);
+            }
+
+            emptyReadCount = 0;
+            lastOutputTime = Date.now();
+
+            // Faster polling after output for interactive feel
+            setTimeout(poll, 100); // Reduced from 200ms
+
+          } else {
+            emptyReadCount++;
+
+            // More aggressive adaptive delays for better performance
+            const timeSinceLastOutput = Date.now() - lastOutputTime;
+            let delay;
+
+            if (timeSinceLastOutput < 500) {
+              // Very recent activity - keep responsive
+              delay = emptyReadCount < 2 ? 150 : 250;
+            } else if (timeSinceLastOutput < 2000) {
+              // Recent activity - moderate polling
+              delay = 400;
+            } else if (timeSinceLastOutput < 10000) {
+              // Moderate idle - slow down
+              delay = 800;
+            } else {
+              // Long idle - very slow polling
+              delay = 2000;
+            }
+
+            setTimeout(poll, delay);
+          }
+
+        } catch (error) {
+          // On error, wait longer before retrying
+          emptyReadCount++;
+          setTimeout(poll, 600);
+        } finally {
+          pollActive = false;
+        }
+      };
+
+      // Start first poll quicker
+      setTimeout(poll, 200);
+    }, 100);
+  };
+
+  // Handle container resize with proper debouncing
+  useEffect(() => {
+    if (!isInitialized || !containerRef.current) return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+      resizeTimeoutRef.current = setTimeout(() => {
+        fitTerminal();
+      }, 50);
+    });
+
+    resizeObserver.observe(containerRef.current);
+
+    return () => {
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+      resizeObserver.disconnect();
+    };
+  }, [isInitialized]);
+
+  // Force fit when terminal becomes visible
+  useEffect(() => {
+    if (isVisible && isInitialized && isTerminalReady) {
+      console.log(`🔍 AUTO-FIT: Triggered by state change, ready=${isTerminalReady}`);
+      // Small delay to ensure container is fully rendered
+      setTimeout(() => {
+        fitTerminal();
+      }, 100);
+    }
+  }, [isVisible, isInitialized, isTerminalReady]);
+
+  // Create new session
+  const createNewSession = async () => {
+    try {
+      // Calculate terminal dimensions for new session
+      let cols = 100; // Default
+      let rows = 30;
+
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          const charWidth = 7.2;
+          const charHeight = 18.2;
+          cols = Math.max(80, Math.floor((rect.width - 8) / charWidth));
+          rows = Math.max(24, Math.floor((rect.height - 8) / charHeight));
+        }
+      }
+
+      console.log('🎯 Creating new session with dimensions:', `${cols}x${rows}`);
+
+      const ptyId = await invoke<string>('create_terminal_session', {
+        workingDirectory: projectPath,
+        cols: cols,
+        rows: rows
+      });
+
+      const newSession: TerminalSession = {
+        id: ptyId,
+        name: `Tab ${sessions.length + 1}`,
+        workingDirectory: projectPath,
+      };
+
+      setSessions(prev => [...prev, newSession]);
+
+      // Create terminal instance for the new session
+      await createTerminalInstance(ptyId);
+
+      // Switch to the new session
+      switchSession(ptyId);
+
+    } catch (error) {
+      console.error('Failed to create new session:', error);
+    }
+  };
+
+  // Close session
+  const closeSession = async (sessionId: string) => {
+    const session = sessions.find(s => s.id === sessionId);
+    if (session?.id) {
+      try {
+        await invoke('close_terminal_session', {
+          sessionId: session.id
+        });
+      } catch (error) {
+        console.error('Error closing session:', error);
+      }
+    }
+
+    // Clean up terminal instance
+    const terminalInstance = terminalsRef.current.get(sessionId);
+    if (terminalInstance) {
+      console.log(`🔍 INSTANCE-CLEANUP: Cleaning up terminal for session ${sessionId}, map-size-before=${terminalsRef.current.size}`);
+
+      // Dispose terminal
+      if (terminalInstance.terminal?.dispose) {
+        terminalInstance.terminal.dispose();
+      }
+      // Remove container
+      if (terminalInstance.container.parentNode) {
+        terminalInstance.container.parentNode.removeChild(terminalInstance.container);
+      }
+      // Remove from map
+      terminalsRef.current.delete(sessionId);
+
+      console.log(`🔍 INSTANCE-CLEANUP: Terminal cleaned up, map-size-after=${terminalsRef.current.size}`);
+    }
+
+    const newSessions = sessions.filter(s => s.id !== sessionId);
+    setSessions(newSessions);
+
+    if (activeSessionId === sessionId) {
+      if (newSessions.length > 0) {
+        switchSession(newSessions[0].id);
+      } else {
+        outputPollingRef.current = false; // Stop polling
+        onToggleVisibility();
+      }
+    }
+  };
+
+  // Rename session
+  const renameSession = (sessionId: string, newName: string) => {
+    setSessions(prev => prev.map(session =>
+      session.id === sessionId ? { ...session, name: newName } : session
+    ));
+  };
+
+  // Enhanced fit function following VS Code's approach
+  const fitTerminal = useCallback(() => {
+    // DIAGNOSTIC: Track fit attempts
+    const fitId = Math.random().toString(36).substr(2, 6);
+    console.log(`🔍 FIT-START: Attempt ${fitId}, session=${activeSessionId}, ready=${isTerminalReady}, visible=${isVisible}`);
+
+    const activeTerminal = getActiveTerminal();
+        if (!activeTerminal || !containerRef.current) {
+      console.log(`🔍 FIT-FAIL: ${fitId} - activeTerminal=${!!activeTerminal}, container=${!!containerRef.current}, creating=${isCreating}`);
+
+      // Only log warning if we expect to have a terminal (when fully ready and not creating)
+      // Reduce console noise by checking more conditions
+      if (isTerminalReady && isVisible && activeSessionId && !isCreating && containerRef.current && containerRef.current.offsetWidth > 0) {
+        console.warn('Active terminal or container not available for fitting');
+      }
+      return;
+    }
+
+    if (!activeTerminal.fitAddon) {
+      console.warn('FitAddon not available for active terminal');
+      return;
+    }
+
+    try {
+      // Get container dimensions with proper calculation
+      const container = containerRef.current;
+      const containerRect = container.getBoundingClientRect();
+
+      // Account for padding and borders (VS Code style calculation)
+      const computedStyle = window.getComputedStyle(container);
+      const paddingLeft = parseInt(computedStyle.paddingLeft) || 0;
+      const paddingRight = parseInt(computedStyle.paddingRight) || 0;
+      const paddingTop = parseInt(computedStyle.paddingTop) || 0;
+      const paddingBottom = parseInt(computedStyle.paddingBottom) || 0;
+
+      const availableWidth = containerRect.width - paddingLeft - paddingRight;
+      const availableHeight = containerRect.height - paddingTop - paddingBottom;
+
+      // Only log in development to reduce overhead - throttle logging
+      if (process.env.NODE_ENV === 'development' && Math.random() < 0.1) {
+        console.log('🎯 Terminal fit:', `${availableWidth}x${availableHeight}`);
+      }
+
+      // Ensure container has proper dimensions
+      if (availableWidth <= 50 || availableHeight <= 20) {
+        setTimeout(() => fitTerminal(), 100);
+        return;
+      }
+
+      // Force the terminal container to use full available space
+      const terminalContainer = activeTerminal.container;
+      if (terminalContainer) {
+        // Set explicit dimensions
+        terminalContainer.style.width = `${availableWidth}px`;
+        terminalContainer.style.height = `${availableHeight}px`;
+      }
+
+      // Perform the fit operation
+      activeTerminal.fitAddon.fit();
+
+      // Get dimensions after fit and validate
+      const terminal = activeTerminal.terminal;
+      const newCols = terminal?.cols || 80;
+      const newRows = terminal?.rows || 24;
+
+      // Only log detailed info in development - throttle logging
+      if (process.env.NODE_ENV === 'development' && Math.random() < 0.1) {
+        console.log('🚀 Terminal fit result:', `${newCols}x${newRows}`);
+      }
+
+      // Ensure minimum usable width - force at least 80 columns for reasonable use
+      if (newCols < 60) {
+        // Force a reasonable column count
+        const minCols = Math.max(80, Math.floor(availableWidth / 8)); // At least 80 cols or calculated
+        const minRows = Math.max(24, Math.floor(availableHeight / 17)); // At least 24 rows or calculated
+
+        try {
+          terminal?.resize(minCols, minRows);
+          if (process.env.NODE_ENV === 'development' && Math.random() < 0.2) {
+            console.log(`✅ Forced terminal resize to ${minCols}x${minRows}`);
+          }
+                  } catch (error) {
+            // Always log errors, but only occasionally in development
+            if (process.env.NODE_ENV === 'development' && Math.random() < 0.3) {
+              console.error('Failed to force terminal resize:', error);
+            }
+          }
+      }
+
+      // Get final dimensions
+      const finalCols = terminal?.cols || newCols;
+      const finalRows = terminal?.rows || newRows;
+
+      // VS Code-style validation: ensure dimensions are reasonable
+      if (finalCols < 10 || finalRows < 1 || finalCols > 500 || finalRows > 200) {
+        console.warn('Terminal dimensions out of range, skipping backend sync');
+        return;
+      }
+
+      // Update the backend PTY to match the frontend terminal dimensions
+      const activeSession = sessions.find(s => s.id === activeSessionId);
+      if (activeSession?.id) {
+        // Debounced backend resize (VS Code approach)
+        if (resizeTimeoutRef.current) {
+          clearTimeout(resizeTimeoutRef.current);
+        }
+
+        resizeTimeoutRef.current = setTimeout(() => {
+          console.log(`🔄 Syncing backend PTY to ${finalCols}x${finalRows}`);
+          invoke('resize_terminal_session', {
+            sessionId: activeSession.id,
+            cols: finalCols,
+            rows: finalRows
+          }).then(() => {
+            console.log('✅ Backend PTY resized successfully');
+          }).catch((error) => {
+            console.warn('Failed to resize backend PTY:', error);
+          });
+        }, 100); // 100ms debounce like VS Code
+      }
+
+    } catch (error) {
+      console.warn('Terminal fit failed:', error);
+    }
+  }, [activeSessionId, sessions, isInitialized, isVisible]);
+
+  // Handle session switching
+  const switchSession = useCallback((sessionId: string) => {
+    if (sessionId === activeSessionId) return;
+
+    console.log('Switching to session:', sessionId);
+
+    // Stop current polling
+    outputPollingRef.current = false;
+
+    // Hide all terminals
+    terminalsRef.current.forEach((instance) => {
+      instance.container.style.display = 'none';
+    });
+
+    // Show the selected terminal
+    const selectedTerminal = terminalsRef.current.get(sessionId);
+    if (selectedTerminal) {
+      selectedTerminal.container.style.display = 'block';
+      // Focus the terminal for input
+      selectedTerminal.terminal.focus();
+
+      // Fit the terminal after showing
+      setTimeout(() => {
+        if (selectedTerminal.fitAddon) {
+          selectedTerminal.fitAddon.fit();
+        }
+      }, 50);
+    }
+
+    setActiveSessionId(sessionId);
+
+    // Start polling for the new session
+    setTimeout(() => {
+      startOutputPolling(sessionId);
+    }, 150);
+  }, [activeSessionId]);
+
+  // Create a new terminal instance for a session
+  const createTerminalInstance = async (sessionId: string): Promise<TerminalInstance | null> => {
+    if (!terminalInstancesRef.current) {
+      console.error('Terminal instances container not ready');
+      return null;
+    }
+
+    console.log('Creating terminal instance for session:', sessionId);
+
+    try {
+      // Create container div for this terminal
+      const terminalContainer = document.createElement('div');
+      terminalContainer.style.width = '100%';
+      terminalContainer.style.height = '100%';
+      terminalContainer.style.display = 'none'; // Hidden by default
+      terminalContainer.className = 'terminal-instance';
+      terminalInstancesRef.current.appendChild(terminalContainer);
+
+      console.log('Terminal container created');
+
+      // Dynamically import terminal modules
+      const { Terminal } = await import('@xterm/xterm');
+      const { WebLinksAddon } = await import('@xterm/addon-web-links');
+      const { FitAddon } = await import('@xterm/addon-fit');
+
+      console.log('Terminal modules imported');
+
+      // Create terminal with options
+      const terminal = new Terminal(terminalOptions);
+
+      // Create and load addons
+      const fitAddon = new FitAddon();
+      const webLinksAddon = new WebLinksAddon();
+
+      terminal.loadAddon(fitAddon);
+      terminal.loadAddon(webLinksAddon);
+
+      // Open terminal in the container
+      terminal.open(terminalContainer);
+
+      console.log('Terminal opened in container');
+
+      // Set up data handler for this terminal with proper session binding
+      terminal.onData((data: string) => {
+        // Directly use the sessionId from closure - much more reliable
+        invoke('send_terminal_input', {
+          sessionId: sessionId,
+          input: data
+        }).catch((error) => {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('Input send failed for session:', sessionId, error);
+          }
+        });
+      });
+
+      const instance: TerminalInstance = {
+        container: terminalContainer,
+        terminal,
+        fitAddon
+      };
+
+      terminalsRef.current.set(sessionId, instance);
+      console.log(`🔍 INSTANCE-CREATE: Terminal instance created for session ${sessionId}, map-size=${terminalsRef.current.size}`);
+      return instance;
+    } catch (error) {
+      console.error('Failed to create terminal instance:', error);
+      return null;
+    }
+  };
+
+  // Get the active terminal instance
+  const getActiveTerminal = () => {
+    if (!activeSessionId) {
+      console.log(`🔍 GET-TERMINAL: No active session ID`);
+      return null;
+    }
+
+    const terminal = terminalsRef.current.get(activeSessionId);
+    if (Math.random() < 0.1) { // Log 10% of calls
+      console.log(`🔍 GET-TERMINAL: Session ${activeSessionId}, found=${!!terminal}, map-size=${terminalsRef.current.size}`);
+    }
+
+    return terminal;
+  };
+
+  if (!isVisible) return null;
+
   return (
-    <div 
+        <div
       className={`bg-[#1e1e1e] ${showHeader ? 'border border-[#3c3c3c] rounded-lg shadow-2xl' : ''} overflow-hidden ${className}`}
-      style={{ 
-        height: isMaximized ? '80vh' : height,
+      style={{
+        height: height,
         width: '100%',
         maxWidth: 'none',
         minWidth: '0',
@@ -807,22 +799,51 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = React.memo(({
                 <button
                   key={session.id}
                   onClick={() => {
-                    setActiveSessionId(session.id);
-                    if (session.ptyId) {
-                      startOutputPolling(session.ptyId);
+                    if (editingSessionId !== session.id) {
+                      switchSession(session.id);
                     }
                   }}
-                  className={`group flex items-center px-3 py-1 text-xs font-medium transition-all duration-200 ${
+                  onDoubleClick={() => setEditingSessionId(session.id)}
+                  className={`group flex items-center px-3 py-1.5 text-xs font-medium transition-all duration-200 relative ${
                     activeSessionId === session.id
-                      ? 'bg-[#1e1e1e] text-[#ffffff] border-t-2 border-[#007acc]'
+                      ? 'bg-[#1e1e1e] text-[#ffffff] shadow-lg'
                       : 'bg-transparent text-[#cccccc] hover:bg-[#37373d] hover:text-[#ffffff]'
                   }`}
                   style={{
                     borderTopLeftRadius: index === 0 ? '4px' : '0',
                     borderTopRightRadius: index === sessions.length - 1 ? '4px' : '0',
+                    border: activeSessionId === session.id ? '1px solid #007acc' : '1px solid transparent',
+                    borderBottom: activeSessionId === session.id ? '1px solid #1e1e1e' : '1px solid #3c3c3c',
                   }}
                 >
-                  <span>{session.name}</span>
+                  {/* Active tab indicator */}
+                  {activeSessionId === session.id && (
+                    <div className="absolute top-0 left-0 right-0 h-0.5 bg-[#007acc]" />
+                  )}
+
+                  {editingSessionId === session.id ? (
+                    <input
+                      type="text"
+                      defaultValue={session.name}
+                      autoFocus
+                      className="bg-transparent outline-none border-b border-[#007acc] text-xs w-24"
+                      onClick={(e) => e.stopPropagation()}
+                      onBlur={(e) => {
+                        renameSession(session.id, e.target.value || session.name);
+                        setEditingSessionId(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          renameSession(session.id, e.currentTarget.value || session.name);
+                          setEditingSessionId(null);
+                        } else if (e.key === 'Escape') {
+                          setEditingSessionId(null);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <span className={activeSessionId === session.id ? 'font-semibold' : ''}>{session.name}</span>
+                  )}
                   {sessions.length > 1 && (
                     <button
                       onClick={(e) => {
@@ -838,113 +859,9 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = React.memo(({
               ))}
             </div>
           </div>
-          
-          {/* Enhanced Terminal Feature Toolbar */}
+
+          {/* Simplified Toolbar - Only Plus Button */}
           <div className="flex items-center space-x-1">
-            {/* Search Feature */}
-            <button
-              onClick={handleSearch}
-              className={`p-1.5 rounded transition-all duration-200 ${
-                showSearch 
-                  ? 'text-[#007acc] bg-[#007acc]/20 hover:bg-[#007acc]/30' 
-                  : 'text-[#cccccc] hover:text-[#ffffff] hover:bg-[#37373d]'
-              }`}
-              title="Search in Terminal (Ctrl+F)"
-            >
-              <Search className="w-4 h-4" />
-            </button>
-
-            {/* Command History */}
-            <button
-              onClick={handleShowHistory}
-              className={`p-1.5 rounded transition-all duration-200 ${
-                showHistory 
-                  ? 'text-[#007acc] bg-[#007acc]/20 hover:bg-[#007acc]/30' 
-                  : 'text-[#cccccc] hover:text-[#ffffff] hover:bg-[#37373d]'
-              }`}
-              title="Command History"
-            >
-              <History className="w-4 h-4" />
-            </button>
-
-            {/* AI Assistant */}
-            <button
-              onClick={handleAIAssist}
-              className="p-1.5 text-[#cccccc] hover:text-[#00ff88] hover:bg-[#00ff88]/10 rounded transition-all duration-200"
-              title="AI Terminal Assistant"
-            >
-              <Bot className="w-4 h-4" />
-            </button>
-
-            <div className="w-px h-4 bg-[#3c3c3c] mx-1" />
-
-            {/* Export Session */}
-            <button
-              onClick={handleExportSession}
-              className="p-1.5 text-[#cccccc] hover:text-[#ffffff] hover:bg-[#37373d] rounded transition-all duration-200"
-              title="Export Terminal Session"
-            >
-              <Download className="w-4 h-4" />
-            </button>
-
-            {/* Take Screenshot */}
-            <button
-              onClick={handleTakeScreenshot}
-              className="p-1.5 text-[#cccccc] hover:text-[#ffffff] hover:bg-[#37373d] rounded transition-all duration-200"
-              title="Take Terminal Screenshot"
-            >
-              <Camera className="w-4 h-4" />
-            </button>
-
-            {/* Theme Selector */}
-            <button
-              onClick={handleThemeChange}
-              className="p-1.5 text-[#cccccc] hover:text-[#ffffff] hover:bg-[#37373d] rounded transition-all duration-200"
-              title={`Current Theme: ${terminalTheme}`}
-            >
-              <Palette className="w-4 h-4" />
-            </button>
-
-            {/* Sound Toggle */}
-            <button
-              onClick={handleToggleSound}
-              className={`p-1.5 rounded transition-all duration-200 ${
-                soundEnabled 
-                  ? 'text-[#00ff88] hover:text-[#ffffff] hover:bg-[#37373d]' 
-                  : 'text-[#ff6b6b] hover:text-[#ffffff] hover:bg-[#37373d]'
-              }`}
-              title={soundEnabled ? 'Disable Terminal Sounds' : 'Enable Terminal Sounds'}
-            >
-              {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-            </button>
-
-            <div className="w-px h-4 bg-[#3c3c3c] mx-1" />
-
-            {/* Clear Terminal */}
-            <button
-              onClick={handleClearTerminal}
-              className="p-1.5 text-[#cccccc] hover:text-[#ff6b6b] hover:bg-[#ff6b6b]/10 rounded transition-all duration-200"
-              title="Clear Terminal"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-
-            {/* Settings */}
-            <button
-              onClick={handleShowSettings}
-              className={`p-1.5 rounded transition-all duration-200 ${
-                showSettings 
-                  ? 'text-[#007acc] bg-[#007acc]/20 hover:bg-[#007acc]/30' 
-                  : 'text-[#cccccc] hover:text-[#ffffff] hover:bg-[#37373d]'
-              }`}
-              title="Terminal Settings"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-
-            <div className="w-px h-4 bg-[#3c3c3c] mx-1" />
-
-            {/* Standard Controls */}
             <button
               onClick={createNewSession}
               className="p-1.5 text-[#cccccc] hover:text-[#ffffff] hover:bg-[#37373d] rounded transition-all duration-200"
@@ -952,40 +869,16 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = React.memo(({
             >
               <Plus className="w-4 h-4" />
             </button>
-            <button
-              onClick={copyTerminalContent}
-              className="p-1.5 text-[#cccccc] hover:text-[#ffffff] hover:bg-[#37373d] rounded transition-all duration-200"
-              title="Copy Selection (Ctrl+C)"
-            >
-              <Copy className="w-4 h-4" />
-            </button>
-
-            <div className="w-px h-4 bg-[#3c3c3c] mx-1" />
-            
-            <button
-              onClick={() => setIsMaximized(!isMaximized)}
-              className="p-1.5 text-[#cccccc] hover:text-[#ffffff] hover:bg-[#37373d] rounded transition-all duration-200"
-              title={isMaximized ? 'Restore Panel' : 'Maximize Panel'}
-            >
-              {isMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-            </button>
-            <button
-              onClick={onToggleVisibility}
-              className="p-1.5 text-[#cccccc] hover:text-[#f48771] hover:bg-[#37373d] rounded transition-all duration-200"
-              title="Hide Terminal"
-            >
-              <X className="w-4 h-4" />
-            </button>
           </div>
         </div>
       )}
 
       {/* Terminal Content */}
-      <div 
+      <div
         ref={containerRef}
-        className={`relative bg-[#1e1e1e] w-full overflow-hidden`} 
-        style={{ 
-          width: '100%', 
+        className={`relative bg-[#1e1e1e] w-full overflow-hidden`}
+        style={{
+          width: '100%',
           maxWidth: 'none',
           minWidth: '0',
           height: showHeader ? 'calc(100% - 40px)' : '100%',
@@ -993,10 +886,11 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = React.memo(({
         }}
       >
         {isInitialized ? (
-          <div 
-            className="h-full w-full min-h-0 min-w-0 terminal-container terminal-glow" 
-            style={{ 
-              width: '100%', 
+          <div
+            ref={terminalInstancesRef}
+            className="h-full w-full min-h-0 min-w-0 terminal-container terminal-glow"
+            style={{
+              width: '100%',
               maxWidth: 'none',
               minWidth: '0',
               height: '100%',
@@ -1006,25 +900,11 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = React.memo(({
           >
             {/* Subtle scanline effect */}
             <div className="terminal-scanline absolute inset-0 pointer-events-none" />
-            
-            <XTerm
-              ref={xtermRef}
-              options={terminalOptions}
-              onData={handleTerminalData}
-              addons={[new WebLinksAddon()]}
-              className="h-full w-full block terminal-xterm"
-              style={{
-                width: '100%',
-                height: '100%',
-                maxWidth: 'none',
-                minWidth: '0',
-                // Force the terminal to use full available width
-                flex: '1 1 auto'
-              }}
-            />
-            
+
+            {/* Terminal containers will be appended here dynamically */}
+
             {/* Terminal overlay effects */}
-            <div 
+            <div
               className="absolute inset-0 pointer-events-none"
               style={{
                 background: 'radial-gradient(circle at center, transparent 60%, rgba(0, 122, 204, 0.02) 100%)',
@@ -1045,7 +925,7 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = React.memo(({
               </div>
               <p className="text-sm font-medium mb-2 animate-fade-in">Initializing terminal...</p>
               <p className="text-xs text-[#858585] animate-fade-in-up">Setting up shell environment</p>
-              
+
               {/* Loading progress */}
               <div className="mt-4 w-32 mx-auto">
                 <div className="h-1 bg-[#3c3c3c] rounded-full overflow-hidden">
@@ -1055,149 +935,13 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = React.memo(({
             </div>
           </div>
         )}
-
-        {/* Enhanced Feature Panels */}
-        {showSearch && (
-          <div className="absolute top-0 right-0 m-4 bg-[#2d2d30] border border-[#3c3c3c] rounded-lg shadow-2xl backdrop-blur-sm z-10 min-w-[300px]">
-            <div className="p-3">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-[#cccccc] text-sm font-medium flex items-center gap-2">
-                  <Search className="w-4 h-4" />
-                  Search Terminal
-                </h3>
-                <button
-                  onClick={() => setShowSearch(false)}
-                  className="text-[#cccccc] hover:text-[#ff6b6b] p-1"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-              <input
-                type="text"
-                placeholder="Search in terminal output..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full px-3 py-2 bg-[#1e1e1e] border border-[#3c3c3c] rounded text-[#cccccc] text-sm focus:border-[#007acc] focus:outline-none"
-                autoFocus
-              />
-              <div className="mt-2 text-xs text-[#858585]">
-                Press Enter to search • Esc to close
-              </div>
-            </div>
-          </div>
-        )}
-
-        {showHistory && (
-          <div className="absolute top-0 right-0 m-4 bg-[#2d2d30] border border-[#3c3c3c] rounded-lg shadow-2xl backdrop-blur-sm z-10 min-w-[350px] max-h-[400px] overflow-hidden">
-            <div className="p-3">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-[#cccccc] text-sm font-medium flex items-center gap-2">
-                  <History className="w-4 h-4" />
-                  Command History
-                </h3>
-                <button
-                  onClick={() => setShowHistory(false)}
-                  className="text-[#cccccc] hover:text-[#ff6b6b] p-1"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-              <div className="space-y-1 max-h-[300px] overflow-y-auto">
-                {commandHistory.length > 0 ? (
-                  commandHistory.map((cmd, index) => (
-                    <div
-                      key={index}
-                      className="px-2 py-1 bg-[#1e1e1e] rounded text-[#cccccc] text-sm font-mono hover:bg-[#37373d] cursor-pointer"
-                      onClick={() => {
-                        // Mock: Copy command to clipboard
-                        navigator.clipboard.writeText(cmd);
-                        console.log(`Copied command: ${cmd}`);
-                      }}
-                    >
-                      {cmd}
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-[#858585] text-sm py-4 text-center">
-                    No command history yet
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {showSettings && (
-          <div className="absolute top-0 right-0 m-4 bg-[#2d2d30] border border-[#3c3c3c] rounded-lg shadow-2xl backdrop-blur-sm z-10 min-w-[320px]">
-            <div className="p-4">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-[#cccccc] text-sm font-medium flex items-center gap-2">
-                  <Settings className="w-4 h-4" />
-                  Terminal Settings
-                </h3>
-                <button
-                  onClick={() => setShowSettings(false)}
-                  className="text-[#cccccc] hover:text-[#ff6b6b] p-1"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-              
-              <div className="space-y-4">
-                {/* Theme Setting */}
-                <div>
-                  <label className="block text-[#cccccc] text-sm mb-2">Theme</label>
-                  <select
-                    value={terminalTheme}
-                    onChange={(e) => setTerminalTheme(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#1e1e1e] border border-[#3c3c3c] rounded text-[#cccccc] text-sm focus:border-[#007acc] focus:outline-none"
-                  >
-                    <option value="dark">Dark</option>
-                    <option value="light">Light</option>
-                    <option value="matrix">Matrix</option>
-                    <option value="cyberpunk">Cyberpunk</option>
-                    <option value="vintage">Vintage</option>
-                  </select>
-                </div>
-
-                {/* Sound Setting */}
-                <div className="flex items-center justify-between">
-                  <span className="text-[#cccccc] text-sm">Terminal Sounds</span>
-                  <button
-                    onClick={handleToggleSound}
-                    className={`w-10 h-6 rounded-full transition-colors ${
-                      soundEnabled ? 'bg-[#007acc]' : 'bg-[#3c3c3c]'
-                    }`}
-                  >
-                    <div className={`w-4 h-4 bg-white rounded-full transition-transform ${
-                      soundEnabled ? 'translate-x-5' : 'translate-x-1'
-                    }`} />
-                  </button>
-                </div>
-
-                {/* Font Size */}
-                <div>
-                  <label className="block text-[#cccccc] text-sm mb-2">Font Size</label>
-                  <input
-                    type="range"
-                    min="10"
-                    max="20"
-                    defaultValue="13"
-                    className="w-full accent-[#007acc]"
-                  />
-                  <div className="text-xs text-[#858585] mt-1">13px</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
-      
+
       {/* Enhanced Terminal Status Bar */}
       <TerminalStatusBar
         osInfo={{
           os: 'linux',
-          shell: 'bash', 
+          shell: 'bash',
           username: 'pajer',
           hostname: 'IdeaPad-Gaming'
         }}
@@ -1208,4 +952,4 @@ export const XTerminalPanel: React.FC<XTerminalPanelProps> = React.memo(({
       />
     </div>
   );
-}); 
+});

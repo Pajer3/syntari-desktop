@@ -2,13 +2,13 @@
 // VS Code-style terminal service using real pseudo-terminals (pty)
 
 import { invoke } from '@tauri-apps/api/core';
-import type { 
-  TerminalSession, 
-  TerminalOutput, 
-  CommandResult, 
-  TerminalInfo,
+import type {
+  CommandResult,
+  ServiceError,
   SystemInfo,
-  ServiceError
+  TerminalInfo,
+  TerminalOutput,
+  TerminalSession,
 } from './types';
 
 export class TerminalService {
@@ -28,7 +28,7 @@ export class TerminalService {
     try {
       // Test backend connection and get terminal info
       const result = await invoke<any>('get_terminal_info');
-      
+
       // Backend returns TerminalInfo directly, not wrapped in TauriResult
       if (result && result.shell) {
         console.log('Terminal service initialized:', result);
@@ -37,7 +37,11 @@ export class TerminalService {
       }
     } catch (error) {
       console.error('Failed to initialize terminal service:', error);
-      throw this.handleError('TERMINAL_INIT_FAILED', 'Failed to initialize terminal service', error);
+      throw this.handleError(
+        'TERMINAL_INIT_FAILED',
+        'Failed to initialize terminal service',
+        error
+      );
     }
   }
 
@@ -47,7 +51,7 @@ export class TerminalService {
   async createSession(name?: string, workingDirectory?: string): Promise<TerminalSession> {
     try {
       let terminalWorkingDir = workingDirectory || '/';
-      
+
       // Try to get terminal info from backend, but don't fail if it's not available
       try {
         const terminalInfo = await invoke<any>('get_terminal_info');
@@ -57,12 +61,12 @@ export class TerminalService {
       } catch (error) {
         console.warn('Could not get terminal info from backend, using default directory');
       }
-      
+
       // Create a real pty session in the backend
       const ptySessionId = await invoke<string>('create_terminal_session', {
-        workingDirectory: terminalWorkingDir
+        workingDirectory: terminalWorkingDir,
       });
-      
+
       const session: TerminalSession = {
         id: this.generateSessionId(),
         name: name || `Terminal ${this.sessions.size + 1}`,
@@ -74,7 +78,7 @@ export class TerminalService {
       // Map UI session to backend pty session
       this.ptySessionIds.set(session.id, ptySessionId);
       this.sessions.set(session.id, session);
-      
+
       // If this is the first session, make it active
       if (this.sessions.size === 1) {
         this.setActiveSession(session.id);
@@ -95,14 +99,22 @@ export class TerminalService {
     console.log('TerminalService.executeCommand called with:', { sessionId, command });
     const session = this.sessions.get(sessionId);
     if (!session) {
-      console.error('Session not found:', sessionId, 'Available sessions:', Array.from(this.sessions.keys()));
+      console.error(
+        'Session not found:',
+        sessionId,
+        'Available sessions:',
+        Array.from(this.sessions.keys())
+      );
       throw this.handleError('SESSION_NOT_FOUND', `Session ${sessionId} not found`);
     }
 
     const ptySessionId = this.ptySessionIds.get(sessionId);
     if (!ptySessionId) {
       console.error('PTY session not found for UI session:', sessionId);
-      throw this.handleError('PTY_SESSION_NOT_FOUND', `PTY session not found for session ${sessionId}`);
+      throw this.handleError(
+        'PTY_SESSION_NOT_FOUND',
+        `PTY session not found for session ${sessionId}`
+      );
     }
 
     console.log('Found session:', session, 'PTY ID:', ptySessionId);
@@ -121,7 +133,7 @@ export class TerminalService {
       console.log('Sending command to pty:', { ptySessionId, command });
       await invoke('send_terminal_input', {
         sessionId: ptySessionId,
-        input: command
+        input: command,
       });
 
       // Give the command a moment to start executing
@@ -131,23 +143,23 @@ export class TerminalService {
       console.log('Reading output from pty...');
       const output = await invoke<string>('read_terminal_output', {
         sessionId: ptySessionId,
-        timeoutMs: 5000 // 5 second timeout
+        timeoutMs: 5000, // 5 second timeout
       });
-      
+
       console.log('PTY output received:', output);
 
       // Create output entry
       const resultOutput: TerminalOutput = {
-          id: this.generateOutputId(),
-          type: 'output',
+        id: this.generateOutputId(),
+        type: 'output',
         content: output || '',
-          timestamp: new Date(),
+        timestamp: new Date(),
         exitCode: 0, // PTY doesn't easily provide exit codes for individual commands
-        };
-      
+      };
+
       session.history.push(resultOutput);
       this.sessions.set(sessionId, session);
-      
+
       return {
         success: true,
         output: output || '',
@@ -157,7 +169,7 @@ export class TerminalService {
       };
     } catch (error) {
       console.error('Failed to execute command in pty:', error);
-      
+
       const errorOutput: TerminalOutput = {
         id: this.generateOutputId(),
         type: 'error',
@@ -167,7 +179,7 @@ export class TerminalService {
       };
       session.history.push(errorOutput);
       this.sessions.set(sessionId, session);
-      
+
       return {
         success: false,
         output: '',
@@ -184,12 +196,15 @@ export class TerminalService {
   async sendInput(sessionId: string, input: string): Promise<void> {
     const ptySessionId = this.ptySessionIds.get(sessionId);
     if (!ptySessionId) {
-      throw this.handleError('PTY_SESSION_NOT_FOUND', `PTY session not found for session ${sessionId}`);
+      throw this.handleError(
+        'PTY_SESSION_NOT_FOUND',
+        `PTY session not found for session ${sessionId}`
+      );
     }
 
     await invoke('send_terminal_input', {
       sessionId: ptySessionId,
-      input: input
+      input: input,
     });
   }
 
@@ -199,12 +214,15 @@ export class TerminalService {
   async readOutput(sessionId: string, timeoutMs: number = 1000): Promise<string> {
     const ptySessionId = this.ptySessionIds.get(sessionId);
     if (!ptySessionId) {
-      throw this.handleError('PTY_SESSION_NOT_FOUND', `PTY session not found for session ${sessionId}`);
+      throw this.handleError(
+        'PTY_SESSION_NOT_FOUND',
+        `PTY session not found for session ${sessionId}`
+      );
     }
 
     return await invoke<string>('read_terminal_output', {
       sessionId: ptySessionId,
-      timeoutMs: timeoutMs
+      timeoutMs: timeoutMs,
     });
   }
 
@@ -222,7 +240,7 @@ export class TerminalService {
   async listDirectory(sessionId: string, path?: string): Promise<string[]> {
     const command = path ? `ls "${path}"` : 'ls';
     const result = await this.executeCommand(sessionId, command);
-    
+
     if (result.success) {
       return result.output.split('\n').filter(line => line.trim().length > 0);
     } else {
@@ -288,9 +306,9 @@ export class TerminalService {
       invoke('close_terminal_session', { sessionId: ptySessionId }).catch(console.error);
       this.ptySessionIds.delete(sessionId);
     }
-    
+
     this.sessions.delete(sessionId);
-    
+
     if (this.activeSessionId === sessionId) {
       this.activeSessionId = null;
     }
@@ -303,14 +321,14 @@ export class TerminalService {
     // Mark all sessions as inactive
     for (const session of this.sessions.values()) {
       session.isActive = false;
-      }
+    }
 
     // Mark the specified session as active
-      const session = this.sessions.get(sessionId);
-      if (session) {
-        session.isActive = true;
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      session.isActive = true;
       this.activeSessionId = sessionId;
-        this.sessions.set(sessionId, session);
+      this.sessions.set(sessionId, session);
     }
   }
 
@@ -361,4 +379,4 @@ export class TerminalService {
 }
 
 // Export singleton instance
-export const terminalService = new TerminalService(); 
+export const terminalService = new TerminalService();

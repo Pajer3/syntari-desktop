@@ -2,16 +2,18 @@
 // Initializes all Tauri backend services on app startup
 
 import { useEffect, useState } from 'react';
-import { 
-  terminalService, 
-  searchService, 
-  commandService, 
-  aiService
+import {
+  AIService,
   // projectService - used in initialization function
+  commandService,
+  searchService,
 } from '../services';
 
+// Create AIService instance
+const aiService = new AIService();
+
 interface ServiceStatus {
-  terminal: 'loading' | 'ready' | 'error';
+  // terminal: 'loading' | 'ready' | 'error'; - removed
   search: 'loading' | 'ready' | 'error';
   command: 'loading' | 'ready' | 'error';
   ai: 'loading' | 'ready' | 'error';
@@ -26,7 +28,7 @@ interface UseServiceInitializationReturn {
 
 export const useServiceInitialization = (): UseServiceInitializationReturn => {
   const [status, setStatus] = useState<ServiceStatus>({
-    terminal: 'loading',
+    // terminal: 'loading', - removed
     search: 'loading',
     command: 'loading',
     ai: 'loading',
@@ -37,21 +39,13 @@ export const useServiceInitialization = (): UseServiceInitializationReturn => {
   const initializeServices = async () => {
     const newErrors: string[] = [];
     const newStatus: ServiceStatus = {
-      terminal: 'loading',
+      // terminal: 'loading', - removed
       search: 'loading',
       command: 'loading',
       ai: 'loading',
     };
 
-    // Initialize Terminal Service
-    try {
-      await terminalService.initialize();
-      newStatus.terminal = 'ready';
-    } catch (error) {
-      console.error('Failed to initialize terminal service:', error);
-      newStatus.terminal = 'error';
-      newErrors.push(`Terminal: ${error}`);
-    }
+    // Terminal initialization removed - XTerminalPanel handles its own initialization
 
     // Initialize Search Service
     try {
@@ -106,4 +100,4 @@ export const useServiceInitialization = (): UseServiceInitializationReturn => {
     errors,
     retryInitialization,
   };
-}; 
+};
